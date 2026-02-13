@@ -1,5 +1,7 @@
 # DEVELOPMENT ENVIRONMENT GUIDELINES
 
+- **IMPORTANT** You are following plans in ./planning/ , udpdating as you progress and writing news ones there as well.
+
 - **IMPORTANT** This file should be AGENTS.md . IF `CLAUDE.md` or `GEMINI.md` exist, they should be symlinks to this file. DO NOT OVERWRITE THE SYMLINKS.
 
 - **IMPORTANT** After significant changes, make sure to ASK about commiting and updating this file as necessary.

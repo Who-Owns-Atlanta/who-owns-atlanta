@@ -17,8 +17,8 @@
 - [x] Data loading pipeline (GeoJSON → PostGIS: `scripts/01_load_parcels.py`)
 - [x] Schema unification (Fulton + DeKalb → `parcels_unified` view)
 - [x] Corporate owner name filtering (`scripts/02_flag_corporate_owners.py`, `is_corporate` column)
-- [ ] libpostal for address normalization
-- [ ] Ownership network/graph logic
+- [x] libpostal for address normalization (`scripts/03_normalize_addresses.py`, `addr_norm_lookup` table)
+- [x] Ownership network/graph logic (`scripts/04_ownership_network.py`, `owner_entities` + `ownership_clusters` tables)
 - [ ] GA Secretary of State scraper (deferred — exists in JS, migrate when needed)
 - [ ] Tests
 
@@ -41,11 +41,17 @@ professional corporations, and investment groups. Will expand as we encounter mo
 Ordered scripts (`scripts/01_load.py`, `scripts/02_flag_corporate.py`, ...) — simple, fast to iterate.
 
 ## Database stats
-- **Fulton County:** 370,189 parcels (63,171 corporate = 17.1%)
-- **DeKalb County:** 245,766 parcels (35,596 corporate = 14.5%)
+- **Fulton County:** 370,189 parcels (67,719 corporate = 18.3%, 22,620 institutional = 6.1%)
+- **DeKalb County:** 245,766 parcels (37,093 corporate = 15.1%, 13,036 institutional = 5.3%)
 - **Total:** 615,955 parcels in `parcels_unified` view
+- **Owner entities:** 543,421 distinct (name, address, county) groups
+- **Ownership clusters:** 471,679 total, 34,233 with multiple linked entities
+- **Address normalization:** 510,849 distinct addresses normalized via libpostal
+
+## Known issues
+- Cluster 1 is a "mega-cluster" (20K parcels) — address-based linking creates large hairball when many LLCs share common office addresses. May need to cap or refine address linking.
 
 ## Next steps
-1. Address normalization with libpostal
-2. Ownership network clustering
+1. Investigate/refine mega-cluster (split or cap address linking)
+2. GA Secretary of State scraper
 3. Tests
