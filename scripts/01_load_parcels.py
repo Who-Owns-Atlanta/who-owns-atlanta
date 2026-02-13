@@ -58,6 +58,8 @@ def create_unified_view(engine):
                 taxdist AS tax_district,
                 nbrhood AS neighborhood_code,
                 subdiv AS subdivision,
+                is_corporate,
+                is_institutional,
                 geometry
             FROM fulton_parcels
 
@@ -79,6 +81,8 @@ def create_unified_view(engine):
                 cvttxdscrp AS tax_district,
                 nghbrhdcd AS neighborhood_code,
                 cnvyname AS subdivision,
+                is_corporate,
+                is_institutional,
                 geometry
             FROM dekalb_parcels;
         """))
