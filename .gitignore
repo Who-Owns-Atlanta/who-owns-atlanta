@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+.venv/
+venv/
+
+# uv
+.python-version
+
+# Data files (too large for git)
+data/
+
+# Symlinks to external repos
+tmp_nbh_accela
+
+# Environment / secrets
+.env
+.env.*
+credentials*.json
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose.override.yml

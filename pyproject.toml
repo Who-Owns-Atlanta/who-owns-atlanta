@@ -1,0 +1,7 @@
+[project]
+name = "who-owns-atl"
+version = "0.1.0"
+description = "Mapping corporate/LLC property ownership networks in Atlanta, Fulton County, and DeKalb County"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
