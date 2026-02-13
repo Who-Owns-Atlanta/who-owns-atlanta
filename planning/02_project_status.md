@@ -12,12 +12,12 @@
 - [x] Linked `tmp_nbh_accela` repo
 
 ## What's NOT in place yet
-- [ ] Python dependencies (geopandas, psycopg2, networkx, libpostal, etc.)
-- [ ] PostgreSQL/PostGIS database (Docker)
-- [ ] Data loading pipeline (GeoJSON → PostGIS)
+- [x] Python dependencies (geopandas, psycopg2-binary, sqlalchemy, geoalchemy2, networkx)
+- [x] PostgreSQL/PostGIS database (Docker — `woa_postgis` on port 5434)
+- [x] Data loading pipeline (GeoJSON → PostGIS: `scripts/01_load_parcels.py`)
+- [x] Schema unification (Fulton + DeKalb → `parcels_unified` view)
+- [x] Corporate owner name filtering (`scripts/02_flag_corporate_owners.py`, `is_corporate` column)
 - [ ] libpostal for address normalization
-- [ ] Schema unification (Fulton + DeKalb → unified parcel table)
-- [ ] Corporate owner name filtering
 - [ ] Ownership network/graph logic
 - [ ] GA Secretary of State scraper (deferred — exists in JS, migrate when needed)
 - [ ] Tests
@@ -37,15 +37,15 @@
 This catches LLCs, corporations, limited partnerships, associations, foundations, government entities,
 professional corporations, and investment groups. Will expand as we encounter more patterns in the data.
 
-## Pipeline architecture — TBD
-Two options, decide when we start building:
-1. **Ordered scripts** (`01_load.py`, `02_normalize.py`, ...) — simple, fast to iterate
-2. **CLI with subcommands** (`uv run who-owns-atl load`, `... normalize`) — cleaner long-term
+## Pipeline architecture
+Ordered scripts (`scripts/01_load.py`, `scripts/02_flag_corporate.py`, ...) — simple, fast to iterate.
+
+## Database stats
+- **Fulton County:** 370,189 parcels (63,171 corporate = 17.1%)
+- **DeKalb County:** 245,766 parcels (35,596 corporate = 14.5%)
+- **Total:** 615,955 parcels in `parcels_unified` view
 
 ## Next steps
-1. Set up Docker PostGIS container
-2. Install Python dependencies
-3. Build data loading pipeline (GeoJSON → unified PostGIS table)
-4. Implement corporate owner name filtering
-5. Address normalization with libpostal
-6. Ownership network clustering
+1. Address normalization with libpostal
+2. Ownership network clustering
+3. Tests

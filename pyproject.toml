@@ -4,4 +4,10 @@ version = "0.1.0"
 description = "Mapping corporate/LLC property ownership networks in Atlanta, Fulton County, and DeKalb County"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "geoalchemy2>=0.18.1",
+    "geopandas>=1.1.2",
+    "networkx>=3.6.1",
+    "psycopg2-binary>=2.9.11",
+    "sqlalchemy>=2.0.46",
+]
