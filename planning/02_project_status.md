@@ -48,8 +48,11 @@ Ordered scripts (`scripts/01_load.py`, `scripts/02_flag_corporate.py`, ...) — 
 - **Ownership clusters:** 471,679 total, 34,233 with multiple linked entities
 - **Address normalization:** 510,849 distinct addresses normalized via libpostal
 
-## Known issues
-- Cluster 1 is a "mega-cluster" (20K parcels) — address-based linking creates large hairball when many LLCs share common office addresses. May need to cap or refine address linking.
+## Known issues / observations
+- **PO Box collapse (fixed):** libpostal strips PO Box numbers, leaving just city/state/zip. This linked thousands of unrelated entities. Fixed by skipping city/zip-only addresses in graph construction.
+- **Cluster 1 (~7.9K parcels, 1638 entities):** Linked via real commercial office addresses (270 Washington St = government center, 1100 Spring St = real estate offices, 345 Park Ave NYC, etc.). Arguably correct — many LLCs sharing office space is a real ownership signal.
+- **Cluster 3 (990 parcels, 990 entities):** All subdivision/condo names used as owner names (BRANDYWINE, WILDWOOD PARK, OXFORD VILLAGE). Data quirk, not real ownership. Linked by shared empty address.
+- **Typo catches working well:** "GEOGRIA POWER COMPANY" → "GEORGIA POWER CO" (cluster 112), "HABITA FOR HUMANITY" → "HABITAT FOR HUMANITY" (cluster 93), "PROMISE HOMES BORROWER I LLCC" → correct spelling (cluster 3403).
 
 ## Next steps
 1. Investigate/refine mega-cluster (split or cap address linking)

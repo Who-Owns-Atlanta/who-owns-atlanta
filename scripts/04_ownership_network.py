@@ -82,16 +82,23 @@ def build_network(engine):
     print(f"  {name_edges:,} name edges")
 
     # Connect entities that share the same mailing address
-    # (but only among corporate/institutional — individuals at same address are common)
+    # Skip city/zip-only addresses (PO Box artifacts from libpostal stripping box numbers)
+    import re
+    city_zip_only = re.compile(r'^[A-Z]+(\s+[A-Z]+)*\s+[A-Z]{2}\s+\d{5}(-\d+)?$')
+
     print("Connecting by shared owner address...")
     addr_edges = 0
+    skipped_city_zip = 0
     for addr, eids in addr_idx.items():
-        if len(eids) > 1 and len(eids) <= 100:  # skip very common addresses (PO boxes, etc.)
+        if city_zip_only.match(addr):
+            skipped_city_zip += 1
+            continue
+        if len(eids) > 1 and len(eids) <= 100:
             for i in range(len(eids)):
                 for j in range(i + 1, len(eids)):
                     G.add_edge(eids[i], eids[j], rel="same_addr")
                     addr_edges += 1
-    print(f"  {addr_edges:,} address edges")
+    print(f"  {addr_edges:,} address edges (skipped {skipped_city_zip:,} city/zip-only addresses)")
 
     print(f"  Graph: {G.number_of_nodes():,} nodes, {G.number_of_edges():,} edges")
     return G
