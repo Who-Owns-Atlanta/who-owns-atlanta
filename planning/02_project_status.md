@@ -1,4 +1,4 @@
-# Project Status — 2026-02-12
+# Project Status — 2026-02-13
 
 ## What's in place
 - [x] Project directory structure
@@ -9,52 +9,77 @@
 - [x] Reference overlays: city limits, neighborhoods, NPU, council districts, address points, zoning
 - [x] Workflow reference docs (two LLM consultations + Horizontal Holdings PDF)
 - [x] CLAUDE.md / AGENTS.md for AI assistant guidelines
-- [x] Linked `tmp_nbh_accela` repo
-
-## What's NOT in place yet
-- [x] Python dependencies (geopandas, psycopg2-binary, sqlalchemy, geoalchemy2, networkx)
+- [x] Python dependencies (geopandas, psycopg2-binary, sqlalchemy, geoalchemy2, networkx, requests, playwright)
 - [x] PostgreSQL/PostGIS database (Docker — `woa_postgis` on port 5434)
 - [x] Data loading pipeline (GeoJSON → PostGIS: `scripts/01_load_parcels.py`)
 - [x] Schema unification (Fulton + DeKalb → `parcels_unified` view)
-- [x] Corporate owner name filtering (`scripts/02_flag_corporate_owners.py`, `is_corporate` column)
-- [x] libpostal for address normalization (`scripts/03_normalize_addresses.py`, `addr_norm_lookup` table)
-- [x] Ownership network/graph logic (`scripts/04_ownership_network.py`, `owner_entities` + `ownership_clusters` tables)
-- [ ] GA Secretary of State scraper (deferred — exists in JS, migrate when needed)
+- [x] Corporate/institutional owner flagging (`scripts/02_flag_corporate_owners.py`)
+- [x] Address normalization via libpostal (`scripts/03_normalize_addresses.py`, `addr_norm_lookup` table)
+- [x] Ownership network/graph logic (`scripts/04_ownership_network.py`, `owner_entities` + `ownership_clusters`)
+- [x] SOS scraper converted to Python/Playwright (`scripts/05_scrape_sos.py`) — blocked by Cloudflare Turnstile, needs 2captcha integration
+
+## What's NOT in place yet
+- [ ] GA SOS data integration (need 2captcha for Cloudflare, or $500 bulk download)
+- [ ] SOS-derived network enrichment (registered agent, officer, principal address linking)
+- [ ] Residential-only / no-homestead filtering
+- [ ] "Parent" company / DBA assignment per ownership group
+- [ ] Atlanta city Tax_Parcel enrichment (council/NPU/neighborhood linkage)
 - [ ] Tests
 
 ## Decisions made
 - **Primary data:** Fulton County + DeKalb County only. Atlanta city data is redundant (counties cover it).
 - **Database:** Docker PostGIS
 - **Python:** 3.12 via `uv`
-- **libpostal:** Will install as a dependency (not optional)
-- **GA SOS scraper:** Deferred until pipeline needs it
-- **Owner filtering:** Corporate/institutional owners identified by name pattern, not homestead exemption
-
-## Corporate Owner Name Filter (starting point)
-```regex
-/\b(llc|inc|corp|ltd|lp|assoc|assn|foundation|company|system|board of regents|department of transportation|plan|pc|venture|ventures|invest|investments|partners)\b/i
-```
-This catches LLCs, corporations, limited partnerships, associations, foundations, government entities,
-professional corporations, and investment groups. Will expand as we encounter more patterns in the data.
-
-## Pipeline architecture
-Ordered scripts (`scripts/01_load.py`, `scripts/02_flag_corporate.py`, ...) — simple, fast to iterate.
+- **libpostal:** Docker container (`woa_libpostal` on port 6789, `clicksend/libpostal-rest`)
+- **Pipeline:** Ordered scripts (`scripts/01_load.py`, `02_flag...`, `03_normalize...`, `04_network...`)
+- **Owner filtering:** Two flags — `is_corporate` (SOS-resolvable) and `is_institutional` (government, education, trusts, HOAs)
+- **GA SOS scraper:** Converted from JS/Puppeteer to Python/Playwright. Cloudflare Turnstile blocks headless. Needs 2captcha or bulk download.
 
 ## Database stats
 - **Fulton County:** 370,189 parcels (67,719 corporate = 18.3%, 22,620 institutional = 6.1%)
 - **DeKalb County:** 245,766 parcels (37,093 corporate = 15.1%, 13,036 institutional = 5.3%)
 - **Total:** 615,955 parcels in `parcels_unified` view
 - **Owner entities:** 543,421 distinct (name, address, county) groups
-- **Ownership clusters:** 471,679 total, 34,233 with multiple linked entities
+- **Ownership clusters:** 476,537 total, 34,831 with multiple linked entities
 - **Address normalization:** 510,849 distinct addresses normalized via libpostal
+- **SOS lookups needed:** ~45K distinct corporate owner names
+
+## Key findings
+
+### Out-of-state ownership
+| State | Parcels | Owners | Parcels/Owner |
+|---|---|---|---|
+| Georgia | 76,033 | 38,549 | 2.0 |
+| Arizona | 5,275 | 476 | 11.1 |
+| Texas | 4,120 | 933 | 4.4 |
+| California | 3,829 | 1,130 | 3.4 |
+| Florida | 2,798 | 1,260 | 2.2 |
+| New York | 2,720 | 824 | 3.3 |
+| Connecticut | 458 | 51 | 9.0 |
+
+Arizona and Connecticut have the highest parcels-per-owner ratios — dominated by SFR aggregators (Scottsdale PO box pipeline).
+
+### Portfolio concentration
+- 72 entities own 100+ parcels each → 15,223 parcels total
+- 183 entities own 50+ parcels → 23,081 parcels
+- 0.1% of corporate owners control 17% of corporate-held parcels
+
+### Scottsdale AZ SFR pipeline
+All mailing to Scottsdale AZ PO boxes: SFR XII NM ATL OWNER 1 LP (243), STAR 2021 SFR1 BORROWER LP (204), FYR SFR BORROWER LLC (192), HOME SFR BORROWER IV LLC (123), 2018-3 IH BORROWER LP (113, Invitation Homes).
+
+### Network quality
+- **Typo catches:** "PROMISE HOMES BORROWER I LLCC" → correct (285 parcels), "LATITIUDE 55 PHARR LLC" variants (123), "GEOGRIA POWER COMPANY" (542)
+- **Related entity linking:** ATLER AT BROOKHAVEN variants + VUE AT EMBRY HILLS (233 parcels)
+- **Person-behind-LLCs:** Cluster 538 links BAHNHOF LLC + BEAR CREEK FULTON LLC + individual MACGREGOR JOHN M (132 parcels)
 
 ## Known issues / observations
-- **PO Box collapse (fixed):** libpostal strips PO Box numbers, leaving just city/state/zip. This linked thousands of unrelated entities. Fixed by skipping city/zip-only addresses in graph construction.
-- **Cluster 1 (~7.9K parcels, 1638 entities):** Linked via real commercial office addresses (270 Washington St = government center, 1100 Spring St = real estate offices, 345 Park Ave NYC, etc.). Arguably correct — many LLCs sharing office space is a real ownership signal.
-- **Cluster 3 (990 parcels, 990 entities):** All subdivision/condo names used as owner names (BRANDYWINE, WILDWOOD PARK, OXFORD VILLAGE). Data quirk, not real ownership. Linked by shared empty address.
-- **Typo catches working well:** "GEOGRIA POWER COMPANY" → "GEORGIA POWER CO" (cluster 112), "HABITA FOR HUMANITY" → "HABITAT FOR HUMANITY" (cluster 93), "PROMISE HOMES BORROWER I LLCC" → correct spelling (cluster 3403).
+- **PO Box collapse (fixed):** libpostal strips PO Box numbers → city/zip-only. Fixed by skipping these in graph.
+- **Cluster 1 (~7.9K parcels):** Linked via real commercial office addresses (270 Washington St, 1100 Spring St, 345 Park Ave NYC). Legitimate but large.
+- **Cluster 3 (990 parcels):** Subdivision/condo names as owner names (BRANDYWINE, WILDWOOD PARK). Data quirk.
+- **"CO" without period:** "GEORGIA POWER CO" in DeKalb not caught by `co\.` pattern — partial match only.
 
 ## Next steps
-1. Investigate/refine mega-cluster (split or cap address linking)
-2. GA Secretary of State scraper
-3. Tests
+1. GA SOS data — either integrate 2captcha into scraper, or purchase $500 bulk download
+2. SOS network enrichment — link entities by shared registered agent, officer names, principal address
+3. Residential filtering + homestead exemption
+4. Atlanta city enrichment (council district, NPU, neighborhood)
