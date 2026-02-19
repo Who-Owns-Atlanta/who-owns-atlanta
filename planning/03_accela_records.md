@@ -68,12 +68,12 @@ We need `Address_Point` loaded into a `gis` schema for the geometry trigger. We 
 
 ## Phase 4: Post-Processing / Enrichment
 
-- [x] **4.1** Geometry trigger verified: 99.4% match rate on first 161 records
-- [x] **4.2** `closed_date` extracted from `raw_data ->> 'closedDate'` in views
+- [x] **4.1** Geometry trigger verified: 99.3% match rate
+- [x] **4.2** Status categorization: `closedDate` not available from search API; resolution determined from workflow status values (see Status Notes below)
 - [x] **4.3** Created views in `scripts/sql/03_create_record_views.sql`:
-  - `view_records_with_parcels` — records + Tax_Parcel bridge (owner, class, neighborhood, council, NPU)
-  - `view_records_fulton` — records joined to fulton_parcels (ownership flags)
-  - `view_complaint_counts` — per-parcel complaint stats (count, open/closed, date range)
+  - `view_records_with_parcels` — records + Tax_Parcel bridge + `status_category` (Active/Resolved)
+  - `view_records_fulton` — records joined to fulton_parcels (ownership flags) + `status_category`
+  - `view_complaint_counts` — per-parcel stats: `resolved_complaints`, `active_complaints`, date range
 
 ## Phase 5: Incremental Updates Script
 
@@ -86,12 +86,30 @@ We need `Address_Point` loaded into a `gis` schema for the geometry trigger. We 
 
 ## Phase 6: Verification & Documentation
 
-- [ ] **6.1** Record count sanity check (after backfill completes)
-- [x] **6.2** Geometry match rate: 99.4% (address point), 93% linked to Tax_Parcel
-- [ ] **6.3** Update `planning/02_project_status.md` with Accela integration status
-- [ ] **6.4** Update this plan with final counts
+- [x] **6.1** Record count: **10,793 records** (74 months, ~2 hours)
+- [x] **6.2** Geometry match: 99.3% (10,715/10,793). Tax_Parcel linkage: 95.5% (10,303/10,793)
+- [x] **6.3** Updated `planning/02_project_status.md`
+- [x] **6.4** Final stats below
 
-**Backfill in progress:** started 2026-02-18 23:28, ~74 monthly chunks, ~1 min/chunk
+**Backfill completed:** 2026-02-19 01:23 (~2 hours for 74 monthly chunks)
+
+### Final Stats
+| Metric | Value |
+|---|---|
+| Total records | 10,793 |
+| With geometry | 10,715 (99.3%) |
+| Linked to Tax_Parcel | 10,303 (95.5%) |
+| Distinct parcels | 8,109 |
+| Date range | 2020-01-02 to 2026-02-18 |
+| Active complaints | 3,681 |
+| Resolved complaints | 7,112 |
+
+### Status Notes
+- `closedDate` is NOT returned by the Accela search API
+- Closure is determined by the workflow `status` field values
+- "Resolved" = Closed, Complied, No Violation Found, Void, Complied - Dismissed, Judgement-Complied, Court Complied, Not Complied-Dismissed, Dismissed-Not Complied, Closed - Final-UTGE, Potential Duplicate
+- "Active" = everything else (Assigned to Inspector, Stop Work Posted, In Review, Citation Served, etc.)
+- 36 distinct status values total
 
 ---
 

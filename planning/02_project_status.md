@@ -78,12 +78,14 @@ All mailing to Scottsdale AZ PO boxes: SFR XII NM ATL OWNER 1 LP (243), STAR 202
 - **Cluster 3 (990 parcels):** Subdivision/condo names as owner names (BRANDYWINE, WILDWOOD PARK). Data quirk.
 - **"CO" without period:** "GEORGIA POWER CO" in DeKalb not caught by `co\.` pattern — partial match only.
 
-## In progress
-- **Accela permit records** — Building Complaint backfill (2020-01 to present) running. See `planning/03_accela_records.md` for full plan.
-  - `application` schema + records table + geometry trigger + views created
-  - GIS data loaded: Address_Point (262K), Tax_Parcel (171K) in `gis` schema
+## In place (continued)
+- [x] Accela permit records — Building Complaint backfill complete. See `planning/03_accela_records.md`.
+  - 10,793 records (2020-01 to 2026-02), 8,109 distinct parcels
+  - 3,681 active / 7,112 resolved (status inferred from 36 workflow status values; closedDate not available from search API)
+  - 99.3% geometry match, 95.5% Tax_Parcel linkage
+  - GIS data: Address_Point (345K), Tax_Parcel (171K) in `gis` schema
   - Script: `scripts/06_pull_accela_records.py` (configurable type, monthly chunking, upsert)
-  - Smoke test: 99.4% geometry match, 93% Tax_Parcel linkage
+  - Views: `view_records_with_parcels`, `view_records_fulton`, `view_complaint_counts` (with `status_category` = Active/Resolved)
 
 ## Next steps
 1. GA SOS data — either integrate 2captcha into scraper, or purchase $500 bulk download
