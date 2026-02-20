@@ -16,11 +16,13 @@
 - [x] Corporate/institutional owner flagging (`scripts/02_flag_corporate_owners.py`)
 - [x] Address normalization via libpostal (`scripts/03_normalize_addresses.py`, `addr_norm_lookup` table)
 - [x] Ownership network/graph logic (`scripts/04_ownership_network.py`, `owner_entities` + `ownership_clusters`)
-- [x] SOS scraper converted to Python/Playwright (`scripts/05_scrape_sos.py`) — blocked by Cloudflare Turnstile, needs 2captcha integration
+- [x] SOS scraper converted to Python/Playwright (`scripts/05_scrape_sos.py`) — superseded by bulk download
+- [x] GA SOS bulk data loaded into `sos` schema (4.3M entities, 4.7M addresses, 49M officers, 10.3M registered agents) — `scripts/07_load_sos.py`
 
 ## What's NOT in place yet
-- [ ] GA SOS data integration (need 2captcha for Cloudflare, or $500 bulk download)
-- [ ] SOS-derived network enrichment (registered agent, officer, principal address linking)
+- [x] SOS name matching — `scripts/08_match_sos.py` (92.6% match, ~5 min runtime)
+- [x] SOS enrichment of `owner_entities` — `scripts/09_enrich_owners_sos.py` (48,579 entities enriched)
+- [ ] SOS-derived network enrichment (shared agents/officers/addresses) — `scripts/10_sos_network_enrichment.py`
 - [ ] Residential-only / no-homestead filtering
 - [ ] "Parent" company / DBA assignment per ownership group
 - [ ] Atlanta city Tax_Parcel enrichment (council/NPU/neighborhood linkage)
@@ -88,8 +90,9 @@ All mailing to Scottsdale AZ PO boxes: SFR XII NM ATL OWNER 1 LP (243), STAR 202
   - Views: `view_records_with_parcels`, `view_records_fulton`, `view_complaint_counts` (with `status_category` = Active/Resolved)
 
 ## Next steps
-1. GA SOS data — either integrate 2captcha into scraper, or purchase $500 bulk download
-2. SOS network enrichment — link entities by shared registered agent, officer names, principal address
+1. SOS name matching — `scripts/08_match_sos.py` (exact + trigram match against 4.3M SOS entities)
+2. SOS enrichment — `scripts/09_enrich_owners_sos.py` (populate SOS fields on owner_entities)
+3. SOS network enrichment — `scripts/10_sos_network_enrichment.py` (shared agents/officers/addresses)
 3. Residential filtering + homestead exemption
 4. Atlanta city enrichment (council district, NPU, neighborhood)
 5. Additional Accela record types (Code Complaints, etc.) — same script, different `--type`
