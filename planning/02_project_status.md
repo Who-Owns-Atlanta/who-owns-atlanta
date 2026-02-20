@@ -22,7 +22,7 @@
 ## What's NOT in place yet
 - [x] SOS name matching — `scripts/08_match_sos.py` (92.6% match, ~5 min runtime)
 - [x] SOS enrichment of `owner_entities` — `scripts/09_enrich_owners_sos.py` (48,579 entities enriched)
-- [x] SOS network enrichment — `scripts/10_sos_network_enrichment.py` (8,043 clusters merged, known mega-cluster issue documented)
+- [x] SOS network enrichment — `scripts/10_sos_network_enrichment.py` (5,396 clusters merged, mega-cluster fixed via two-pass approach)
 - [ ] Residential-only / no-homestead filtering
 - [ ] "Parent" company / DBA assignment per ownership group
 - [ ] Atlanta city Tax_Parcel enrichment (council/NPU/neighborhood linkage)
@@ -42,7 +42,7 @@
 - **DeKalb County:** 245,766 parcels (37,093 corporate = 15.1%, 13,036 institutional = 5.3%)
 - **Total:** 615,955 parcels in `parcels_unified` view
 - **Owner entities:** 543,421 distinct (name, address, county) groups
-- **Ownership clusters:** 476,537 total, 34,831 with multiple linked entities
+- **Ownership clusters:** 471,141 total (post-SOS enrichment), 42,704 with multiple linked entities
 - **Address normalization:** 510,849 distinct addresses normalized via libpostal
 - **SOS lookups needed:** ~45K distinct corporate owner names
 
@@ -76,7 +76,8 @@ All mailing to Scottsdale AZ PO boxes: SFR XII NM ATL OWNER 1 LP (243), STAR 202
 
 ## Known issues / observations
 - **PO Box collapse (fixed):** libpostal strips PO Box numbers → city/zip-only. Fixed by skipping these in graph.
-- **Cluster 1 (~7.9K parcels):** Linked via real commercial office addresses (270 Washington St, 1100 Spring St, 345 Park Ave NYC). Legitimate but large.
+- **Cluster 2 (7,113 parcels):** Linked via real commercial office addresses (1100 Spring St, etc.). Legitimate but large.
+- **Cluster 1 (3,496 parcels):** Large mixed cluster — reduced from 27K after two-pass mega-cluster fix.
 - **Cluster 3 (990 parcels):** Subdivision/condo names as owner names (BRANDYWINE, WILDWOOD PARK). Data quirk.
 - **"CO" without period:** "GEORGIA POWER CO" in DeKalb not caught by `co\.` pattern — partial match only.
 
@@ -90,9 +91,7 @@ All mailing to Scottsdale AZ PO boxes: SFR XII NM ATL OWNER 1 LP (243), STAR 202
   - Views: `view_records_with_parcels`, `view_records_fulton`, `view_complaint_counts` (with `status_category` = Active/Resolved)
 
 ## Next steps
-1. SOS name matching — `scripts/08_match_sos.py` (exact + trigram match against 4.3M SOS entities)
-2. SOS enrichment — `scripts/09_enrich_owners_sos.py` (populate SOS fields on owner_entities)
-3. SOS network enrichment — `scripts/10_sos_network_enrichment.py` (shared agents/officers/addresses)
-3. Residential filtering + homestead exemption
-4. Atlanta city enrichment (council district, NPU, neighborhood)
-5. Additional Accela record types (Code Complaints, etc.) — same script, different `--type`
+1. Web interface — see `planning/04_web_interface.md` (Phase 1–5)
+2. Residential filtering + homestead exemption
+3. Atlanta city enrichment (council district, NPU, neighborhood)
+4. Additional Accela record types (Code Complaints, etc.) — same script, different `--type`
