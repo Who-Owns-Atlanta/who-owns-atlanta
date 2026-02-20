@@ -43,10 +43,22 @@ A new server block for `who-owns-atlanta.org`. Key directives:
 - Rate limiting: `limit_req_zone` on `/api/` — 10 req/s per IP, burst 30 (defined in `nginx.conf` http block, referenced in vhost)
 - Proxy `/api/` → `127.0.0.1:8080`
 - Serve static frontend files from a configured root (e.g. `/var/www/who-owns-atlanta/`)
-- SSL via Let's Encrypt (Certbot)
+- SSL via Let's Encrypt (Certbot) — production only; dev runs plain HTTP
 - Tiles are served from CloudFront/S3 — nginx does not handle tile requests
 
 Rate limiting must live in the host nginx since that's the public-facing layer. Docker-internal nginx would not see real client IPs.
+
+### 1.3 Development workflow
+
+Development avoids full Docker image rebuilds by mounting source code as a volume and running FastAPI with auto-reload. A `dev_rebuild_web.sh` script (adapted from `rebuild_web.sh`) handles this:
+
+- Mounts `./api/` into the container — code changes reload instantly without rebuilding the image
+- FastAPI runs with `--reload` flag
+- Only a full `docker compose up --build` is needed when dependencies (`pyproject.toml`) change
+
+Local nginx vhost mirrors the prod config **without SSL** — plain `http://` on a local hostname (e.g. `who-owns-atlanta.local` via `/etc/hosts`). This keeps dev/prod vhost configs structurally identical; SSL and the real domain are added at deploy time only.
+
+Dev vhost config lives in `nginx/who-owns-atlanta.dev.conf` (committed). Prod vhost config lives in `nginx/who-owns-atlanta.conf` (committed, deployed to VPS at Phase 5).
 
 ### 1.4 Environment / secrets
 
@@ -280,6 +292,7 @@ No tile server on VPS — tiles are on S3/CloudFront. `woa_libpostal` is a data-
 - **Auth/admin:** None at launch — publicly readable. Add if/when needed.
 - **Choropleth:** Stretch goal — implement after core features are solid
 - **Frontend architecture:** Hybrid — JS-heavy map page + conventional server-rendered/static content pages. Not a SPA.
-- **nginx:** Host nginx (already running) handles public traffic, rate limiting, SSL. No nginx container.
+- **nginx:** Host nginx handles public traffic, rate limiting, SSL. No nginx container. Dev vhost is plain HTTP, mirroring prod config structure; SSL added at deploy time only.
+- **Dev workflow:** Volume-mounted FastAPI with `--reload`; `dev_rebuild_web.sh` for container restarts. Full image rebuild only when dependencies change.
 - **Tile serving:** tippecanoe → static `.pbf` files → S3 + CloudFront. No pg_tileserv. VPS handles only `/api/` traffic.
 - **Tile rebuild:** manual trigger via `scripts/build_tiles.sh` after pipeline runs. Parcel data changes rarely so staleness is not a concern.
