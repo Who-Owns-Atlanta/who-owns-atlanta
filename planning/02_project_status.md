@@ -22,7 +22,7 @@
 ## What's NOT in place yet
 - [x] SOS name matching — `scripts/08_match_sos.py` (92.6% match, ~5 min runtime)
 - [x] SOS enrichment of `owner_entities` — `scripts/09_enrich_owners_sos.py` (48,579 entities enriched)
-- [ ] SOS-derived network enrichment (shared agents/officers/addresses) — `scripts/10_sos_network_enrichment.py`
+- [x] SOS network enrichment — `scripts/10_sos_network_enrichment.py` (8,043 clusters merged, known mega-cluster issue documented)
 - [ ] Residential-only / no-homestead filtering
 - [ ] "Parent" company / DBA assignment per ownership group
 - [ ] Atlanta city Tax_Parcel enrichment (council/NPU/neighborhood linkage)

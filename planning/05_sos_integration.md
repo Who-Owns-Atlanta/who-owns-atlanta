@@ -111,7 +111,7 @@ ALTER TABLE owner_entities ADD COLUMN IF NOT EXISTS sos_principal_state TEXT;
 
 ---
 
-### Phase 3: SOS-derived network enrichment
+### Phase 3: SOS-derived network enrichment ✅ COMPLETE
 
 Use SOS data to find hidden connections between ownership clusters that parcel-level data doesn't reveal:
 
@@ -122,22 +122,34 @@ Use SOS data to find hidden connections between ownership clusters that parcel-l
 
 **Script:** `scripts/10_sos_network_enrichment.py`
 
-**Approach:**
-- Filter out commercial RAs (e.g. CT Corporation, Northwest Registered Agent, Cogency) — they manage thousands of unrelated entities and would create false links
-- Filter out officer names that are very common or blank
-- Generate new edges in the ownership graph, re-run cluster assignment
+**Results (2026-02-19):**
+- 476,537 clusters (pre-SOS) → 468,494 clusters (post-SOS) = **8,043 net merges**
+- New edges added: 7,530 shared-RA + 11,799 shared-officer + 48,029 shared-SOS-address = 67,358 total
+- 3,682 clusters now have 2+ SOS-linked entities
+- Thresholds: MAX_RA=30, MAX_OFFICER=10, MAX_ADDR=50
 
-**Output:** Updated `ownership_clusters` table with merged clusters where SOS evidence supports it.
+**Tuning applied:**
+- `MAX_OFFICER_ENTITIES` tightened from 150 → 10 after discovering attorneys filing for many clients were linking unrelated entities (Rachel Conrad × 145, Lisa Gable Attorney × 86)
+- `commercial_ra` field in SOS data is "No" for all rows — useless. Commercial RAs filtered by name instead (CT Corp, CSC, Cogency, Northwest RA, etc.)
+
+**Known limitation — mega-cluster:**
+- Cluster 1 grew from ~7.9K to 27.3K parcels through transitive chaining
+- Root cause: commercial office addresses (500 Sugar Mill Rd, 1465 Northside Dr) each hosting 100+ different entities in SOS — below our cap of 50, but combined through chaining they expand the cluster
+- This is a known issue from script 04 (cluster 1 was already large via 270 Washington St, 1100 Spring St)
+- Mitigation options for future: minimum-edge-count confirmation, cluster size limit with split, manual review flag for clusters >1000 parcels
+
+**Output:** Updated `ownership_clusters` table with merged clusters and SOS summary columns (sos_entity_count, primary_sos_status, primary_foreign_state, registered_agents[]).
 
 ---
 
-## Next steps (ordered)
+## Next steps
 
-1. **`scripts/08_match_sos.py`** — name matching, create `sos_matches` table ← START HERE
-2. **Review match quality** — spot-check exact matches, tune trgm threshold
-3. **`scripts/09_enrich_owners_sos.py`** — populate SOS columns on `owner_entities`
-4. **`scripts/10_sos_network_enrichment.py`** — graph enrichment via shared agents/officers
-5. **Update `02_project_status.md`** — mark SOS integration complete
+SOS integration is complete. Remaining work:
+1. **Mega-cluster mitigation** — investigate cluster 1 with minimum-edge-count confirmation
+2. **Web interface** — see `planning/04_web_interface.md` (Phase 1–5)
+3. **Additional Accela record types** — code complaints etc. via `scripts/06_pull_accela_records.py --type`
+4. **Residential/homestead filtering** — filter parcels with homestead exemption for renter-occupied focus
+5. **Atlanta city enrichment** — council district, NPU, neighborhood via spatial join
 
 ---
 
