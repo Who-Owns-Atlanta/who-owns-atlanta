@@ -5,7 +5,7 @@
 - [x] Git repo initialized
 - [x] `uv` project configured (Python 3.12, `pyproject.toml`)
 - [x] Two primary parcel datasets: Fulton County (457MB), DeKalb County (451MB)
-- [x] Atlanta Tax_Parcel reserved for later enrichment (council/NPU/neighborhood linkage)
+- [x] Atlanta Tax_Parcel used for city enrichment (council/NPU/neighborhood linkage via spatial join)
 - [x] Reference overlays: city limits, neighborhoods, NPU, council districts, address points, zoning
 - [x] Workflow reference docs (two LLM consultations + Horizontal Holdings PDF)
 - [x] CLAUDE.md / AGENTS.md for AI assistant guidelines
@@ -23,9 +23,9 @@
 - [x] SOS name matching — `scripts/08_match_sos.py` (92.6% match, ~5 min runtime)
 - [x] SOS enrichment of `owner_entities` — `scripts/09_enrich_owners_sos.py` (48,579 entities enriched)
 - [x] SOS network enrichment — `scripts/10_sos_network_enrichment.py` (5,396 clusters merged, mega-cluster fixed via two-pass approach)
+- [x] Atlanta city Tax_Parcel enrichment — `scripts/11_city_enrichment.py` (171,287 parcels enriched: 156,557 Fulton + 14,730 DeKalb; city_neighborhood, city_npu, city_council columns on county tables)
 - [ ] Residential-only / no-homestead filtering
 - [ ] "Parent" company / DBA assignment per ownership group
-- [ ] Atlanta city Tax_Parcel enrichment (council/NPU/neighborhood linkage)
 - [ ] Tests
 
 ## Decisions made
@@ -93,5 +93,4 @@ All mailing to Scottsdale AZ PO boxes: SFR XII NM ATL OWNER 1 LP (243), STAR 202
 ## Next steps
 1. Web interface — see `planning/04_web_interface.md` (Phase 1–5)
 2. Residential filtering + homestead exemption
-3. Atlanta city enrichment (council district, NPU, neighborhood)
-4. Additional Accela record types (Code Complaints, etc.) — same script, different `--type`
+3. Additional Accela record types (Code Complaints, etc.) — same script, different `--type`
