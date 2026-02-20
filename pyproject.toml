@@ -9,6 +9,7 @@ dependencies = [
     "accelapy>=0.3.5",
     "geoalchemy2>=0.18.1",
     "geopandas>=1.1.2",
+    "jinja2>=3.1.6",
     "networkx>=3.6.1",
     "playwright>=1.58.0",
     "playwright-stealth>=2.0.2",

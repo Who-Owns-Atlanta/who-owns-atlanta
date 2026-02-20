@@ -1,0 +1,257 @@
+/* ── Content pages (leaderboard, owner profiles, about, etc.) ── */
+
+body.content-page {
+  overflow: auto;
+}
+
+/* Header on content pages: site name is a link back to map */
+header .site-name,
+header a.site-name {
+  text-decoration: none;
+  color: var(--pico-color);
+}
+
+.header-nav {
+  margin-left: auto;
+  display: flex;
+  gap: 1.2rem;
+}
+
+.header-nav a {
+  font-size: 0.85rem;
+  color: var(--pico-muted-color);
+  text-decoration: none;
+}
+
+.header-nav a:hover { color: var(--pico-primary); }
+
+/* ── Main content area ───────────────────────────────────────── */
+/* Pico classless sets display:grid on <main> — override it */
+body.content-page main {
+  display: block;
+}
+
+.content-main {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 3rem;
+}
+
+.content-main h1 {
+  font-size: 1.8rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-bottom: 0.5rem;
+}
+
+.content-main h2 {
+  font-size: 1.2rem;
+  font-weight: 600;
+  margin: 2rem 0 0.75rem;
+}
+
+.lead {
+  font-size: 1rem;
+  color: var(--pico-muted-color);
+  margin-bottom: 1.5rem;
+}
+
+.lead .muted { color: #94a3b8; }
+
+/* ── Tables ─────────────────────────────────────────────────── */
+.table-scroll {
+  overflow-x: auto;
+  margin-bottom: 1.5rem;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+th {
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--pico-muted-color);
+  border-bottom: 2px solid #e2e8f0;
+  padding: 0.5rem 0.75rem;
+}
+
+td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid #f1f5f9;
+  color: var(--pico-color);
+  vertical-align: top;
+}
+
+tr:last-child td { border-bottom: none; }
+
+tr:hover td { background: #f8fafc; }
+
+th.num, td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+td.rank {
+  color: var(--pico-muted-color);
+  font-size: 0.8rem;
+  width: 2.5rem;
+}
+
+td.owner-cell a {
+  font-weight: 500;
+  color: var(--pico-primary);
+  text-decoration: none;
+}
+
+td.owner-cell a:hover { text-decoration: underline; }
+
+.alt-names {
+  font-size: 0.78rem;
+  color: var(--pico-muted-color);
+  margin-top: 0.15rem;
+}
+
+td.county-cell {
+  color: var(--pico-muted-color);
+  font-size: 0.82rem;
+}
+
+td.owner-record {
+  font-size: 0.82rem;
+  color: var(--pico-muted-color);
+}
+
+td.flags-cell {
+  white-space: nowrap;
+}
+
+td.flags-cell .badge-corporate,
+td.flags-cell .badge-institutional,
+td.flags-cell .badge-state {
+  display: block;
+  margin-bottom: 0.2rem;
+  width: fit-content;
+}
+
+/* ── State badge ─────────────────────────────────────────────── */
+.badge-state {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #475569;
+  white-space: nowrap;
+}
+
+/* ── Owner profile ───────────────────────────────────────────── */
+.owner-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.owner-header h1 { margin-bottom: 0.25rem; }
+
+.alt-name-list {
+  list-style: none;
+  margin: 0.25rem 0 0;
+  padding: 0;
+  font-size: 0.85rem;
+  color: var(--pico-muted-color);
+}
+
+.alt-name-list li + li { margin-top: 0.15rem; }
+
+.owner-flags {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 0.35rem;
+  padding-top: 0.4rem;
+}
+
+/* ── Stats row ───────────────────────────────────────────────── */
+.stats-row {
+  display: flex;
+  gap: 2rem;
+  flex-wrap: wrap;
+  padding: 1rem 0;
+  border-top: 1px solid #e2e8f0;
+  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 1.5rem;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.stat-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--pico-color);
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-label {
+  font-size: 0.78rem;
+  color: var(--pico-muted-color);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ── SOS details ─────────────────────────────────────────────── */
+.sos-details {
+  margin-bottom: 1.25rem;
+  font-size: 0.875rem;
+}
+
+.sos-details summary {
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0.25rem 0;
+  color: var(--pico-color);
+}
+
+.sos-details dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 1rem;
+  row-gap: 0.25rem;
+  margin: 0.75rem 0 0 0;
+  font-size: 0.85rem;
+}
+
+.sos-details dt { color: var(--pico-muted-color); }
+.sos-details dd { margin: 0; }
+
+/* ── Map link ────────────────────────────────────────────────── */
+.map-link {
+  display: inline-block;
+  margin-bottom: 1.75rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--pico-primary);
+  text-decoration: none;
+}
+
+.map-link:hover { text-decoration: underline; }
+
+/* ── Mobile ─────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .content-main { padding: 1.25rem 1rem 2rem; }
+  .content-main h1 { font-size: 1.4rem; }
+  .stats-row { gap: 1.25rem; }
+  .owner-header { flex-direction: column; }
+}
