@@ -30,27 +30,20 @@ Add new services to `docker-compose.yml` alongside existing `woa_postgis` and `w
 ### 1.1 New containers
 
 - **`woa_api`** — FastAPI app (Python/uv). Reads PostGIS. Binds to internal port 8080.
-- **`woa_tiles`** — `pg_tileserv` (official `pramsey/pg_tileserv` image). Serves vector tiles directly from PostGIS. Binds to internal port 7800.
+
+No `woa_tiles` container — tiles are pre-generated static files (see Phase 3), not served dynamically.
 
 No nginx container — the host already runs nginx. Docker containers expose ports only on localhost (`127.0.0.1`); the host nginx proxies to them.
 
-### 1.2 pg_tileserv setup
-
-- Point at `woa_postgis` via env var `DATABASE_URL`
-- Expose the `mv_parcels_tile` materialized view (see Phase 3)
-- Config: restrict to read-only tile endpoints only
-- Tiles served as `/{layer}/{z}/{x}/{y}.pbf`
-
-### 1.3 Host nginx configuration
+### 1.2 Host nginx configuration
 
 A new server block for `who-owns-atlanta.org`. Key directives:
 
 - Rate limiting: `limit_req_zone` on `/api/` — 10 req/s per IP, burst 30 (defined in `nginx.conf` http block, referenced in vhost)
 - Proxy `/api/` → `127.0.0.1:8080`
-- Proxy `/tiles/` → `127.0.0.1:7800`
-- Cache headers: tile responses get `Cache-Control: public, max-age=86400`
 - Serve static frontend files from a configured root (e.g. `/var/www/who-owns-atlanta/`)
 - SSL via Let's Encrypt (Certbot)
+- Tiles are served from CloudFront/S3 — nginx does not handle tile requests
 
 Rate limiting must live in the host nginx since that's the public-facing layer. Docker-internal nginx would not see real client IPs.
 
@@ -112,43 +105,55 @@ SOS enrichment (when available) adds: registered_agent, officers[], principal_ad
 
 ## Phase 3: Vector Tile Layer
 
-pg_tileserv serves any PostGIS table or function directly. Create a dedicated materialized view for tiles to control exactly what properties are encoded and eliminate per-request join cost.
+Tiles are **pre-generated static `.pbf` files** using tippecanoe, uploaded to S3, and served via CloudFront. No tile server runs on the VPS.
 
-### Tile source: `public.mv_parcels_tile` (materialized)
+### Why static tiles over pg_tileserv
+
+- **No cold-start DB load:** pg_tileserv fires a PostGIS spatial query per tile per user. On a modest VPS, a user loading the map at zoom 12 triggers 20–60 simultaneous tile requests before any cache warms up.
+- **S3/CloudFront is the right cache:** static `.pbf` files map directly to S3 object keys (`/{z}/{x}/{y}.pbf`). CloudFront caches by path natively — tiles never hit the VPS after first fetch.
+- **Tile footprint is small:** Atlanta metro at z10–z14 is ~1,300 tiles; output is ~200–500MB, not "several gigs."
+- **VPS is out of the tile loop entirely:** only `/api/` calls hit the VPS.
+
+### Tile build process
+
+1. Export GeoJSON from PostGIS (query below)
+2. Run tippecanoe to generate a directory of `.pbf` files
+3. Sync to S3: `aws s3 sync tiles/ s3://who-owns-atlanta-tiles/ --content-type application/x-protobuf`
+4. Invalidate CloudFront on rebuild: `aws cloudfront create-invalidation --paths "/tiles/*"`
 
 ```sql
--- Combines both counties, joins cluster_id, exposes only tile-relevant columns
-SELECT geometry, parcelid, owner, is_corporate, is_institutional,
-       cluster_id, county
-FROM fulton_parcels + owner_entities join
-UNION ALL
-FROM dekalb_parcels + owner_entities join
+-- GeoJSON export query (produces tile source)
+SELECT ST_AsGeoJSON(ST_Transform(geometry, 4326))::json AS geometry,
+       parcelid, owner, is_corporate, is_institutional, cluster_id, county
+FROM parcels_unified
+JOIN owner_entities oe ON parcelid = ANY(oe.parcel_ids);
 ```
 
-(Full query already drafted. Uses `parcelid = ANY(oe.parcel_ids)` join — verified 1:1 per parcel.)
+```bash
+# tippecanoe build (z10–z14, Atlanta bbox)
+tippecanoe -o tiles/ \
+  --no-tile-compression \
+  --minimum-zoom=10 --maximum-zoom=14 \
+  --layer=parcels \
+  parcels.geojson
+```
 
 ### Tile layer behavior
 
 - Zoom 10–12: simplified polygons, color by `is_corporate` / `is_institutional` flag only
 - Zoom 13+: full detail, color by `cluster_id` (consistent hue per cluster)
-- Client-side: Maplibre GL or Leaflet.VectorGrid for rendering
+- Client-side: Maplibre GL
 
-### Why pg_tileserv over pre-generated tiles
+### Rebuild trigger
 
-- No export/re-export step when data changes
-- cluster_id and flags update in-place in PostGIS
-- ~30MB RAM footprint, negligible CPU at this traffic scale
-- Can switch to pre-generated tippecanoe tiles later if serving costs become an issue
+Tiles are stale until rebuilt. Since parcel data and cluster assignments change rarely (monthly pipeline runs at most), a manual rebuild + sync is acceptable. Document the steps in a `scripts/build_tiles.sh` script.
 
-### Materialized view decision
+### Traffic architecture
 
-**Materialize `mv_parcels_tile`, not `parcels_unified`.**
-
-`parcels_unified` is a pure `UNION ALL` — Postgres splits tile queries into two GIST index scans (one per county table), which is already fast. No need to duplicate it.
-
-The tile view adds a `JOIN owner_entities` to get `cluster_id` via `parcelid = ANY(oe.parcel_ids)` — an array containment scan across 543K rows, executed on every tile request. Pre-joining this into a materialized view with a single GIST index eliminates that per-request cost entirely.
-
-Downside is minimal: parcel data is essentially static, so staleness isn't a concern. Refresh with `REFRESH MATERIALIZED VIEW CONCURRENTLY` (non-blocking, takes a few minutes) after any data update. Extra disk ~1–2GB.
+```
+User → CloudFront → S3 (static .pbf tiles)   [tiles — VPS not involved]
+User → CloudFront → VPS nginx → FastAPI       [/api/ calls only]
+```
 
 ---
 
@@ -239,18 +244,17 @@ Aggregate `is_corporate` parcel count by neighborhood polygon. Render as a fill 
 |---|---|
 | woa_postgis (shared_buffers=2GB) | 2.5GB |
 | woa_api (FastAPI + workers) | 200MB |
-| woa_tiles (pg_tileserv) | 50MB |
 | woa_libpostal | 200MB |
 | host nginx | 30MB |
 | OS + headroom | 1GB |
 | **Total** | **~4GB** |
 
-8GB gives comfortable buffer for Postgres to cache hot parcel data.
+No tile server on VPS — tiles are on S3/CloudFront. 8GB gives comfortable buffer for Postgres to cache hot parcel data.
 
 ### Rate limiting strategy
 
 - Host nginx: 10 req/s per IP on `/api/` routes, burst 30
-- Tile requests: CDN-cached by z/x/y — doesn't re-hit pg_tileserv on repeat
+- Tile requests: served from CloudFront/S3 — VPS never sees tile traffic
 - Leaderboard: materialized view, no join cost
 - `/api/owner/<cluster_id>` is the heaviest endpoint — consider in-process LRU cache for top-1000 clusters (5 min TTL)
 
@@ -258,9 +262,9 @@ Aggregate `is_corporate` parcel count by neighborhood polygon. Render as a fill 
 
 ## Phased Build Order
 
-1. **Phase 1** — docker-compose additions (`woa_api` stub + `woa_tiles`) + host nginx vhost config
+1. **Phase 1** — docker-compose addition (`woa_api` stub) + host nginx vhost config
 2. **Phase 2** — materialized views + FastAPI with `/search` and `/parcel` endpoints
-3. **Phase 3** — `mv_parcels_tile` materialized view + verify pg_tileserv serving it
+3. **Phase 3** — GeoJSON export → tippecanoe build → S3 upload → CloudFront distribution
 4. **Phase 4** — map page: Maplibre GL + address search + parcel detail panel
 5. **Phase 4b** — owner cluster profile page + map highlight
 6. **Phase 4c** — leaderboard page
@@ -277,4 +281,5 @@ Aggregate `is_corporate` parcel count by neighborhood polygon. Render as a fill 
 - **Choropleth:** Stretch goal — implement after core features are solid
 - **Frontend architecture:** Hybrid — JS-heavy map page + conventional server-rendered/static content pages. Not a SPA.
 - **nginx:** Host nginx (already running) handles public traffic, rate limiting, SSL. No nginx container.
-- **Materialized view:** `mv_parcels_tile` only (tile view with cluster_id join); `parcels_unified` stays a plain view.
+- **Tile serving:** tippecanoe → static `.pbf` files → S3 + CloudFront. No pg_tileserv. VPS handles only `/api/` traffic.
+- **Tile rebuild:** manual trigger via `scripts/build_tiles.sh` after pipeline runs. Parcel data changes rarely so staleness is not a concern.
