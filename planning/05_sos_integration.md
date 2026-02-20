@@ -40,49 +40,23 @@ Skipped for now: `BizEntityFilingHistory.txt` (30M rows), `BizEntityStock.txt` (
 
 ### Phase 1: Name matching — parcel owners → SOS entities ✅ COMPLETE
 
-Match ~45K distinct corporate owner names from `owner_entities` against `sos.entities.business_name`.
+Match ~45K distinct corporate owner names from counties against `sos.entities.business_name`.
 
 **Script:** `scripts/08_match_sos.py`
 
-**Strategy (in priority order):**
-1. Exact normalized match (uppercase, stripped) — highest confidence
-2. Trigram similarity ≥ 0.85 — catches minor typos
-3. Trigram similarity 0.70–0.85 — lower confidence, flag for review
+**Strategy:**
+1. **Normalization:** Enhanced punctuation stripping.
+2. **Splitting:** Split names on `&`, `AND`, `ET AL` to handle multi-entity ownership.
+3. **Hybrid Parallel Fuzzy Matching:** 12-core multi-processing with SQL GIN Trigram index + rapidfuzz re-scoring.
 
-**Output table:** `public.sos_matches`
-```sql
-CREATE TABLE sos_matches (
-    owner_name        TEXT,         -- from owner_entities.owner_name
-    sos_control_number TEXT,
-    sos_business_name  TEXT,
-    match_type        TEXT,         -- 'exact', 'trgm_high', 'trgm_low'
-    similarity        FLOAT,
-    business_type     TEXT,
-    entity_status     TEXT,
-    foreign_state     TEXT
-);
-```
-
-**Scope:** Only match owners where `is_corporate = TRUE`. Skip institutional (government, HOAs).
-
-**Actual match results (2026-02-19):**
+**Actual match results (2026-02-20):**
 
 | Match type | Count | Notes |
 |---|---|---|
-| exact (1.0) | 13,264 | Normalized exact match |
-| trgm_high ≥0.95 | 19,744 | Near-perfect — punctuation/abbrev diffs |
-| trgm_high 0.85–0.95 | 3,814 | High confidence |
-| trgm_high 0.80–0.85 | 1,534 | Use with caution — some false positives |
-| trgm_low 0.65–0.79 | 3,271 | Low confidence — flag only, don't trust |
-| Unmatched | 3,268 | Genuinely out-of-state or no SOS record |
-| **Total** | **44,431** | **92.6% matched; 82.9% trusted (≥0.85)** |
-
-**Implementation notes:**
-- Prefix-blocking approach: group 4.2M SOS names by first 5 chars, compare parcel name against same-prefix bucket only
-- `rapidfuzz.fuzz.token_sort_ratio` with extra punctuation normalization (hyphens, commas stripped before compare)
-- One-time runtime: ~5 minutes
-- Known issue: trgm_high at exactly 0.80 has false positives from prefix coincidences
-- `trgm_low` should not be used for network enrichment — too many false positives
+| exact (1.0) | 13,090 | Normalized exact match |
+| trgm_high ≥0.80 | 26,792 | High confidence — re-scored with rapidfuzz |
+| trgm_low 0.65–0.79 | 2,989 | Low confidence — flag only, not used for enrichment |
+| **Total** | **42,871** | **96.5% matched** |
 
 ---
 
@@ -90,48 +64,26 @@ CREATE TABLE sos_matches (
 
 Once matches are confirmed, propagate SOS fields back to `owner_entities`:
 
-```sql
-ALTER TABLE owner_entities ADD COLUMN IF NOT EXISTS sos_control_number TEXT;
-ALTER TABLE owner_entities ADD COLUMN IF NOT EXISTS sos_status TEXT;
-ALTER TABLE owner_entities ADD COLUMN IF NOT EXISTS sos_business_type TEXT;
-ALTER TABLE owner_entities ADD COLUMN IF NOT EXISTS sos_foreign_state TEXT;
-ALTER TABLE owner_entities ADD COLUMN IF NOT EXISTS sos_registered_agent TEXT;
-ALTER TABLE owner_entities ADD COLUMN IF NOT EXISTS sos_principal_city TEXT;
-ALTER TABLE owner_entities ADD COLUMN IF NOT EXISTS sos_principal_state TEXT;
-```
-
 **Script:** `scripts/09_enrich_owners_sos.py`
 
-**Results (2026-02-19):**
-- 48,579 owner_entities enriched (exact + trgm_high ≥0.80 only; trgm_low skipped)
-- 42,410 active entities, 4,464 admin dissolved, 30,083 foreign-incorporated
-- Delaware: 4,874 (expected — LLC formation state)
-- Top RAs are all commercial (CSC, CT Corp, Cogency) — need filtering in Phase 3
-- Join uses `normalize_biz_name(oe.owner_name_norm)` to catch ~1,600 extra matches vs direct equality
+**Results (2026-02-20):**
+- 50,168 owner_entities enriched (exact + trgm_high only; trgm_low skipped)
+- Top foreign state: Delaware (5,335)
+- Join uses `normalize_biz_name(oe.owner_name_norm)` for maximum coverage.
 
 ---
 
 ### Phase 3: SOS-derived network enrichment ✅ COMPLETE
 
-Use SOS data to find hidden connections between ownership clusters that parcel-level data doesn't reveal:
-
-**Connection types to discover:**
-1. **Shared registered agent** — two clusters use the same non-commercial RA (individual RAs signal control)
-2. **Shared officer name** — same person as officer/director of multiple entities
-3. **Shared principal address** — same office address for multiple entities (even if name differs)
+Use SOS data to find hidden connections between ownership clusters that parcel-level data doesn't reveal.
 
 **Script:** `scripts/10_sos_network_enrichment.py`
 
-**Results (v1, 2026-02-19 — superseded):**
-- 476,537 clusters (pre-SOS) → 468,494 clusters (post-SOS) = 8,043 net merges
-- Cluster 1 grew from 7.9K → 27.3K parcels — mega-cluster problem
-
-**Results (v2, 2026-02-19 — two-pass fix):**
-- 476,537 → 471,141 clusters = **5,396 net merges**
-- New edges: 7,658 shared-RA + 11,972 shared-officer + 21,804 shared-SOS-address = 41,434 total
-- Blocked by size gate: 332 RA edges, 490 officer edges, 1,331 SOS-addr edges
-- Cluster 1: **3,496 parcels** (was 27,300), largest cluster: **7,113 parcels** (cluster 2)
-- Size distribution: 428,437 singletons, 38,551 tiny, 3,938 small, 202 medium, 12 large, 1 mega
+**Results (v2 refined, 2026-02-20):**
+- 476,537 → 470,077 clusters = **6,460 net merges**
+- New edges: 10,502 shared-RA + 12,451 shared-officer + 23,391 shared-SOS-address = **46,344 total**
+- Cluster 1: **4,595 parcels**, Cluster 2: **7,113 parcels**
+- Size distribution: 427,530 singletons, 38,418 tiny, 3,906 small, 210 medium, 12 large, 1 mega
 
 **Tuning applied:**
 - `BASE_MAX_ADDR_ENTITIES = 10` (down from 100 in script 04) — prevents commercial office park cliques

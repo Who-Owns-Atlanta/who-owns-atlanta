@@ -9,24 +9,30 @@
 - [x] Reference overlays: city limits, neighborhoods, NPU, council districts, address points, zoning
 - [x] Workflow reference docs (two LLM consultations + Horizontal Holdings PDF)
 - [x] CLAUDE.md / AGENTS.md for AI assistant guidelines
-- [x] Python dependencies (geopandas, psycopg2-binary, sqlalchemy, geoalchemy2, networkx, requests, playwright)
+- [x] Python dependencies (geopandas, psycopg2-binary, sqlalchemy, geoalchemy2, networkx, requests, playwright, rapidfuzz)
 - [x] PostgreSQL/PostGIS database (Docker — `woa_postgis` on port 5434)
 - [x] Data loading pipeline (GeoJSON → PostGIS: `scripts/01_load_parcels.py`)
 - [x] Schema unification (Fulton + DeKalb → `parcels_unified` view)
 - [x] Corporate/institutional owner flagging (`scripts/02_flag_corporate_owners.py`)
 - [x] Address normalization via libpostal (`scripts/03_normalize_addresses.py`, `addr_norm_lookup` table)
 - [x] Ownership network/graph logic (`scripts/04_ownership_network.py`, `owner_entities` + `ownership_clusters`)
-- [x] SOS scraper converted to Python/Playwright (`scripts/05_scrape_sos.py`) — superseded by bulk download
-- [x] GA SOS bulk data loaded into `sos` schema (4.3M entities, 4.7M addresses, 49M officers, 10.3M registered agents) — `scripts/07_load_sos.py`
+- [x] SOS name matching — `scripts/08_match_sos.py` (96.5% match rate, hybrid SQL + multi-processing)
+- [x] SOS enrichment of `owner_entities` — `scripts/09_enrich_owners_sos.py` (50,168 entities enriched)
+- [x] SOS network enrichment — `scripts/10_sos_network_enrichment.py` (6,460 net merges, 46K SOS edges)
+- [x] Atlanta city Tax_Parcel enrichment — `scripts/11_city_enrichment.py` (171,287 parcels enriched)
 
 ## What's NOT in place yet
-- [x] SOS name matching — `scripts/08_match_sos.py` (92.6% match, ~5 min runtime)
-- [x] SOS enrichment of `owner_entities` — `scripts/09_enrich_owners_sos.py` (48,579 entities enriched)
-- [x] SOS network enrichment — `scripts/10_sos_network_enrichment.py` (5,396 clusters merged, mega-cluster fixed via two-pass approach)
-- [x] Atlanta city Tax_Parcel enrichment — `scripts/11_city_enrichment.py` (171,287 parcels enriched: 156,557 Fulton + 14,730 DeKalb; city_neighborhood, city_npu, city_council columns on county tables)
 - [ ] Residential-only / no-homestead filtering
 - [ ] "Parent" company / DBA assignment per ownership group
+- [ ] Web interface — see `planning/04_web_interface.md`
 - [ ] Tests
+
+## Database stats
+- **Fulton County:** 370,189 parcels (67,719 corporate, 22,620 institutional)
+- **DeKalb County:** 245,766 parcels (37,093 corporate, 13,036 institutional)
+- **Total:** 615,955 parcels
+- **Ownership clusters:** 470,077 total (post-SOS refinement)
+- **SOS matched owners:** 42,871 distinct names
 
 ## Decisions made
 - **Primary data:** Fulton County + DeKalb County only. Atlanta city data is redundant (counties cover it).
