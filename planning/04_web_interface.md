@@ -4,6 +4,7 @@
 **Status:** Draft
 
 **Site name:** Who Owns Atlanta?
+**Short name/tag:** whoa?!?
 **Domain:** who-owns-atlanta.org
 
 ---
@@ -25,7 +26,7 @@ A public-facing web interface for exploring Atlanta-area property ownership. Cor
 
 ## Phase 1: Docker Infrastructure
 
-Add new services to `docker-compose.yml` alongside existing `woa_postgis` and `woa_libpostal`.
+Add new services to `docker-compose.yml` alongside existing `woa_postgis`.
 
 ### 1.1 New containers
 
@@ -244,12 +245,11 @@ Aggregate `is_corporate` parcel count by neighborhood polygon. Render as a fill 
 |---|---|
 | woa_postgis (shared_buffers=2GB) | 2.5GB |
 | woa_api (FastAPI + workers) | 200MB |
-| woa_libpostal | 200MB |
 | host nginx | 30MB |
 | OS + headroom | 1GB |
-| **Total** | **~4GB** |
+| **Total** | **~3.7GB** |
 
-No tile server on VPS — tiles are on S3/CloudFront. 8GB gives comfortable buffer for Postgres to cache hot parcel data.
+No tile server on VPS — tiles are on S3/CloudFront. `woa_libpostal` is a data-prep tool only; it does not run in production. 8GB gives comfortable buffer for Postgres to cache hot parcel data.
 
 ### Rate limiting strategy
 
