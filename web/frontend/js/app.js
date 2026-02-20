@@ -256,9 +256,9 @@ function renderParcelPanel(p) {
   // Owner line
   const ownerName = (p.owner_name || '').trim();
   if (p.cluster_id) {
-    parcelOwnerLine.innerHTML = `Owner: <a href="/owner/${p.cluster_id}/">${escHtml(ownerName)}</a>`;
+    parcelOwnerLine.innerHTML = `<a href="/owner/${p.cluster_id}/">${escHtml(ownerName)}</a>`;
   } else {
-    parcelOwnerLine.textContent = ownerName ? `Owner: ${ownerName}` : '';
+    parcelOwnerLine.textContent = ownerName;
   }
 
   // Metadata

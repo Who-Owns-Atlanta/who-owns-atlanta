@@ -1,12 +1,13 @@
 /* ── Pico overrides ─────────────────────────────────────────── */
 :root {
-  --pico-background-color: #f7f7f8;
-  --pico-primary:          #2563eb;
-  --pico-primary-hover:    #1d4ed8;
-  --pico-color:            #1e293b;
-  --pico-muted-color:      #64748b;
-  --pico-border-radius:    6px;
-  --pico-font-family:      system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --pico-background-color:      #f7f7f8;
+  --pico-primary:               #2563eb;
+  --pico-primary-hover:         #1d4ed8;
+  --pico-color:                 #1e293b;
+  --pico-muted-color:           #64748b;
+  --pico-border-radius:         6px;
+  --pico-font-family:           system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --pico-form-element-color:    #1e293b;
 }
 
 /* ── Full-height shell ──────────────────────────────────────── */
@@ -36,8 +37,9 @@ header {
 }
 
 .site-name {
-  font-size: 1.1rem;
-  font-weight: 600;
+  font-size: 1.4rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
   color: var(--pico-color);
   white-space: nowrap;
   flex: 0 0 auto;
@@ -46,8 +48,7 @@ header {
 /* ── Search ─────────────────────────────────────────────────── */
 .search-wrapper {
   position: relative;
-  flex: 1 1 auto;
-  max-width: 480px;
+  flex: 0 0 400px;
 }
 
 #search-input {
@@ -55,9 +56,14 @@ header {
   margin: 0;
   padding: 0.45rem 0.75rem;
   font-size: 0.95rem;
+  color: #1e293b !important;
   border: 1px solid #cbd5e1;
-  border-radius: var(--pico-border-radius);
+  border-radius: 6px;
   background: #fff;
+}
+
+#search-input::placeholder {
+  color: #94a3b8;
 }
 
 #search-input:focus {
@@ -87,6 +93,7 @@ header {
   gap: 0.5rem;
   padding: 0.55rem 0.85rem;
   font-size: 0.9rem;
+  color: #1e293b;
   cursor: pointer;
   border-bottom: 1px solid #f1f5f9;
 }
@@ -138,7 +145,7 @@ main {
   position: absolute;
   top: 0.75rem;
   right: 0.75rem;
-  background: none;
+  background: #f1f5f9;
   border: none;
   font-size: 1rem;
   color: var(--pico-muted-color);
@@ -148,7 +155,7 @@ main {
   border-radius: 4px;
 }
 
-#panel-close:hover { background: #f1f5f9; color: var(--pico-color); }
+#panel-close:hover { background: #e2e8f0; color: var(--pico-color); }
 
 #parcel-view h2 {
   font-size: 1.1rem;
@@ -185,8 +192,9 @@ main {
 #parcel-badges { margin-bottom: 0.75rem; min-height: 1.2rem; }
 
 #parcel-owner-line {
-  font-size: 0.9rem;
-  color: var(--pico-muted-color);
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--pico-color);
   margin: 0 0 1rem;
 }
 
@@ -240,6 +248,7 @@ footer {
 footer nav {
   display: flex;
   gap: 1.5rem;
+  justify-content: flex-start;
 }
 
 footer nav a {
@@ -256,8 +265,8 @@ footer nav a:hover { color: var(--pico-primary); }
 /* ── Mobile ─────────────────────────────────────────────────── */
 @media (max-width: 768px) {
   header { gap: 0.5rem; padding: 0.5rem 0.75rem; }
-  .site-name { font-size: 0.95rem; }
-  .search-wrapper { max-width: none; }
+  .site-name { font-size: 1.1rem; }
+  .search-wrapper { flex: 1 1 auto; }
 
   #detail-panel {
     position: fixed;
