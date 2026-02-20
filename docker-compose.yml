@@ -12,5 +12,19 @@ services:
       - woa_pgdata:/var/lib/postgresql/data
     restart: unless-stopped
 
+  api:
+    build: ./web/api
+    container_name: woa_api
+    environment:
+      DATABASE_URL: postgresql://woa:woa@postgis:5432/who_owns_atl
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./web/api:/app
+    command: uv run uvicorn main:app --host 0.0.0.0 --port 8080 --reload
+    depends_on:
+      - postgis
+    restart: unless-stopped
+
 volumes:
   woa_pgdata:
