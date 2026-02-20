@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Who Owns Atlanta?</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.classless.min.css">
+  <link href="https://unpkg.com/maplibre-gl@4/dist/maplibre-gl.css" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+  <header>
+    <span class="site-name">Who Owns Atlanta?</span>
+    <div class="search-wrapper">
+      <input type="search" id="search-input" placeholder="Search an address…" autocomplete="off" aria-label="Search an address" aria-autocomplete="list" aria-controls="search-results">
+      <ul id="search-results" role="listbox" hidden></ul>
+    </div>
+  </header>
+
+  <main>
+    <div id="map"></div>
+
+    <aside id="detail-panel" hidden aria-live="polite">
+      <button id="panel-close" aria-label="Close panel">✕</button>
+
+      <div id="parcel-view">
+        <h2 id="parcel-address"></h2>
+        <div id="parcel-badges"></div>
+        <p id="parcel-owner-line"></p>
+        <dl id="parcel-meta"></dl>
+
+        <details id="parcel-permits">
+          <summary>Building complaints</summary>
+          <dl id="permit-meta"></dl>
+        </details>
+
+        <a id="owner-profile-link" href="#" hidden>View full owner profile →</a>
+      </div>
+    </aside>
+  </main>
+
+  <footer>
+    <nav>
+      <a href="/leaderboard/">Leaderboard</a>
+      <a href="/about/">About</a>
+      <a href="/methodology/">Methodology</a>
+      <a href="/faq/">FAQ</a>
+    </nav>
+  </footer>
+
+  <script src="https://unpkg.com/maplibre-gl@4/dist/maplibre-gl.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>

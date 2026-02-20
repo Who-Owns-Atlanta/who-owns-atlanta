@@ -1,0 +1,276 @@
+/* ── Pico overrides ─────────────────────────────────────────── */
+:root {
+  --pico-background-color: #f7f7f8;
+  --pico-primary:          #2563eb;
+  --pico-primary-hover:    #1d4ed8;
+  --pico-color:            #1e293b;
+  --pico-muted-color:      #64748b;
+  --pico-border-radius:    6px;
+  --pico-font-family:      system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+/* ── Full-height shell ──────────────────────────────────────── */
+html, body {
+  height: 100%;
+  overflow: hidden;
+  margin: 0;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  background: var(--pico-background-color);
+}
+
+/* ── Header ─────────────────────────────────────────────────── */
+header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.6rem 1.2rem;
+  background: #fff;
+  border-bottom: 1px solid #e2e8f0;
+  z-index: 200;
+}
+
+.site-name {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--pico-color);
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+/* ── Search ─────────────────────────────────────────────────── */
+.search-wrapper {
+  position: relative;
+  flex: 1 1 auto;
+  max-width: 480px;
+}
+
+#search-input {
+  width: 100%;
+  margin: 0;
+  padding: 0.45rem 0.75rem;
+  font-size: 0.95rem;
+  border: 1px solid #cbd5e1;
+  border-radius: var(--pico-border-radius);
+  background: #fff;
+}
+
+#search-input:focus {
+  border-color: var(--pico-primary);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+#search-results {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: var(--pico-border-radius);
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.08);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  z-index: 300;
+}
+
+#search-results li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.85rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+#search-results li:last-child { border-bottom: none; }
+
+#search-results li:hover,
+#search-results li[aria-selected="true"] {
+  background: #eff6ff;
+}
+
+.result-county {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #475569;
+  white-space: nowrap;
+}
+
+/* ── Main split ─────────────────────────────────────────────── */
+main {
+  flex: 1 1 0;
+  display: flex;
+  overflow: hidden;
+  position: relative;
+}
+
+#map {
+  flex: 1 1 0;
+  height: 100%;
+}
+
+/* ── Detail panel ───────────────────────────────────────────── */
+#detail-panel {
+  width: 360px;
+  flex: 0 0 360px;
+  height: 100%;
+  overflow-y: auto;
+  background: #fff;
+  border-left: 1px solid #e2e8f0;
+  padding: 1.2rem 1.2rem 1.5rem;
+  position: relative;
+  box-shadow: -2px 0 8px rgba(15, 23, 42, 0.05);
+}
+
+#panel-close {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  background: none;
+  border: none;
+  font-size: 1rem;
+  color: var(--pico-muted-color);
+  cursor: pointer;
+  padding: 0.25rem 0.4rem;
+  line-height: 1;
+  border-radius: 4px;
+}
+
+#panel-close:hover { background: #f1f5f9; color: var(--pico-color); }
+
+#parcel-view h2 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0 2rem 0.5rem 0;
+  line-height: 1.3;
+}
+
+/* ── Badges ─────────────────────────────────────────────────── */
+.badge-corporate {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: #dc2626;
+  color: #fff;
+  margin-right: 0.35rem;
+}
+
+.badge-institutional {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: #d97706;
+  color: #fff;
+  margin-right: 0.35rem;
+}
+
+#parcel-badges { margin-bottom: 0.75rem; min-height: 1.2rem; }
+
+#parcel-owner-line {
+  font-size: 0.9rem;
+  color: var(--pico-muted-color);
+  margin: 0 0 1rem;
+}
+
+#parcel-owner-line a { color: var(--pico-primary); }
+
+/* ── Definition list metadata ───────────────────────────────── */
+dl#parcel-meta,
+dl#permit-meta {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 0.75rem;
+  row-gap: 0.25rem;
+  font-size: 0.85rem;
+  margin: 0 0 1rem;
+}
+
+dl dt { color: var(--pico-muted-color); white-space: nowrap; }
+dl dd { margin: 0; color: var(--pico-color); }
+
+/* ── Permits details ────────────────────────────────────────── */
+#parcel-permits {
+  margin-bottom: 1rem;
+  font-size: 0.85rem;
+}
+
+#parcel-permits summary {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--pico-color);
+  cursor: pointer;
+  padding: 0.25rem 0;
+}
+
+/* ── Owner profile link ─────────────────────────────────────── */
+#owner-profile-link {
+  display: inline-block;
+  margin-top: 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--pico-primary);
+}
+
+/* ── Footer nav ─────────────────────────────────────────────── */
+footer {
+  flex: 0 0 auto;
+  background: #fff;
+  border-top: 1px solid #e2e8f0;
+  padding: 0.4rem 1.2rem;
+}
+
+footer nav {
+  display: flex;
+  gap: 1.5rem;
+}
+
+footer nav a {
+  font-size: 0.85rem;
+  color: var(--pico-muted-color);
+  text-decoration: none;
+}
+
+footer nav a:hover { color: var(--pico-primary); }
+
+/* ── MapLibre attribution tweak ─────────────────────────────── */
+.maplibregl-ctrl-attrib { font-size: 0.7rem !important; }
+
+/* ── Mobile ─────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  header { gap: 0.5rem; padding: 0.5rem 0.75rem; }
+  .site-name { font-size: 0.95rem; }
+  .search-wrapper { max-width: none; }
+
+  #detail-panel {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    height: auto;
+    max-height: 55vh;
+    border-left: none;
+    border-top: 1px solid #e2e8f0;
+    border-radius: 12px 12px 0 0;
+    box-shadow: 0 -4px 16px rgba(15, 23, 42, 0.1);
+    z-index: 150;
+  }
+}
