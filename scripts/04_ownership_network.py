@@ -151,15 +151,37 @@ def assign_clusters(engine, G):
         conn.execute(text("DROP TABLE IF EXISTS ownership_clusters CASCADE;"))
         conn.execute(text("""
             CREATE TABLE ownership_clusters AS
-            SELECT
-                cluster_id,
-                COUNT(*) AS entity_count,
-                SUM(count) AS parcel_count,
-                ARRAY_AGG(DISTINCT owner_name_norm ORDER BY owner_name_norm) AS owner_names,
-                ARRAY_AGG(DISTINCT owner_addr_norm ORDER BY owner_addr_norm)
-                    FILTER (WHERE owner_addr_norm != '') AS owner_addresses
-            FROM owner_entities
-            GROUP BY cluster_id
+            WITH name_ranks AS (
+                -- Deduplicate names per cluster, ordered by entity parcel count DESC
+                -- so the largest entity name sorts first (primary display name).
+                SELECT cluster_id, owner_name_norm,
+                       MAX(array_length(parcel_ids, 1)) AS max_pc
+                FROM owner_entities
+                GROUP BY cluster_id, owner_name_norm
+            ),
+            name_arrays AS (
+                SELECT cluster_id,
+                       ARRAY_AGG(owner_name_norm ORDER BY max_pc DESC, owner_name_norm)
+                           AS owner_names
+                FROM name_ranks
+                GROUP BY cluster_id
+            ),
+            addr_arrays AS (
+                SELECT cluster_id,
+                       ARRAY_AGG(DISTINCT owner_addr_norm ORDER BY owner_addr_norm)
+                           FILTER (WHERE owner_addr_norm != '') AS owner_addresses
+                FROM owner_entities
+                GROUP BY cluster_id
+            )
+            SELECT oe.cluster_id,
+                   COUNT(*)        AS entity_count,
+                   SUM(oe.count)   AS parcel_count,
+                   na.owner_names,
+                   aa.owner_addresses
+            FROM owner_entities oe
+            JOIN name_arrays na USING (cluster_id)
+            JOIN addr_arrays aa USING (cluster_id)
+            GROUP BY oe.cluster_id, na.owner_names, aa.owner_addresses
             ORDER BY parcel_count DESC;
         """))
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_oc_cluster ON ownership_clusters (cluster_id);"))

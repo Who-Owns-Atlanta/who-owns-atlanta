@@ -380,24 +380,40 @@ def reassign_clusters(engine, G):
         conn.execute(text("DROP TABLE IF EXISTS ownership_clusters CASCADE"))
         conn.execute(text("""
             CREATE TABLE ownership_clusters AS
+            WITH name_ranks AS (
+                -- Deduplicate names per cluster, ordered by entity parcel count DESC
+                -- so the largest entity name sorts first (primary display name).
+                SELECT cluster_id, owner_name_norm,
+                       MAX(array_length(parcel_ids, 1)) AS max_pc
+                FROM owner_entities
+                GROUP BY cluster_id, owner_name_norm
+            ),
+            name_arrays AS (
+                SELECT cluster_id,
+                       ARRAY_AGG(owner_name_norm ORDER BY max_pc DESC, owner_name_norm)
+                           AS owner_names
+                FROM name_ranks
+                GROUP BY cluster_id
+            )
             SELECT
-                cluster_id,
+                oe.cluster_id,
                 COUNT(*)                                                     AS entity_count,
-                SUM(count)                                                   AS parcel_count,
-                ARRAY_AGG(DISTINCT owner_name_norm ORDER BY owner_name_norm) AS owner_names,
-                ARRAY_AGG(DISTINCT owner_addr_norm ORDER BY owner_addr_norm)
-                    FILTER (WHERE owner_addr_norm != '')                     AS owner_addresses,
-                COUNT(DISTINCT sos_control_number)
-                    FILTER (WHERE sos_control_number IS NOT NULL)            AS sos_entity_count,
-                MODE() WITHIN GROUP (ORDER BY sos_status)                   AS primary_sos_status,
-                MODE() WITHIN GROUP (ORDER BY sos_foreign_state)
-                    FILTER (WHERE sos_foreign_state IS NOT NULL
-                              AND sos_foreign_state <> '')                   AS primary_foreign_state,
-                ARRAY_AGG(DISTINCT sos_registered_agent ORDER BY sos_registered_agent)
-                    FILTER (WHERE sos_registered_agent IS NOT NULL
-                              AND sos_registered_agent <> '')                AS registered_agents
-            FROM owner_entities
-            GROUP BY cluster_id
+                SUM(oe.count)                                                AS parcel_count,
+                na.owner_names,
+                ARRAY_AGG(DISTINCT oe.owner_addr_norm ORDER BY oe.owner_addr_norm)
+                    FILTER (WHERE oe.owner_addr_norm != '')                  AS owner_addresses,
+                COUNT(DISTINCT oe.sos_control_number)
+                    FILTER (WHERE oe.sos_control_number IS NOT NULL)         AS sos_entity_count,
+                MODE() WITHIN GROUP (ORDER BY oe.sos_status)                AS primary_sos_status,
+                MODE() WITHIN GROUP (ORDER BY oe.sos_foreign_state)
+                    FILTER (WHERE oe.sos_foreign_state IS NOT NULL
+                              AND oe.sos_foreign_state <> '')                AS primary_foreign_state,
+                ARRAY_AGG(DISTINCT oe.sos_registered_agent ORDER BY oe.sos_registered_agent)
+                    FILTER (WHERE oe.sos_registered_agent IS NOT NULL
+                              AND oe.sos_registered_agent <> '')             AS registered_agents
+            FROM owner_entities oe
+            JOIN name_arrays na USING (cluster_id)
+            GROUP BY oe.cluster_id, na.owner_names
             ORDER BY parcel_count DESC
         """))
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_oc_cluster ON ownership_clusters (cluster_id)"))
