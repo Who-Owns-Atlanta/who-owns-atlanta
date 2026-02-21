@@ -62,40 +62,38 @@ echo "==> Exporting from PostGIS and building tiles (parallel pipeline)..."
 
 TILE_TMP="$WORK_DIR/tiles"
 
-PGPASSWORD="$DB_PASS" ogr2ogr \
-  -f GeoJSON /vsistdout/ \
-  "PG:host=$DB_HOST port=$DB_PORT dbname=$DB_NAME user=$DB_USER password=$DB_PASS" \
-  -sql "
-    SELECT
-        p.geometry,
-        p.parcel_id,
-        p.county,
-        p.is_corporate::int  AS is_corporate,
-        p.is_institutional::int AS is_institutional,
-        oe.cluster_id
-    FROM parcels_unified p
-    LEFT JOIN LATERAL (
-        SELECT cluster_id
-        FROM owner_entities
-        WHERE p.parcel_id = ANY(parcel_ids)
-          AND county = p.county
-        LIMIT 1
-    ) oe ON true
-  " \
-  -nln parcels \
-  -lco COORDINATE_PRECISION=6 \
-  | tippecanoe \
-      --output-to-directory "$TILE_TMP" \
-      --no-tile-compression \
-      --minimum-zoom=10 \
-      --maximum-zoom=14 \
-      --layer=parcels \
-      --attribute-type=is_corporate:bool \
-      --attribute-type=is_institutional:bool \
-      --coalesce-densest-as-needed \
-      --read-parallel \
-      --quiet \
-      -
+tippecanoe \
+  --output-to-directory "$TILE_TMP" \
+  --no-tile-compression \
+  --minimum-zoom=10 \
+  --maximum-zoom=14 \
+  --layer=parcels \
+  --attribute-type=is_corporate:bool \
+  --attribute-type=is_institutional:bool \
+  --coalesce-densest-as-needed \
+  --quiet \
+  <(PGPASSWORD="$DB_PASS" ogr2ogr \
+      -f GeoJSON /vsistdout/ \
+      "PG:host=$DB_HOST port=$DB_PORT dbname=$DB_NAME user=$DB_USER password=$DB_PASS" \
+      -sql "
+        SELECT
+            p.geometry,
+            p.parcel_id,
+            p.county,
+            p.is_corporate::int  AS is_corporate,
+            p.is_institutional::int AS is_institutional,
+            oe.cluster_id
+        FROM parcels_unified p
+        LEFT JOIN LATERAL (
+            SELECT cluster_id
+            FROM owner_entities
+            WHERE p.parcel_id = ANY(parcel_ids)
+              AND county = p.county
+            LIMIT 1
+        ) oe ON true
+      " \
+      -nln parcels \
+      -lco COORDINATE_PRECISION=6)
 
 TILE_COUNT=$(find "$TILE_TMP" -name "*.pbf" | wc -l)
 TILE_SIZE=$(du -sh "$TILE_TMP" | cut -f1)
