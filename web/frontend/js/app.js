@@ -2,9 +2,14 @@
 // Who Owns Atlanta? — map page
 // ---------------------------------------------------------------------------
 
-// Set to S3/CloudFront URL after tiles are built (Phase 3).
-// e.g. "https://tiles.who-owns-atlanta.org/tiles/{z}/{x}/{y}.pbf"
-const PARCEL_TILES_URL = null;
+// Tile URL: relative path in dev (served by local nginx), CloudFront in prod.
+// Set PROD_TILES_URL once the CloudFront distribution is live.
+const PROD_TILES_URL = null; // e.g. "https://tiles.who-owns-atlanta.org/tiles/{z}/{x}/{y}.pbf"
+const DEV_TILES_URL  = "/tiles/{z}/{x}/{y}.pbf";
+
+const PARCEL_TILES_URL = (window.location.hostname === "who-owns-atlanta.local")
+  ? DEV_TILES_URL
+  : PROD_TILES_URL;
 
 // ---------------------------------------------------------------------------
 // Map init
