@@ -17,6 +17,7 @@ services:
     container_name: woa_api
     environment:
       DATABASE_URL: postgresql://woa:woa@postgis:5432/who_owns_atl
+      DEV_MODE: "1"
     ports:
       - "127.0.0.1:8080:8080"
     volumes:

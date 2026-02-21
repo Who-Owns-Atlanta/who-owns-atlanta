@@ -15,7 +15,9 @@ app.add_middleware(
 
 # Stable endpoints get a 24-hour public cache.
 # Search results are query-specific and must not be cached.
-CACHE_1DAY = "public, max-age=86400"
+# Set DEV_MODE=1 to disable caching entirely (useful during development).
+_dev = os.environ.get("DEV_MODE", "").strip() == "1"
+CACHE_1DAY = "no-store" if _dev else "public, max-age=86400"
 NO_CACHE = "no-store"
 
 
