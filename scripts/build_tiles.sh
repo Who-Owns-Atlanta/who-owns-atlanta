@@ -28,7 +28,6 @@ DB_PASS="woa"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 WORK_DIR="$(mktemp -d)"
-GEOJSON="$WORK_DIR/parcels.geojson"
 
 trap 'rm -rf "$WORK_DIR"' EXIT
 
@@ -46,16 +45,25 @@ done
 mkdir -p "$OUTPUT_DIR"
 
 # ---------------------------------------------------------------------------
-# Step 1: Export GeoJSON from PostGIS
+# Steps 1 + 2: Export GeoJSON and build tiles in one pipeline
 # ---------------------------------------------------------------------------
-# Join parcels_unified to owner_entities via unnest so each parcel gets
-# its cluster_id. LEFT JOIN so parcels with no entity row are still exported.
-# ogr2ogr is faster than psql for large geometry exports.
+# ogr2ogr writes to stdout (/vsistdout/); tippecanoe reads from stdin (-).
+# Both processes run concurrently — no intermediate file written to disk.
+#
+# Zoom 10–14:
+#   z10–12: simplified overview — color by is_corporate/is_institutional
+#   z13–14: full detail — color by cluster_id
+#
+# --read-parallel: tippecanoe parses stdin features across multiple threads.
+# --coalesce-densest-as-needed: merge features at low zoom rather than drop.
+# --no-tile-compression: raw .pbf — nginx/CloudFront handle Content-Encoding.
 
-echo "==> Exporting GeoJSON from PostGIS..."
+echo "==> Exporting from PostGIS and building tiles (parallel pipeline)..."
+
+TILE_TMP="$WORK_DIR/tiles"
 
 PGPASSWORD="$DB_PASS" ogr2ogr \
-  -f GeoJSON "$GEOJSON" \
+  -f GeoJSON /vsistdout/ \
   "PG:host=$DB_HOST port=$DB_PORT dbname=$DB_NAME user=$DB_USER password=$DB_PASS" \
   -sql "
     SELECT
@@ -75,38 +83,19 @@ PGPASSWORD="$DB_PASS" ogr2ogr \
     ) oe ON true
   " \
   -nln parcels \
-  -lco COORDINATE_PRECISION=6
-
-FEATURE_COUNT=$(grep -c '"type":"Feature"' "$GEOJSON" || true)
-echo "    Exported ~$FEATURE_COUNT features ($(du -sh "$GEOJSON" | cut -f1))"
-
-# ---------------------------------------------------------------------------
-# Step 2: Build tiles with tippecanoe
-# ---------------------------------------------------------------------------
-# Zoom 10–14:
-#   z10–12: simplified overview — color by is_corporate/is_institutional
-#   z13–14: full detail — color by cluster_id
-#
-# --coalesce-densest-as-needed: merge features at low zoom to stay under tile
-#   size limits rather than dropping them entirely.
-# --no-tile-compression: tiles served as raw .pbf — nginx/CloudFront handle
-#   transport compression via Content-Encoding separately.
-
-echo "==> Running tippecanoe..."
-
-TILE_TMP="$WORK_DIR/tiles"
-
-tippecanoe \
-  --output-to-directory "$TILE_TMP" \
-  --no-tile-compression \
-  --minimum-zoom=10 \
-  --maximum-zoom=14 \
-  --layer=parcels \
-  --attribute-type=is_corporate:bool \
-  --attribute-type=is_institutional:bool \
-  --coalesce-densest-as-needed \
-  --quiet \
-  "$GEOJSON"
+  -lco COORDINATE_PRECISION=6 \
+  | tippecanoe \
+      --output-to-directory "$TILE_TMP" \
+      --no-tile-compression \
+      --minimum-zoom=10 \
+      --maximum-zoom=14 \
+      --layer=parcels \
+      --attribute-type=is_corporate:bool \
+      --attribute-type=is_institutional:bool \
+      --coalesce-densest-as-needed \
+      --read-parallel \
+      --quiet \
+      -
 
 TILE_COUNT=$(find "$TILE_TMP" -name "*.pbf" | wc -l)
 TILE_SIZE=$(du -sh "$TILE_TMP" | cut -f1)
