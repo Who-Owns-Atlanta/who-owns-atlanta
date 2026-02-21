@@ -302,9 +302,10 @@ def add_sos_addr_edges(G, engine, entities, base_cluster_of, parcel_count_of):
                          [{"cn": cn} for cn in cns[i:i+CHUNK]])
         rows = conn.execute(text("""
             SELECT a.control_number,
-                   upper(trim(a.street_address1)) AS street,
-                   upper(trim(a.city))            AS city,
-                   upper(trim(a.state))           AS state
+                   upper(trim(a.street_address1))             AS street,
+                   upper(trim(coalesce(a.street_address2,''))) AS unit,
+                   upper(trim(a.city))                        AS city,
+                   upper(trim(a.state))                       AS state
             FROM sos.addresses a
             JOIN _enrich_cns2 ec ON ec.control_number = a.control_number
             WHERE a.street_address1 IS NOT NULL AND trim(a.street_address1) <> ''
@@ -314,16 +315,18 @@ def add_sos_addr_edges(G, engine, entities, base_cluster_of, parcel_count_of):
     print(f"  {len(rows):,} SOS address records")
 
     addr_cns: dict[tuple, set] = {}
-    for cn, street, city, state in rows:
+    for cn, street, unit, city, state in rows:
         if street and city:
-            addr_cns.setdefault((street, city, state or ''), set()).add(cn)
+            # Include unit/suite in key so different suites at the same building
+            # (e.g. a law firm or registered-agent service) are not merged.
+            addr_cns.setdefault((street, unit, city, state or ''), set()).add(cn)
 
     cn_to_eids: dict[str, list[int]] = {}
     for eid, cn in enriched_cns.items():
         cn_to_eids.setdefault(cn, []).append(eid)
 
     added = skipped_large = skipped_gate = 0
-    for (street, city, state), cns_for_addr in addr_cns.items():
+    for (street, unit, city, state), cns_for_addr in addr_cns.items():
         eids_for_addr = []
         for cn in cns_for_addr:
             eids_for_addr.extend(cn_to_eids.get(cn, []))
@@ -341,7 +344,7 @@ def add_sos_addr_edges(G, engine, entities, base_cluster_of, parcel_count_of):
                 if not G.has_edge(eids_for_addr[i], eids_for_addr[j]):
                     G.add_edge(eids_for_addr[i], eids_for_addr[j],
                                rel="shared_sos_addr",
-                               addr=f"{street}, {city}")
+                               addr=f"{street} {unit}, {city}".strip())
                     added += 1
 
     print(f"  {added:,} edges added  |  {skipped_large:,} addresses too large  |  {skipped_gate:,} blocked by size gate")
