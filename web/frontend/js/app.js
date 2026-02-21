@@ -5,7 +5,7 @@
 // Tile URL: relative path in dev (served by local nginx), CloudFront in prod.
 // Set PROD_TILES_URL once the CloudFront distribution is live.
 const PROD_TILES_URL = null; // e.g. "https://tiles.who-owns-atlanta.org/tiles/{z}/{x}/{y}.pbf"
-const DEV_TILES_URL  = "/tiles/{z}/{x}/{y}.pbf";
+const DEV_TILES_URL  = `${window.location.origin}/tiles/{z}/{x}/{y}.pbf`;
 
 const PARCEL_TILES_URL = (window.location.hostname === "who-owns-atlanta.local")
   ? DEV_TILES_URL
@@ -96,12 +96,17 @@ map.on('load', () => {
 
 // Deterministic cluster → HSL color expression for MapLibre
 function clusterColor() {
-  // Produces a stable hue from cluster_id using modulo over a golden-ratio spread
+  // Produces a stable hue from cluster_id using modulo over a golden-ratio spread.
+  // Uses to-color + concat to build a CSS hsl() string, avoiding MapLibre 4's
+  // strict type checking on the ['hsl', expr, ...] form.
   return [
-    'hsl',
-    ['%', ['*', ['get', 'cluster_id'], 137], 360],
-    65,
-    55,
+    'to-color',
+    ['concat',
+      'hsl(',
+      ['to-string', ['%', ['*', ['coalesce', ['get', 'cluster_id'], 0], 137], 360]],
+      ',65%,55%)',
+    ],
+    'hsl(0,0%,70%)',  // fallback for null cluster_id
   ];
 }
 
