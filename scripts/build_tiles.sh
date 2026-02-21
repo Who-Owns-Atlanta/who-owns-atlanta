@@ -29,7 +29,15 @@ DB_PASS="woa"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 WORK_DIR="$(mktemp -d)"
 
-trap 'rm -rf "$WORK_DIR"' EXIT
+psql_cmd() {
+  PGPASSWORD="$DB_PASS" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" "$DB_NAME" "$@"
+}
+
+cleanup() {
+  rm -rf "$WORK_DIR"
+  psql_cmd -c "DROP TABLE IF EXISTS _tile_oe_map;" 2>/dev/null || true
+}
+trap cleanup EXIT
 
 # ---------------------------------------------------------------------------
 # Args
@@ -58,6 +66,24 @@ mkdir -p "$OUTPUT_DIR"
 # --coalesce-densest-as-needed: merge features at low zoom rather than drop.
 # --no-tile-compression: raw .pbf — nginx/CloudFront handle Content-Encoding.
 
+# ---------------------------------------------------------------------------
+# Step 1: Materialize unnested parcel→cluster mapping for an efficient join
+# ---------------------------------------------------------------------------
+# Unnesting owner_entities.parcel_ids inline at query time forces PostgreSQL
+# into a Merge Right Join with full sorts on both sides (~20 min for 615K rows).
+# Materializing once as a real table lets the planner choose Hash Left Join
+# (~1.4s for the full export query).
+
+echo "==> Materializing parcel→cluster map..."
+psql_cmd -c "
+  DROP TABLE IF EXISTS _tile_oe_map;
+  CREATE TABLE _tile_oe_map AS
+    SELECT unnest(parcel_ids) AS parcel_id, county, cluster_id
+    FROM owner_entities;
+  CREATE INDEX ON _tile_oe_map (parcel_id, county);
+  ANALYZE _tile_oe_map;
+"
+
 echo "==> Exporting from PostGIS and building tiles (parallel pipeline)..."
 
 TILE_TMP="$WORK_DIR/tiles"
@@ -80,17 +106,12 @@ tippecanoe \
             p.geometry,
             p.parcel_id,
             p.county,
-            p.is_corporate::int  AS is_corporate,
+            p.is_corporate::int     AS is_corporate,
             p.is_institutional::int AS is_institutional,
-            oe.cluster_id
+            m.cluster_id
         FROM parcels_unified p
-        LEFT JOIN LATERAL (
-            SELECT cluster_id
-            FROM owner_entities
-            WHERE p.parcel_id = ANY(parcel_ids)
-              AND county = p.county
-            LIMIT 1
-        ) oe ON true
+        LEFT JOIN _tile_oe_map m
+          ON m.parcel_id = p.parcel_id AND m.county = p.county
       " \
       -nln parcels \
       -lco COORDINATE_PRECISION=6)
