@@ -53,10 +53,10 @@ Match ~45K distinct corporate owner names from counties against `sos.entities.bu
 
 | Match type | Count | Notes |
 |---|---|---|
-| exact (1.0) | 13,090 | Normalized exact match |
-| trgm_high ≥0.80 | 26,792 | High confidence — re-scored with rapidfuzz |
-| trgm_low 0.65–0.79 | 2,989 | Low confidence — flag only, not used for enrichment |
-| **Total** | **42,871** | **96.5% matched** |
+| exact (1.0) | 16,287 | Normalized exact match (updated to remove punctuation) |
+| trgm_high ≥0.80 | 37,036 | High confidence — re-scored with priority for Active status |
+| trgm_low 0.65–0.79 | 3,114 | Low confidence — flag only, not used for enrichment |
+| **Total** | **53,323** | **Enriched matching logic applied** |
 
 ---
 
@@ -67,8 +67,8 @@ Once matches are confirmed, propagate SOS fields back to `owner_entities`:
 **Script:** `scripts/09_enrich_owners_sos.py`
 
 **Results (2026-02-20):**
-- 50,168 owner_entities enriched (exact + trgm_high only; trgm_low skipped)
-- Top foreign state: Delaware (5,335)
+- 53,323 owner_entities enriched (exact + trgm_high only)
+- Added `sos_registered_agent_address` to support better grouping.
 - Join uses `normalize_biz_name(oe.owner_name_norm)` for maximum coverage.
 
 ---
@@ -79,11 +79,32 @@ Use SOS data to find hidden connections between ownership clusters that parcel-l
 
 **Script:** `scripts/10_sos_network_enrichment.py`
 
-**Results (v2 refined, 2026-02-20):**
-- 476,537 → 470,077 clusters = **6,460 net merges**
-- New edges: 10,502 shared-RA + 12,451 shared-officer + 23,391 shared-SOS-address = **46,344 total**
-- Cluster 1: **4,595 parcels**, Cluster 2: **7,113 parcels**
-- Size distribution: 427,530 singletons, 38,418 tiny, 3,906 small, 210 medium, 12 large, 1 mega
+**Results (v3 refined, 2026-02-20):**
+- 476,537 → 467,585 clusters = **8,952 net merges**
+- New edges: 81,955 shared-RA + 10,893 shared-officer + 18,048 shared-SOS-address = **110,896 total**
+- Cluster 1: **12,627 parcels**, Cluster 2: **7,113 parcels**
+- Size distribution: 426,154 singletons, 37,610 tiny, 3,612 small, 195 medium, 12 large, 2 mega
+
+---
+
+## Fixes & Refinements (2026-02-20)
+
+### 1. SOS Matching Priority (Redeemed vs. Active)
+**Issue:** `scripts/08_match_sos.py` was picking non-deterministic matches when multiple SOS records shared the same name (e.g., an old "Name Reservation" vs. an "Active" LLC). This often resulted in matching "Redeemed" records with no address or agent data.
+**Fix:** Updated Phase 1 (SQL) and Phase 2 (Python) to prioritize:
+1. `Active` status over others.
+2. Presence of a `registered_agent_id`.
+3. Non-"Name Reservation" business types.
+
+### 2. Registered Agent Grouping Fragmentation
+**Issue:** `scripts/10_sos_network_enrichment.py` used `sos_registered_agent_id` for linkage. Some agents have dozens of unique IDs for different entities in the same portfolio.
+**Fix:** 
+- Switched RA grouping to a composite key: `Normalized RA Name + Normalized RA Street Address`.
+- Increased `MAX_RA_ENTITIES` cap from 30 to 100 to allow for professional agents managing local/regional portfolios without merging into national mega-clusters.
+
+### 3. Normalization Alignment
+**Issue:** SQL normalization in Phase 1 didn't strip punctuation, while Python normalization in Phase 2 did, causing exact matches to fail and drop into fuzzy matching.
+**Fix:** Re-aligned `normalize_biz_name()` SQL function to match Python's `_cmp_norm()` (stripping all non-alphanumeric characters).
 
 **Tuning applied:**
 - `BASE_MAX_ADDR_ENTITIES = 10` (down from 100 in script 04) — prevents commercial office park cliques

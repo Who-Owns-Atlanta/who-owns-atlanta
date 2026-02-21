@@ -16,9 +16,9 @@
 - [x] Corporate/institutional owner flagging (`scripts/02_flag_corporate_owners.py`)
 - [x] Address normalization via libpostal (`scripts/03_normalize_addresses.py`, `addr_norm_lookup` table)
 - [x] Ownership network/graph logic (`scripts/04_ownership_network.py`, `owner_entities` + `ownership_clusters`)
-- [x] SOS name matching — `scripts/08_match_sos.py` (96.5% match rate, hybrid SQL + multi-processing)
-- [x] SOS enrichment of `owner_entities` — `scripts/09_enrich_owners_sos.py` (50,168 entities enriched)
-- [x] SOS network enrichment — `scripts/10_sos_network_enrichment.py` (6,460 net merges, 46K SOS edges)
+- [x] SOS name matching — `scripts/08_match_sos.py` (53,323 matched, prioritized Active status and resolved Name Reservation duplicates)
+- [x] SOS enrichment of `owner_entities` — `scripts/09_enrich_owners_sos.py` (53,323 entities enriched, including RA address)
+- [x] SOS network enrichment — `scripts/10_sos_network_enrichment.py` (8,952 net merges, 110K SOS edges, composite RA Name+Street grouping)
 - [x] Atlanta city Tax_Parcel enrichment — `scripts/11_city_enrichment.py` (171,287 parcels enriched)
 
 ## What's NOT in place yet
@@ -31,8 +31,8 @@
 - **Fulton County:** 370,189 parcels (67,719 corporate, 22,620 institutional)
 - **DeKalb County:** 245,766 parcels (37,093 corporate, 13,036 institutional)
 - **Total:** 615,955 parcels
-- **Ownership clusters:** 470,077 total (post-SOS refinement)
-- **SOS matched owners:** 42,871 distinct names
+- **Ownership clusters:** 467,585 total (post-SOS refined matching)
+- **SOS matched owners:** 53,323 distinct names
 
 ## Decisions made
 - **Primary data:** Fulton County + DeKalb County only. Atlanta city data is redundant (counties cover it).
