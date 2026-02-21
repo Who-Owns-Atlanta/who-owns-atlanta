@@ -15,6 +15,9 @@ const PARCEL_TILES_URL = (window.location.hostname === "who-owns-atlanta.local")
 // Map init
 // ---------------------------------------------------------------------------
 
+// Detect ?cluster=ID before map init so we can suppress the parcel flash.
+const pendingClusterId = parseInt(new URLSearchParams(window.location.search).get('cluster')) || null;
+
 const map = new maplibregl.Map({
   container: 'map',
   style: 'https://tiles.openfreemap.org/styles/liberty',
@@ -41,6 +44,7 @@ map.on('load', () => {
   });
 
   // Zoom 10-12: color by ownership type
+  // Start invisible on cluster deep link to avoid flash before dimming is applied.
   map.addLayer({
     id: 'parcels-overview',
     type: 'fill',
@@ -49,6 +53,7 @@ map.on('load', () => {
     maxzoom: 13,
     paint: {
       'fill-color': OVERVIEW_COLOR,
+      'fill-opacity': pendingClusterId ? 0 : 1,
       'fill-outline-color': 'rgba(0,0,0,0.1)',
     },
   });
@@ -62,7 +67,7 @@ map.on('load', () => {
     minzoom: 13,
     paint: {
       'fill-color': clusterColor(),
-      'fill-opacity': detailOpacity(),
+      'fill-opacity': pendingClusterId ? 0 : detailOpacity(),
       'fill-outline-color': 'rgba(0,0,0,0.15)',
     },
   });
@@ -182,11 +187,15 @@ function enterClusterMode(clusterId, parcels) {
 function placeClusterMarkers(parcels) {
   for (const p of parcels) {
     if (!p.lon || !p.lat) continue;
-    clusterMarkers.push(
-      new maplibregl.Marker({ color: '#f97316', scale: 0.75 })
-        .setLngLat([p.lon, p.lat])
-        .addTo(map)
-    );
+    const marker = new maplibregl.Marker({ color: '#f97316', scale: 0.75 })
+      .setLngLat([p.lon, p.lat])
+      .addTo(map);
+    marker.getElement().style.cursor = 'pointer';
+    marker.getElement().addEventListener('click', (e) => {
+      e.stopPropagation();
+      loadParcel(p.county, p.parcel_id);
+    });
+    clusterMarkers.push(marker);
   }
 }
 
@@ -195,6 +204,7 @@ function exitClusterMode() {
   clusterParcels  = [];
   for (const m of clusterMarkers) m.remove();
   clusterMarkers = [];
+  if (selectedMarker) { selectedMarker.remove(); selectedMarker = null; }
   if (map.getLayer('parcels-detail'))   map.setPaintProperty('parcels-detail',   'fill-opacity', detailOpacity());
   if (map.getLayer('parcels-overview')) map.setPaintProperty('parcels-overview', 'fill-opacity', 1.0);
 }
@@ -204,23 +214,36 @@ function exitClusterMode() {
 // ---------------------------------------------------------------------------
 
 map.on('load', () => {
-  const clusterId = parseInt(new URLSearchParams(window.location.search).get('cluster'));
-  if (!clusterId) return;
+  if (!pendingClusterId) return;
 
-  fetch(`/api/owner/${clusterId}`)
+  const clusterLoading = document.getElementById('cluster-loading');
+  clusterLoading.hidden = false;
+
+  fetch(`/api/owner/${pendingClusterId}`)
     .then(r => r.ok ? r.json() : null)
     .then(async data => {
+      clusterLoading.hidden = true;
       if (!data || !data.parcels.length) return;
 
-      // Load detail panel for first parcel, then place pins on all cluster parcels.
-      // No zoom/pan change — map stays at default city view so the user can see the
-      // full spread of pins immediately.
+      const withCoords = data.parcels.filter(p => p.lon && p.lat);
+
+      // Fit map to the cluster's bounding box so the full pin spread is visible.
+      if (withCoords.length) {
+        const bounds = withCoords.reduce(
+          (b, p) => b.extend([p.lon, p.lat]),
+          new maplibregl.LngLatBounds([withCoords[0].lon, withCoords[0].lat], [withCoords[0].lon, withCoords[0].lat])
+        );
+        map.fitBounds(bounds, { padding: 80, maxZoom: 15, duration: 0 });
+      }
+
+      // Load detail panel for first parcel, then enter cluster mode.
+      // Parcel layers are currently invisible (fill-opacity:0); enterClusterMode
+      // sets them to the cluster dim expression so they appear already in context.
       const first = data.parcels[0];
       await loadParcel(first.county, first.parcel_id);
-      highlightCluster(clusterId, data.parcels);
-      if (first.lon && first.lat) placeMarker(first.lon, first.lat);
+      highlightCluster(pendingClusterId, data.parcels);
     })
-    .catch(() => {});
+    .catch(() => { clusterLoading.hidden = true; });
 });
 
 // ---------------------------------------------------------------------------
