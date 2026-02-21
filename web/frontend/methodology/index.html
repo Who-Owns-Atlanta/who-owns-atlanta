@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Methodology — Who Owns Atlanta?</title>
+  <meta name="description" content="How Who Owns Atlanta? works: data sources, corporate flagging, ownership clustering, and known limitations.">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.classless.min.css">
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/content.css">
+</head>
+<body class="content-page">
+  <header>
+    <a href="/" class="site-name">Who Owns Atlanta?</a>
+    <nav class="header-nav">
+      <a href="/leaderboard/">Leaderboard</a>
+    </nav>
+  </header>
+
+  <main class="content-main content-prose">
+    <h1>Methodology</h1>
+
+    <h2>Data sources</h2>
+    <p><strong>Parcel records</strong> come from Fulton County and DeKalb County tax assessment data, obtained as GIS exports. Each record includes the parcel geometry, owner name and mailing address, land use code, acreage, and living units. The two datasets are unified into a single table of 615,955 parcels.</p>
+
+    <p><strong>Georgia Secretary of State</strong> business registration data (bulk download) is matched against owner names to identify registered corporations, LLCs, and other entities. Matching uses a hybrid SQL + fuzzy approach, with manual review of ambiguous cases. 53,323 owner entities have been linked to SOS records.</p>
+
+    <p><strong>Building complaints</strong> come from the City of Atlanta's Accela permitting system via the public records API. Records cover Building Code Complaints from January 2020 forward. Complaints are linked to parcels via spatial join against the city's address point and Tax Parcel datasets.</p>
+
+    <h2>Corporate and institutional flags</h2>
+    <p>Every owner name is tested against a set of patterns to assign one or both flags:</p>
+
+    <p><strong>CORPORATE</strong> — owner name contains indicators of a business entity: <em>LLC, LP, Inc., Corp., Co., Trust, Holdings, Properties, Realty, Investments, Fund, Partners, Ventures,</em> and others. Also matches known patterns for single-family rental aggregators and out-of-state investment vehicles.</p>
+
+    <p><strong>INSTITUTIONAL</strong> — owner is a government body, university, hospital, religious organization, HOA, or similar non-profit entity. Matched by name pattern and, where available, confirmed via SOS business type.</p>
+
+    <p>These flags have known gaps:</p>
+    <ul>
+      <li>Some abbreviations without punctuation are not caught (e.g. <em>GEORGIA POWER CO</em> without a period).</li>
+      <li>Subdivision and condo association names sometimes appear as owner names in the raw data — these look like institutional owners but are data artifacts.</li>
+      <li>Individual landlords with large portfolios are not flagged unless they hold property through a named entity.</li>
+    </ul>
+
+    <h2>Ownership clustering</h2>
+    <p>Many landlords hold property across dozens of separately-named LLCs. To surface these networks, owner entities are linked into clusters when they share:</p>
+    <ul>
+      <li>A normalized mailing address (after stripping PO box numbers and standardizing via libpostal)</li>
+      <li>A Georgia SOS registered agent, where the agent is a private individual or small firm rather than a national corporate agent</li>
+      <li>A SOS principal office address</li>
+    </ul>
+    <p>Linked entities form a graph; connected components become clusters. The algorithm uses a two-pass approach to prevent large national agents (CT Corporation, Cogency Global, etc.) from collapsing unrelated owners into a single mega-cluster.</p>
+
+    <p>Clustering is imperfect. Known issues:</p>
+    <ul>
+      <li><strong>Cluster 2 (7,113 parcels)</strong> — linked via legitimate shared commercial office addresses (1100 Spring St NW and similar). May represent a real network or a co-working space artifact.</li>
+      <li><strong>Cluster 1 (3,496 parcels)</strong> — large mixed cluster. Reduced significantly after the two-pass mega-cluster fix but still warrants scrutiny.</li>
+      <li><strong>Cluster 3 (990 parcels)</strong> — subdivision and condo names appearing as owner names. A data artifact from how Fulton County records some common-area parcels.</li>
+    </ul>
+
+    <h2>Address normalization</h2>
+    <p>Owner mailing addresses are normalized using <a href="https://github.com/openvenues/libpostal" target="_blank" rel="noopener">libpostal</a>, an open-source address parser. PO Box addresses are excluded from clustering links because libpostal strips box numbers, which would incorrectly connect all owners using the same post office.</p>
+
+    <h2>Limitations</h2>
+    <p>This data reflects public records as of the last pipeline run. It does not reflect ownership changes that have occurred since then. Parcel boundaries and owner assignments come from county assessor records, which may lag behind actual deed transfers. This tool is for informational purposes; it is not a substitute for a title search.</p>
+  </main>
+
+  <footer>
+    <nav>
+      <a href="/leaderboard/">Leaderboard</a>
+      <a href="/about/">About</a>
+      <a href="/methodology/">Methodology</a>
+      <a href="/faq/">FAQ</a>
+    </nav>
+  </footer>
+</body>
+</html>

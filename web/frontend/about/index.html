@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>About — Who Owns Atlanta?</title>
+  <meta name="description" content="About Who Owns Atlanta? — a public tool for exploring property ownership across Fulton and DeKalb counties.">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.classless.min.css">
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/content.css">
+</head>
+<body class="content-page">
+  <header>
+    <a href="/" class="site-name">Who Owns Atlanta?</a>
+    <nav class="header-nav">
+      <a href="/leaderboard/">Leaderboard</a>
+    </nav>
+  </header>
+
+  <main class="content-main content-prose">
+    <h1>About</h1>
+
+    <p>Who Owns Atlanta? is a public tool for exploring property ownership across Fulton and DeKalb counties. Search any address to find who owns it, see whether the owner is a corporation or institution, and follow the ownership network across the city.</p>
+
+    <p>The project grew out of a simple question: when a house or apartment building changes hands and conditions deteriorate, who is actually responsible? Tax records list an LLC. The LLC has no obvious face. This site tries to connect those dots.</p>
+
+    <h2>What it covers</h2>
+    <p>615,955 parcels across Fulton and DeKalb counties, sourced from publicly available county tax records. Ownership is grouped into clusters — networks of entities that share addresses, registered agents, or other identifiers — so that related LLCs and shell companies appear together rather than separately.</p>
+
+    <h2>What it doesn't cover</h2>
+    <p>Municipal boundaries don't match county lines. Some Atlanta addresses fall outside Fulton or DeKalb. Clayton, Gwinnett, Cobb, and Cherokee counties are not included in this version. Corporate flag coverage has known gaps — see the <a href="/methodology/">Methodology</a> page for details.</p>
+
+    <h2>Data freshness</h2>
+    <p>Parcel data is updated periodically as counties publish new extracts. The date of the most recent pipeline run is noted on the <a href="/leaderboard/">Leaderboard</a>.</p>
+
+    <h2>Contact</h2>
+    <p>Questions, corrections, or tips: open an issue on GitHub (link forthcoming when the repository is made public).</p>
+  </main>
+
+  <footer>
+    <nav>
+      <a href="/leaderboard/">Leaderboard</a>
+      <a href="/about/">About</a>
+      <a href="/methodology/">Methodology</a>
+      <a href="/faq/">FAQ</a>
+    </nav>
+  </footer>
+</body>
+</html>

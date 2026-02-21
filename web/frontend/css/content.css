@@ -248,6 +248,58 @@ td.flags-cell .badge-state {
 
 .map-link:hover { text-decoration: underline; }
 
+/* ── Prose pages (about, methodology, faq) ──────────────────── */
+.content-prose p,
+.content-prose ul,
+.content-prose ol {
+  max-width: 680px;
+  line-height: 1.7;
+  margin-bottom: 1rem;
+}
+
+.content-prose ul,
+.content-prose ol {
+  padding-left: 1.5rem;
+}
+
+.content-prose li { margin-bottom: 0.35rem; }
+
+.content-prose details {
+  max-width: 680px;
+  border-bottom: 1px solid #e2e8f0;
+  padding: 0.75rem 0;
+}
+
+.content-prose details:first-of-type { border-top: 1px solid #e2e8f0; }
+
+.content-prose details summary {
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+.content-prose details summary::-webkit-details-marker { display: none; }
+
+.content-prose details summary::after {
+  content: '+';
+  font-size: 1.2rem;
+  font-weight: 400;
+  color: var(--pico-muted-color);
+  flex: 0 0 auto;
+}
+
+.content-prose details[open] summary::after { content: '−'; }
+
+.content-prose details p {
+  margin-top: 0.75rem;
+  margin-bottom: 0;
+  color: var(--pico-muted-color);
+}
+
 /* ── Mobile ─────────────────────────────────────────────────── */
 @media (max-width: 640px) {
   .content-main { padding: 1.25rem 1rem 2rem; }

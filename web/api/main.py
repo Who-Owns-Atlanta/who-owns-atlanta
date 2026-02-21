@@ -115,15 +115,16 @@ def parcel(county: str, parcel_id: str, response: Response):
                 raise HTTPException(status_code=404, detail="Parcel not found")
             result = dict(row)
 
-            # Owner cluster
+            # Owner cluster — only expose if the cluster has >1 parcel (otherwise no profile page exists)
             cur.execute("""
-                SELECT cluster_id
-                FROM owner_entities
-                WHERE %(pid)s = ANY(parcel_ids) AND county = %(county)s
+                SELECT oe.cluster_id, oc.parcel_count
+                FROM owner_entities oe
+                JOIN ownership_clusters oc USING (cluster_id)
+                WHERE %(pid)s = ANY(oe.parcel_ids) AND oe.county = %(county)s
                 LIMIT 1
             """, {"pid": parcel_id, "county": county})
             oe = cur.fetchone()
-            result["cluster_id"] = oe["cluster_id"] if oe else None
+            result["cluster_id"] = oe["cluster_id"] if oe and oe["parcel_count"] >= 2 else None
 
             # Permit summary
             cur.execute("""

@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FAQ — Who Owns Atlanta?</title>
+  <meta name="description" content="Frequently asked questions about Who Owns Atlanta?">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.classless.min.css">
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/content.css">
+</head>
+<body class="content-page">
+  <header>
+    <a href="/" class="site-name">Who Owns Atlanta?</a>
+    <nav class="header-nav">
+      <a href="/leaderboard/">Leaderboard</a>
+    </nav>
+  </header>
+
+  <main class="content-main content-prose">
+    <h1>FAQ</h1>
+
+    <details>
+      <summary>Why doesn't my address show up in search?</summary>
+      <p>Search covers addresses in Fulton and DeKalb counties only. Addresses in Cobb, Gwinnett, Clayton, or other metro counties are not included. Some addresses inside the city limits of Atlanta fall in neither county dataset due to boundary quirks — these are also missing. If your address is in Fulton or DeKalb and still doesn't appear, the address point may not be in the county's GIS data or may be spelled differently than expected.</p>
+    </details>
+
+    <details>
+      <summary>The owner shown is wrong or out of date. What gives?</summary>
+      <p>Parcel records come from county tax assessor data, which lags behind actual deed transfers — sometimes by months. If a property recently sold, the new owner may not appear yet. The data reflects the most recent county extract we've processed; the methodology page notes when that was.</p>
+    </details>
+
+    <details>
+      <summary>What does the CORPORATE flag mean?</summary>
+      <p>The owner name matches patterns associated with a business entity — LLC, LP, Inc., Corp., Trust, Holdings, and similar. It does not mean the owner is a large or predatory landlord; many small local landlords also hold property through LLCs. What it does mean is that the owner is not an individual holding property in their own name.</p>
+    </details>
+
+    <details>
+      <summary>What does the INSTITUTIONAL flag mean?</summary>
+      <p>The owner appears to be a government body, university, hospital, religious organization, homeowners association, or similar non-profit entity. Some of these are large landholders (Atlanta Public Schools, Emory University, the City of Atlanta) that show up prominently on the leaderboard.</p>
+    </details>
+
+    <details>
+      <summary>Why are multiple LLCs grouped together on an owner profile?</summary>
+      <p>Many property investors hold land through dozens of separately-named entities. When those entities share a mailing address, a registered agent, or other identifiers, they're grouped into a cluster so you can see the full portfolio. See the <a href="/methodology/">Methodology</a> page for details on how clustering works and its limitations.</p>
+    </details>
+
+    <details>
+      <summary>I found a clustering error — two unrelated owners are grouped together.</summary>
+      <p>Clustering is imperfect and we know some errors exist (see the <a href="/methodology/">Methodology</a> page). If you find a specific case, please open an issue on GitHub (link forthcoming). Include the cluster ID and the names you believe are incorrectly linked.</p>
+    </details>
+
+    <details>
+      <summary>Why doesn't the map show parcel boundaries?</summary>
+      <p>Parcel tile generation is in progress. The map currently shows only the base street layer. Parcel overlays — colored by ownership type at low zoom, by ownership cluster at high zoom — will be added once tiles are built and deployed.</p>
+    </details>
+
+    <details>
+      <summary>Can I download the data?</summary>
+      <p>Not yet. Bulk download is on the roadmap. The underlying county records are public data; links to the original sources will be added to the methodology page.</p>
+    </details>
+
+    <details>
+      <summary>I have a tip about a specific landlord or property.</summary>
+      <p>Please get in touch via GitHub (link forthcoming when the repository is made public).</p>
+    </details>
+  </main>
+
+  <footer>
+    <nav>
+      <a href="/leaderboard/">Leaderboard</a>
+      <a href="/about/">About</a>
+      <a href="/methodology/">Methodology</a>
+      <a href="/faq/">FAQ</a>
+    </nav>
+  </footer>
+</body>
+</html>
