@@ -32,16 +32,19 @@ SETUP_STMTS = [
                 regexp_replace(
                     regexp_replace(
                         regexp_replace(
-                            upper(trim(txt)),
-                            '\.', '', 'g'
+                            regexp_replace(
+                                upper(trim(txt)),
+                                '[^A-Z0-9\s]', '', 'g'
+                            ),
+                            '\mL\s+L\s+P\M', 'LLP', 'g'
                         ),
-                        '\mL\s+L\s+P\M', 'LLP', 'g'
+                        '\mL\s+L\s+C\M', 'LLC', 'g'
                     ),
-                    '\mL\s+L\s+C\M', 'LLC', 'g'
+                    '\mL\s+P\M', 'LP', 'g'
                 ),
-                '\mL\s+P\M', 'LP', 'g'
+                '\s+', ' ', 'g'
             ),
-            '\s+', ' ', 'g'
+            '^\s+|\s+$', '', 'g'
         )
     $$
     """,
@@ -84,11 +87,12 @@ def fuzzy_worker(worker_id, chunk):
             SELECT 
                 biz_name_norm, control_number, business_id,
                 business_name, entity_status, business_type_desc, foreign_state,
-                similarity(biz_name_norm, %s) as sql_sim
+                similarity(biz_name_norm, %s) as sql_sim,
+                registered_agent_id
             FROM sos.entities
             WHERE biz_name_norm %% %s
             ORDER BY sql_sim DESC
-            LIMIT 20
+            LIMIT 50
         """, (part, search_part))
         candidates = cur.fetchall()
         
@@ -96,15 +100,29 @@ def fuzzy_worker(worker_id, chunk):
             continue
 
         part_cmp = _cmp_norm(part)
-        best_score = 0
+        best_score = -1
         best_row = None
+        
         for cand in candidates:
-            score = fuzz.token_sort_ratio(part_cmp, _cmp_norm(cand[0]))
-            if score > best_score:
-                best_score = score
+            # Score similarity
+            sim_score = fuzz.token_sort_ratio(part_cmp, _cmp_norm(cand[0]))
+            
+            # Penalize non-active and placeholder types
+            status_score = 1.0
+            if cand[4] and not cand[4].startswith('Active'):
+                status_score = 0.8
+            if cand[5] and 'Name Reservation' in cand[5]:
+                status_score = 0.5
+            if cand[8] == '0' or not cand[8]:
+                status_score *= 0.9
+                
+            final_score = sim_score * status_score
+            
+            if final_score > best_score:
+                best_score = final_score
                 best_row = cand
         
-        if best_score >= 65:
+        if best_row and (best_score >= 65 or (best_score >= 60 and 'LLC' in part)):
             match_type = 'trgm_high' if best_score >= 80 else 'trgm_low'
             inserts.append((
                 full_name, best_row[1], best_row[2], best_row[3], best_row[0],
@@ -167,11 +185,16 @@ def main():
         print("Phase 1: Running exact matches...")
         cur.execute("""
             INSERT INTO sos_matches
-            SELECT DISTINCT ON (s.full_owner_norm, e.biz_name_norm)
+            SELECT DISTINCT ON (s.full_owner_norm)
                 s.full_owner_norm, e.control_number, e.business_id, e.business_name, 
                 e.biz_name_norm, 'exact', 1.0, e.entity_status, e.business_type_desc, e.foreign_state
             FROM _parcel_owners_split s
             JOIN sos.entities e ON e.biz_name_norm = s.part_norm
+            ORDER BY s.full_owner_norm,
+                     (CASE WHEN e.entity_status LIKE 'Active%' THEN 0 ELSE 1 END),
+                     (CASE WHEN e.registered_agent_id <> '0' AND e.registered_agent_id <> '' THEN 0 ELSE 1 END),
+                     (CASE WHEN e.business_type_desc NOT LIKE '%Name Reservation%' THEN 0 ELSE 1 END),
+                     e.control_number DESC
         """)
         print(f"  Matched {cur.rowcount:,} parts exactly.")
         conn.commit()

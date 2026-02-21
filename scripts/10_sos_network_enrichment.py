@@ -29,7 +29,7 @@ engine = create_engine(DB_URL)
 # --- Tuning knobs ---
 BASE_MAX_ADDR_ENTITIES = 10   # base graph: skip address if shared by more entities
                                # (100 in script 04 allowed office-park mega-clusters)
-MAX_RA_ENTITIES        = 30   # skip RA if it manages this many of our entities
+MAX_RA_ENTITIES        = 100  # skip RA if it manages this many of our entities
 MAX_OFFICER_ENTITIES   = 10   # skip officer if appears this many times among our entities
 MAX_SOS_ADDR_ENTITIES  = 20   # skip SOS address if this many entities share it
 MAX_MERGE_PARCELS      = 200  # SOS edge gate: skip if either base cluster > this many parcels
@@ -62,10 +62,15 @@ _STRIP_PUNCT = re.compile(r'[^A-Z0-9 ]')
 _CITY_ZIP_ONLY = re.compile(r'^[A-Z]+(\s+[A-Z]+)*\s+[A-Z]{2}\s+\d{5}(-\d+)?$')
 
 
-def ra_key(name: str) -> str:
+def ra_key(name: str, street: str = "") -> str:
+    """Create a composite key for RA grouping (Name + Street) to resolve fragmented IDs and city inconsistencies."""
     if not name:
         return ""
-    return _STRIP_PUNCT.sub("", name.upper()).strip()
+    name_part = _STRIP_PUNCT.sub("", name.upper()).strip()
+    # Normalize street: remove punctuation and 'UNIT/STE' suffixes for matching
+    street_part = _STRIP_PUNCT.sub("", (street or "").upper()).strip()
+    street_part = re.sub(r'\b(STE|SUITE|UNIT|BLDG|OFFICE|#)\s+.*$', '', street_part).strip()
+    return f"{name_part}|{street_part}"
 
 
 # ---------------------------------------------------------------------------
@@ -78,7 +83,8 @@ def load_entities(engine):
         rows = conn.execute(text("""
             SELECT entity_id, owner_name_norm, owner_addr_norm, count,
                    sos_control_number, sos_registered_agent_id,
-                   sos_registered_agent, sos_match_type
+                   sos_registered_agent, sos_match_type,
+                   sos_registered_agent_address
             FROM owner_entities
         """)).fetchall()
     print(f"  {len(rows):,} entities loaded")
@@ -168,21 +174,31 @@ def can_merge(eid1, eid2, base_cluster_of, parcel_count_of):
 # ---------------------------------------------------------------------------
 
 def add_ra_edges(G, entities, base_cluster_of, parcel_count_of):
-    print(f"\nPass 2a: shared registered-agent edges...")
+    print(f"\nPass 2a: shared registered-agent edges (Name + RA Street)...")
     ra_idx: dict[str, list[int]] = {}
     ra_names: dict[str, str] = {}
 
-    for eid, name, addr, count, sos_cn, ra_id, ra_name, match_type in entities:
-        if not ra_id or match_type not in ('exact', 'trgm_high'):
+    for row in entities:
+        eid = row[0]
+        ra_name = row[6]
+        match_type = row[7]
+        ra_street = row[8]
+        
+        if not ra_name or match_type not in ('exact', 'trgm_high'):
             continue
-        key = ra_key(ra_name or "")
-        if key in COMMERCIAL_RA_SKIP:
+        
+        # Check base name (stripped) against skip list
+        name_only = _STRIP_PUNCT.sub("", ra_name.upper()).strip()
+        if name_only in COMMERCIAL_RA_SKIP:
             continue
-        ra_idx.setdefault(ra_id, []).append(eid)
-        ra_names[ra_id] = ra_name or ""
+            
+        # Group by Name + RA Street (ignoring City)
+        key = ra_key(ra_name, ra_street)
+        ra_idx.setdefault(key, []).append(eid)
+        ra_names[key] = ra_name or ""
 
     added = skipped_large = skipped_gate = 0
-    for ra_id, eids in ra_idx.items():
+    for key, eids in ra_idx.items():
         if len(eids) < 2:
             continue
         if len(eids) > MAX_RA_ENTITIES:
@@ -194,7 +210,7 @@ def add_ra_edges(G, entities, base_cluster_of, parcel_count_of):
                     skipped_gate += 1
                     continue
                 if not G.has_edge(eids[i], eids[j]):
-                    G.add_edge(eids[i], eids[j], rel="shared_ra", ra=ra_names[ra_id])
+                    G.add_edge(eids[i], eids[j], rel="shared_ra", ra=ra_names[key])
                     added += 1
 
     print(f"  {added:,} edges added  |  {skipped_large:,} RAs too large  |  {skipped_gate:,} blocked by size gate")
@@ -205,9 +221,9 @@ def add_officer_edges(G, engine, entities, base_cluster_of, parcel_count_of):
     print(f"Pass 2b: shared officer edges...")
 
     enriched = {
-        eid: cn
-        for eid, name, addr, count, cn, ra_id, ra_name, match_type in entities
-        if cn and match_type in ('exact', 'trgm_high')
+        row[0]: row[4] # eid: cn
+        for row in entities
+        if row[4] and row[7] in ('exact', 'trgm_high')
     }
     if not enriched:
         print("  No enriched entities — skipping")
@@ -270,9 +286,9 @@ def add_sos_addr_edges(G, engine, entities, base_cluster_of, parcel_count_of):
     print(f"Pass 2c: shared SOS principal address edges...")
 
     enriched_cns = {
-        eid: cn
-        for eid, name, addr, count, cn, ra_id, ra_name, match_type in entities
-        if cn and match_type in ('exact', 'trgm_high')
+        row[0]: row[4] # eid: cn
+        for row in entities
+        if row[4] and row[7] in ('exact', 'trgm_high')
     }
     if not enriched_cns:
         return 0
