@@ -1,6 +1,8 @@
 /* ── Content pages (leaderboard, owner profiles, about, etc.) ── */
 
+html,
 body.content-page {
+  height: auto;
   overflow: auto;
 }
 
@@ -26,9 +28,13 @@ header a.site-name {
 .header-nav a:hover { color: var(--pico-primary); }
 
 /* ── Main content area ───────────────────────────────────────── */
-/* Pico classless sets display:grid on <main> — override it */
+/* Pico classless sets display:grid on <main>;
+   map CSS sets overflow:hidden + flex sizing — undo both for content pages */
 body.content-page main {
   display: block;
+  overflow: visible;
+  flex: unset;
+  height: auto;
 }
 
 .content-main {
