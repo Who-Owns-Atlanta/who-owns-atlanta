@@ -78,8 +78,10 @@ echo "==> Materializing parcel→cluster map..."
 psql_cmd -c "
   DROP TABLE IF EXISTS _tile_oe_map;
   CREATE TABLE _tile_oe_map AS
-    SELECT unnest(parcel_ids) AS parcel_id, county, cluster_id
-    FROM owner_entities;
+    SELECT unnest(oe.parcel_ids) AS parcel_id, oe.county, oe.cluster_id,
+           oc.parcel_count AS cluster_size
+    FROM owner_entities oe
+    JOIN ownership_clusters oc ON oc.cluster_id = oe.cluster_id;
   CREATE INDEX ON _tile_oe_map (parcel_id, county);
   ANALYZE _tile_oe_map;
 "
@@ -96,7 +98,8 @@ tippecanoe \
   --layer=parcels \
   --attribute-type=is_corporate:bool \
   --attribute-type=is_institutional:bool \
-  --coalesce-densest-as-needed \
+  --no-tile-size-limit \
+  --no-feature-limit \
   --quiet \
   <(PGPASSWORD="$DB_PASS" ogr2ogr \
       -f GeoJSON /vsistdout/ \
@@ -108,7 +111,8 @@ tippecanoe \
             p.county,
             p.is_corporate::int     AS is_corporate,
             p.is_institutional::int AS is_institutional,
-            m.cluster_id
+            m.cluster_id,
+            m.cluster_size
         FROM parcels_unified p
         LEFT JOIN _tile_oe_map m
           ON m.parcel_id = p.parcel_id AND m.county = p.county

@@ -263,6 +263,17 @@ footer nav a:hover { color: var(--pico-primary); }
 .maplibregl-ctrl-attrib { font-size: 0.7rem !important; }
 
 /* ── Mobile ─────────────────────────────────────────────────── */
+/* Small dots placed at each parcel location when in cluster focus mode */
+.cluster-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #f97316;        /* orange — distinct from map fill and blue marker */
+  border: 2px solid #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+  pointer-events: none;
+}
+
 @media (max-width: 768px) {
   header { gap: 0.5rem; padding: 0.5rem 0.75rem; }
   .site-name { font-size: 1.1rem; }
