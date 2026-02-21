@@ -118,6 +118,47 @@ function highlightParcel(parcelId) {
   }
 }
 
+// Highlight all parcels in a cluster
+function highlightCluster(clusterId) {
+  if (!PARCEL_TILES_URL) return;
+  if (map.getLayer('parcels-selected')) {
+    if (clusterId) {
+      map.setFilter('parcels-selected', ['==', ['get', 'cluster_id'], clusterId]);
+    } else {
+      map.setFilter('parcels-selected', ['==', 'parcel_id', '']);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// ?cluster=ID deep link — highlight a cluster on page load
+// ---------------------------------------------------------------------------
+
+map.on('load', () => {
+  const clusterId = parseInt(new URLSearchParams(window.location.search).get('cluster'));
+  if (!clusterId) return;
+
+  fetch(`/api/owner/${clusterId}`)
+    .then(r => r.ok ? r.json() : null)
+    .then(data => {
+      if (!data || !data.parcels.length) return;
+
+      // Compute centroid of all parcel coordinates
+      const lats = data.parcels.map(p => p.lat).filter(Boolean);
+      const lons = data.parcels.map(p => p.lon).filter(Boolean);
+      const centerLat = lats.reduce((a, b) => a + b, 0) / lats.length;
+      const centerLon = lons.reduce((a, b) => a + b, 0) / lons.length;
+
+      map.flyTo({ center: [centerLon, centerLat], zoom: 14, duration: 800 });
+      highlightCluster(clusterId);
+
+      // Load detail panel for first parcel so user sees context
+      const first = data.parcels[0];
+      loadParcel(first.county, first.parcel_id);
+    })
+    .catch(() => {});
+});
+
 // ---------------------------------------------------------------------------
 // Address search
 // ---------------------------------------------------------------------------
@@ -318,7 +359,7 @@ function renderParcelPanel(p) {
 }
 
 function showPanel()  { detailPanel.hidden = false; }
-function closePanel() { detailPanel.hidden = true; highlightParcel(null); }
+function closePanel() { detailPanel.hidden = true; highlightParcel(null); highlightCluster(null); }
 
 // ---------------------------------------------------------------------------
 // Utilities
