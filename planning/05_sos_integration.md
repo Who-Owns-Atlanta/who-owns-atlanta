@@ -124,9 +124,10 @@ Use SOS data to find hidden connections between ownership clusters that parcel-l
 
 SOS integration is complete. Remaining work:
 1. **Web interface** — see `planning/04_web_interface.md` (Phase 1–5)
-2. **Additional Accela record types** — code complaints etc. via `scripts/06_pull_accela_records.py --type`
-3. **Residential/homestead filtering** — filter parcels with homestead exemption for renter-occupied focus
-4. **Atlanta city enrichment** — council district, NPU, neighborhood via spatial join
+2. **Atlanta city enrichment** — council district, NPU, neighborhood via spatial join
+
+Deferred to stretch/future:
+- Additional Accela record types — homestead filtering not available across all counties; additional Accela types deferred until building complaints are stable
 
 ---
 

@@ -22,10 +22,15 @@
 - [x] Atlanta city Tax_Parcel enrichment — `scripts/11_city_enrichment.py` (171,287 parcels enriched)
 
 ## What's NOT in place yet
-- [ ] Residential-only / no-homestead filtering
 - [ ] "Parent" company / DBA assignment per ownership group
 - [ ] Web interface — see `planning/04_web_interface.md`
 - [ ] Tests
+
+## Stretch / future
+- [ ] Residential-only / homestead filtering — homestead data not available for all counties; defer until coverage is consistent
+- [ ] Additional Accela record types (code complaints etc.) — same script, different `--type`; defer until building complaints are well-established
+- [ ] Metro expansion (Gwinnett, Cobb, Clayton) — see `planning/06_metro_expansion.md`
+- [ ] Corporate ownership choropleth (neighborhood-level aggregate layer toggle)
 
 ## Database stats
 - **Fulton County:** 370,189 parcels (67,719 corporate, 22,620 institutional)

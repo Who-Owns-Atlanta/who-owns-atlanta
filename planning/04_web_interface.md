@@ -56,7 +56,9 @@ Development avoids full Docker image rebuilds by mounting source code as a volum
 - FastAPI runs with `--reload` flag
 - Only a full `docker compose up --build` is needed when dependencies (`pyproject.toml`) change
 
-Local nginx vhost mirrors the prod config **without SSL** — plain `http://` on a local hostname (e.g. `who-owns-atlanta.local` via `/etc/hosts`). This keeps dev/prod vhost configs structurally identical; SSL and the real domain are added at deploy time only.
+Local nginx vhost mirrors the prod config **without SSL** — plain `http://` on a local hostname (e.g. `who-owns-atlanta.local` or `who-owns-atlanta.lan` via `/etc/hosts` or local DNS). This keeps dev/prod vhost configs structurally identical; SSL and the real domain are added at deploy time only.
+
+**Note on Hostnames:** The frontend `js/app.js` uses `window.location.hostname` to determine whether to serve tiles from the local `/tiles/` directory or the production CloudFront URL. Currently supported dev hostnames: `who-owns-atlanta.local`, `who-owns-atlanta.lan`, and `localhost`.
 
 Dev vhost config lives in `nginx/who-owns-atlanta.dev.conf` (committed). Prod vhost config lives in `nginx/who-owns-atlanta.conf` (committed, deployed to VPS at Phase 5).
 
