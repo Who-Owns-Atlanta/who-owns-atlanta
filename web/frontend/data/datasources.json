@@ -1,0 +1,51 @@
+{
+  "fulton_parcels": {
+    "name": "Fulton County Tax Assessor",
+    "description": "Parcels, ownership, property class, exemptions, appraised value",
+    "admin_date": "2026-01-07",
+    "last_loaded": "2026-02-13",
+    "url": "https://gisdata.fultoncountyga.gov/datasets/fulcogis::tax-parcels/about"
+  },
+  "dekalb_parcels": {
+    "name": "DeKalb County Tax Assessor",
+    "description": "Parcels, ownership, appraised value, zoning, historic districts",
+    "admin_date": "2025-12-06",
+    "last_loaded": "2026-02-13",
+    "url": "https://dekalbinsights-dekalbgis.opendata.arcgis.com/datasets/731f52734f2346d6b939ff7337fcfaa2_0/"
+  },
+  "atlanta_gis_neighborhoods": {
+    "name": "City of Atlanta GIS — Neighborhoods",
+    "description": "Neighborhood boundaries (spatial join to parcels)",
+    "admin_date": "2025-02-05",
+    "last_loaded": "2025-02-13",
+    "url": "https://dcp-coaplangis.opendata.arcgis.com/"
+  },
+  "atlanta_gis_npu": {
+    "name": "City of Atlanta GIS — NPU",
+    "description": "Neighborhood Planning Unit boundaries",
+    "admin_date": "2025-02-05",
+    "last_loaded": "2025-02-13",
+    "url": "https://dcp-coaplangis.opendata.arcgis.com/"
+  },
+  "atlanta_gis_council": {
+    "name": "City of Atlanta GIS — Council Districts",
+    "description": "City Council district boundaries",
+    "admin_date": "2026-02-09",
+    "last_loaded": "2025-02-13",
+    "url": "https://dcp-coaplangis.opendata.arcgis.com/"
+  },
+  "accela": {
+    "name": "City of Atlanta — Accela",
+    "description": "Building complaints and code enforcement records",
+    "admin_date": null,
+    "last_loaded": "2026-02-13",
+    "url": "https://aca-prod.accela.com/ATLANTA_GA/"
+  },
+  "ga_sos": {
+    "name": "Georgia Secretary of State, Corporations Division",
+    "description": "Business entity registrations, officers, registered agents",
+    "admin_date": "2026-02-18",
+    "last_loaded": "2026-02-19",
+    "url": "https://ecorp.sos.ga.gov/"
+  }
+}

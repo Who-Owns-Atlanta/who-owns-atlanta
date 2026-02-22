@@ -477,6 +477,7 @@ const parcelAddress    = document.getElementById('parcel-address');
 const parcelBadges     = document.getElementById('parcel-badges');
 const parcelOwnerLine  = document.getElementById('parcel-owner-line');
 const parcelMeta       = document.getElementById('parcel-meta');
+const parcelMetaCity   = document.getElementById('parcel-meta-city');
 const permitMeta       = document.getElementById('permit-meta');
 const parcelPermits    = document.getElementById('parcel-permits');
 const parcelLinks      = document.getElementById('parcel-links');
@@ -564,61 +565,72 @@ function renderParcelPanel(p) {
     parcelOwnerLine.textContent = ownerName;
   }
 
-  // Metadata
-  const meta = [];
-
-  // County + parcel ID
-  meta.push(['County', p.county === 'fulton' ? 'Fulton County' : 'DeKalb County']);
-  meta.push(['Parcel ID', p.parcel_id]);
+  // ── County tax parcel fields (first dl) ──────────────────────
+  const countyMeta = [];
+  countyMeta.push(['__divider__', 'County tax parcel']);
+  countyMeta.push(['County', p.county === 'fulton' ? 'Fulton County' : 'DeKalb County']);
+  countyMeta.push(['Parcel ID', p.parcel_id]);
 
   // Property class — same GA state code in both Fulton (classcode) and DeKalb (classdscrp)
   if (p.property_class) {
-    meta.push(['Property class', GA_PROPERTY_CLASS[p.property_class] || p.property_class]);
+    countyMeta.push(['Property class', GA_PROPERTY_CLASS[p.property_class] || p.property_class]);
   }
 
   // Co-owner (DeKalb ownernme2)
-  if (p.owner_name2) meta.push(['Co-owner', p.owner_name2]);
-
-  // Geographic context
-  if (p.neighborhood)     meta.push(['Neighborhood', p.neighborhood]);
-  if (p.npu)              meta.push(['NPU', p.npu]);
-  if (p.council_district) meta.push(['Council', `District ${p.council_district}`]);
+  if (p.owner_name2) countyMeta.push(['Co-owner', p.owner_name2]);
 
   // Physical details
-  if (p.land_acres != null) meta.push(['Land', `${Number(p.land_acres).toFixed(2)} acres`]);
-  if (p.living_units)       meta.push(['Units', p.living_units]);
-  if (p.land_use)           meta.push(['Land use', p.land_use]);
+  if (p.land_acres != null) countyMeta.push(['Land', `${Number(p.land_acres).toFixed(2)} acres`]);
+  if (p.living_units)       countyMeta.push(['Units', p.living_units]);
+  if (p.land_use)           countyMeta.push(['Land use', p.land_use]);
 
   // Homestead exemption (Fulton only) — excode non-empty = homestead exempt
   if (p.county === 'fulton') {
-    meta.push(['Exemption', p.exemption_code ? 'Homestead exempt' : 'Not homestead exempt']);
+    countyMeta.push(['Exemption', p.exemption_code ? 'Homestead exempt' : 'Not homestead exempt']);
   }
 
   // Appraised value (DeKalb only)
   if (p.appraised_value != null) {
-    meta.push(['Assessed value', '$' + Number(p.appraised_value).toLocaleString() + ' (DeKalb)']);
+    countyMeta.push(['Assessed value', '$' + Number(p.appraised_value).toLocaleString() + ' (DeKalb)']);
   }
 
   // Zoning / historic / overlay (skip if blank — API returns null when blank)
-  if (p.zoning)            meta.push(['Zoning', p.zoning]);
-  if (p.historic_district) meta.push(['Historic district', p.historic_district]);
-  if (p.overlay_district)  meta.push(['Overlay district', p.overlay_district]);
+  if (p.zoning)            countyMeta.push(['Zoning', p.zoning]);
+  if (p.historic_district) countyMeta.push(['Historic district', p.historic_district]);
+  if (p.overlay_district)  countyMeta.push(['Overlay district', p.overlay_district]);
 
-  parcelMeta.innerHTML = meta.map(([k, v]) =>
-    `<dt>${escHtml(k)}</dt><dd>${escHtml(String(v))}</dd>`
+  const renderRow = ([k, v]) => `<dt>${escHtml(k)}</dt><dd>${escHtml(String(v))}</dd>`;
+  const renderDivider = (label) =>
+    `<dt class="meta-source-divider">${escHtml(label)}<sup><a href="/faq/#data-sources" title="Data source information">*</a></sup></dt>`;
+
+  parcelMeta.innerHTML = countyMeta.map(([k, v]) =>
+    k === '__divider__' ? renderDivider(v) : renderRow([k, v])
   ).join('');
 
-  // Owner mailing address — rendered below the dl, above permits
+  // Owner mailing address — county tax parcel record, rendered as block between the two dls
   const mailAddr = [p.owner_mail_addr1, p.owner_mail_addr2].filter(Boolean);
-  const mailBlock = parcelMeta.nextElementSibling?.id === 'owner-mail-addr'
-    ? parcelMeta.nextElementSibling
-    : (() => { const d = document.createElement('div'); d.id = 'owner-mail-addr'; parcelMeta.after(d); return d; })();
+  const mailBlock = document.getElementById('owner-mail-addr');
   if (mailAddr.length) {
     mailBlock.innerHTML = `<p class="meta-section-label">Owner mailing address</p>`
       + `<p class="owner-mail">${mailAddr.map(escHtml).join('<br>')}</p>`;
     mailBlock.hidden = false;
   } else {
     mailBlock.hidden = true;
+  }
+
+  // ── City of Atlanta GIS fields (second dl) ───────────────────
+  const cityFields = [];
+  if (p.neighborhood)     cityFields.push(['Neighborhood', p.neighborhood]);
+  if (p.npu)              cityFields.push(['NPU', p.npu]);
+  if (p.council_district) cityFields.push(['Council', `District ${p.council_district}`]);
+
+  if (cityFields.length) {
+    parcelMetaCity.innerHTML = renderDivider('City of Atlanta GIS')
+      + cityFields.map(renderRow).join('');
+    parcelMetaCity.hidden = false;
+  } else {
+    parcelMetaCity.innerHTML = '';
+    parcelMetaCity.hidden = true;
   }
 
   // Permits

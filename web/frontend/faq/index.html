@@ -64,6 +64,33 @@
       <summary>I have a tip about a specific landlord or property.</summary>
       <p>Please get in touch via GitHub (link forthcoming when the repository is made public).</p>
     </details>
+
+    <details id="data-sources">
+      <summary>Where does the data come from?</summary>
+      <p>All data in Who Owns Atlanta? is drawn from public records. The table below lists each source, what it provides, and when we last ingested it.</p>
+      <div id="datasources-table-wrap">Loading…</div>
+      <script>
+        document.getElementById('data-sources').addEventListener('toggle', function handler() {
+          if (!this.open) return;
+          this.removeEventListener('toggle', handler);
+          fetch('/data/datasources.json')
+            .then(r => r.json())
+            .then(data => {
+              const rows = Object.values(data).map(s => {
+                const link = s.url ? `<a href="${s.url}" target="_blank" rel="noopener noreferrer">${s.name} ↗</a>` : s.name;
+                const adminDate = s.admin_date || '—';
+                const lastLoaded = s.last_loaded || '—';
+                return `<tr><td>${link}</td><td>${s.description}</td><td>${adminDate}</td><td>${lastLoaded}</td></tr>`;
+              }).join('');
+              document.getElementById('datasources-table-wrap').innerHTML =
+                `<table><thead><tr><th>Source</th><th>What it provides</th><th>Admin date</th><th>Last loaded</th></tr></thead><tbody>${rows}</tbody></table>`;
+            })
+            .catch(() => {
+              document.getElementById('datasources-table-wrap').textContent = 'Could not load data sources.';
+            });
+        });
+      </script>
+    </details>
   </main>
 
   <footer>
