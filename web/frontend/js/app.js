@@ -72,6 +72,35 @@ map.on('load', () => {
     },
   });
 
+  // Atlanta city limits boundary
+  map.addSource('city-limits', {
+    type: 'geojson',
+    data: '/geojson/atlanta_city_limits.json',
+  });
+
+  map.addLayer({
+    id: 'city-limits-casing',
+    type: 'line',
+    source: 'city-limits',
+    paint: {
+      'line-color': '#000000',
+      'line-width': 4,
+      'line-opacity': 0.5,
+    },
+  });
+
+  map.addLayer({
+    id: 'city-limits',
+    type: 'line',
+    source: 'city-limits',
+    paint: {
+      'line-color': '#ffffff',
+      'line-width': 2,
+      'line-dasharray': [4, 3],
+      'line-opacity': 0.9,
+    },
+  });
+
   // Selected parcel highlight layer (outline) — used on individual parcel clicks.
   map.addLayer({
     id: 'parcels-selected',
@@ -166,6 +195,14 @@ function swatch(color, label, shape) {
       `<polygon points="5.5,15 2,8 9,8" fill="${color}"/>` +
       `</svg>${label}</div>`;
   }
+  if (shape === 'boundary') {
+    // Dashed white line with dark casing, matching the city limits layer
+    return `<div class="legend-item">` +
+      `<svg width="20" height="11" viewBox="0 0 20 11" style="flex-shrink:0">` +
+      `<line x1="0" y1="5.5" x2="20" y2="5.5" stroke="#000" stroke-width="4" stroke-opacity="0.5"/>` +
+      `<line x1="0" y1="5.5" x2="20" y2="5.5" stroke="#fff" stroke-width="2" stroke-dasharray="4 3"/>` +
+      `</svg>${label}</div>`;
+  }
   return `<div class="legend-item"><span class="legend-swatch" style="background:${color}"></span>${label}</div>`;
 }
 
@@ -184,6 +221,7 @@ function updateLegend() {
       swatch('rgba(217,119,6,0.8)',  'Institutional') +
       swatch('rgba(148,163,184,0.6)', 'Other');
   }
+  legend.innerHTML += swatch(null, 'City limits', 'boundary');
   if (activeClusterId) {
     legend.innerHTML += swatch('#16a34a', 'In cluster', 'pin');
   }
