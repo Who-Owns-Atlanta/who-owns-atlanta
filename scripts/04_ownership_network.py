@@ -180,6 +180,8 @@ def assign_clusters(engine, G):
         conn.execute(text("UPDATE owner_entities oe SET cluster_id = tc.cluster_id FROM tmp_clusters tc WHERE oe.entity_id = tc.entity_id;"))
         conn.execute(text("DROP TABLE tmp_clusters;"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_oe_cluster ON owner_entities (cluster_id);"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_oe_cluster_county ON owner_entities (cluster_id, county);"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_oe_parcel_ids_gin ON owner_entities USING GIN (parcel_ids);"))
 
     print("Rebuilding ownership_clusters...")
     with engine.begin() as conn:

@@ -115,12 +115,13 @@ def parcel(county: str, parcel_id: str, response: Response):
                 raise HTTPException(status_code=404, detail="Parcel not found")
             result = dict(row)
 
-            # Owner cluster — only expose if the cluster has >1 parcel (otherwise no profile page exists)
+            # Owner cluster — only expose if the cluster has >1 parcel (otherwise no profile page exists).
+            # Use @> (array contains) — GIN index on parcel_ids (idx_oe_parcel_ids_gin) is used.
             cur.execute("""
                 SELECT oe.cluster_id, oc.parcel_count
                 FROM owner_entities oe
                 JOIN ownership_clusters oc USING (cluster_id)
-                WHERE %(pid)s = ANY(oe.parcel_ids) AND oe.county = %(county)s
+                WHERE oe.parcel_ids @> ARRAY[%(pid)s] AND oe.county = %(county)s
                 LIMIT 1
             """, {"pid": parcel_id, "county": county})
             oe = cur.fetchone()
@@ -186,23 +187,42 @@ def owner(cluster_id: int, response: Response):
             """, {"cid": cluster_id})
             result["officers"] = cur.fetchall()
 
-            # Parcel list with centroid lat/lon
+            # Parcel list with centroid lat/lon.
+            # Query underlying tables directly (not parcels_unified view) so the
+            # btree indexes on parcelid are used instead of a 615K-row UNION ALL seq scan.
+            # lowparcelid is always NULL in dekalb data, so the OR branch is dropped.
             cur.execute("""
                 SELECT
-                    p.parcel_id,
-                    p.county,
-                    p.site_address  AS address,
-                    p.owner_name    AS owner,
-                    p.is_corporate,
-                    p.is_institutional,
-                    ST_Y(ST_Centroid(p.geometry)) AS lat,
-                    ST_X(ST_Centroid(p.geometry)) AS lon
+                    fp.parcelid           AS parcel_id,
+                    'fulton'              AS county,
+                    fp.address            AS address,
+                    fp.owner              AS owner,
+                    fp.is_corporate,
+                    fp.is_institutional,
+                    ST_Y(ST_Centroid(fp.geometry)) AS lat,
+                    ST_X(ST_Centroid(fp.geometry)) AS lon
                 FROM owner_entities oe
                 JOIN LATERAL unnest(oe.parcel_ids) AS pid ON true
-                JOIN parcels_unified p
-                    ON p.parcel_id = pid AND p.county = oe.county
-                WHERE oe.cluster_id = %(cid)s
-                ORDER BY p.county, p.site_address
+                JOIN fulton_parcels fp ON fp.parcelid = pid
+                WHERE oe.cluster_id = %(cid)s AND oe.county = 'fulton'
+
+                UNION ALL
+
+                SELECT
+                    dp.parcelid           AS parcel_id,
+                    'dekalb'              AS county,
+                    dp.siteaddress        AS address,
+                    dp.ownernme1          AS owner,
+                    dp.is_corporate,
+                    dp.is_institutional,
+                    ST_Y(ST_Centroid(dp.geometry)) AS lat,
+                    ST_X(ST_Centroid(dp.geometry)) AS lon
+                FROM owner_entities oe
+                JOIN LATERAL unnest(oe.parcel_ids) AS pid ON true
+                JOIN dekalb_parcels dp ON dp.parcelid = pid
+                WHERE oe.cluster_id = %(cid)s AND oe.county = 'dekalb'
+
+                ORDER BY county, address
             """, {"cid": cluster_id})
             result["parcels"] = cur.fetchall()
 
