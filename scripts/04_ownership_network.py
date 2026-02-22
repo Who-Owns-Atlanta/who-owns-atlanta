@@ -203,4 +203,8 @@ if __name__ == "__main__":
     build_owner_entities(engine)
     G = build_network(engine)
     assign_clusters(engine, G)
+    print("\nNOTE: DROP TABLE owner_entities/ownership_clusters CASCADE was run above.")
+    print("      mv_cluster_stats and mv_leaderboard have been dropped.")
+    print("      After the full pipeline, recreate with:")
+    print("        psql ... -f scripts/sql/04_create_materialized_views.sql")
     print("\nDone.")

@@ -106,6 +106,10 @@ if __name__ == "__main__":
     load_dekalb(engine)
     create_unified_view(engine)
     create_indexes(engine)
+    print("\nNOTE: DROP VIEW parcels_unified CASCADE was run above.")
+    print("      mv_parcel_permits and mv_cluster_stats have been dropped.")
+    print("      After the full pipeline, recreate with:")
+    print("        psql ... -f scripts/sql/04_create_materialized_views.sql")
     print("\nAll done. Verifying counts:")
     with engine.connect() as conn:
         for tbl in ["fulton_parcels", "dekalb_parcels", "parcels_unified"]:

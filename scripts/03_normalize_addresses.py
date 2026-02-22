@@ -205,4 +205,8 @@ if __name__ == "__main__":
         for r in rows:
             print(f"  {r.owner.strip()} | {r.owneraddr1} {r.owneraddr2} -> {r.owner_addr_norm}")
 
+    print("\nNOTE: DROP VIEW parcels_unified CASCADE was run above.")
+    print("      mv_parcel_permits and mv_cluster_stats have been dropped.")
+    print("      After the full pipeline, recreate with:")
+    print("        psql ... -f scripts/sql/04_create_materialized_views.sql")
     print("\nDone.")

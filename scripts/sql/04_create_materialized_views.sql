@@ -77,6 +77,19 @@ CREATE INDEX idx_mv_parcel_permits
 -- mv_cluster_stats
 -- Per-cluster aggregate stats. Depends on mv_parcel_permits.
 -- Unnests owner_entities.parcel_ids for the join to parcels_unified.
+--
+-- NOTE: registered_agents and primary_foreign_state are aggregated from
+-- owner_entities — they do NOT exist as columns in ownership_clusters.
+-- ownership_clusters only carries: cluster_id, entity_count, parcel_count,
+-- owner_names, owner_addresses, sos_entity_count, primary_sos_status.
+--
+-- IMPORTANT: This view must be (re)created after any run of the clustering
+-- pipeline (scripts 10_sos_network_enrichment.py or 11_*). The pipeline
+-- uses DROP TABLE ... CASCADE on ownership_clusters which cascades to
+-- mv_cluster_stats (and mv_leaderboard). Re-run this file after the pipeline:
+--
+--   PGPASSWORD=woa psql -h localhost -p 5434 -U woa who_owns_atl \
+--     -f scripts/sql/04_create_materialized_views.sql
 -- ---------------------------------------------------------------------------
 
 DROP MATERIALIZED VIEW IF EXISTS mv_cluster_stats CASCADE;
@@ -87,14 +100,15 @@ SELECT
     oc.entity_count,
     oc.parcel_count,
     oc.owner_names,
-    oc.registered_agents,
-    oc.primary_sos_status,
-    oc.primary_foreign_state,
-    round(sum(p.land_acres)::numeric, 2)                            AS total_land_acres,
-    count(*) FILTER (WHERE p.is_corporate)                          AS corporate_parcel_count,
-    count(*) FILTER (WHERE p.is_institutional)                      AS institutional_parcel_count,
-    coalesce(sum(pp.permit_count), 0)                               AS total_permit_count,
-    coalesce(sum(pp.open_count), 0)                                 AS total_open_count
+    array_remove(array_agg(DISTINCT oe.sos_registered_agent)
+        FILTER (WHERE oe.sos_registered_agent IS NOT NULL), NULL) AS registered_agents,
+    mode() WITHIN GROUP (ORDER BY oe.sos_status)                  AS primary_sos_status,
+    mode() WITHIN GROUP (ORDER BY oe.sos_foreign_state)           AS primary_foreign_state,
+    round(sum(p.land_acres)::numeric, 2)                          AS total_land_acres,
+    count(*) FILTER (WHERE p.is_corporate)                        AS corporate_parcel_count,
+    count(*) FILTER (WHERE p.is_institutional)                    AS institutional_parcel_count,
+    coalesce(sum(pp.permit_count), 0)                             AS total_permit_count,
+    coalesce(sum(pp.open_count), 0)                               AS total_open_count
 FROM ownership_clusters oc
 JOIN owner_entities oe
     ON oe.cluster_id = oc.cluster_id
@@ -104,8 +118,7 @@ JOIN parcels_unified p
 LEFT JOIN mv_parcel_permits pp
     ON pp.parcel_id = p.parcel_id AND pp.county = p.county
 GROUP BY
-    oc.cluster_id, oc.entity_count, oc.parcel_count, oc.owner_names,
-    oc.registered_agents, oc.primary_sos_status, oc.primary_foreign_state;
+    oc.cluster_id, oc.entity_count, oc.parcel_count, oc.owner_names;
 
 CREATE INDEX idx_mv_cluster_stats
     ON mv_cluster_stats (cluster_id);

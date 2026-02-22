@@ -11,7 +11,7 @@ Not all data changes require a full rebuild. Match the change to the minimum req
 | What changed | Steps required |
 |---|---|
 | Parcel data (new county export) | pipeline → tiles → static pages |
-| Ownership clustering (re-run scripts 04+) | tiles → static pages |
+| Ownership clustering (re-run scripts 04+) | **recreate mat views** → tiles → static pages |
 | Permit records only | permit refresh → mat view refresh → static pages |
 | SOS data only | mat view refresh → static pages |
 | HTML template / design change | static pages only |
@@ -71,3 +71,14 @@ Before deploying the frontend to production, perform these manual verification s
 | `mv_parcel_permits` | After any permit pull |
 | `mv_cluster_stats` | After parcel pipeline or clustering re-run |
 | `mv_leaderboard` | After parcel pipeline or clustering re-run |
+
+**Important — clustering pipeline drops `mv_cluster_stats` and `mv_leaderboard`.**
+
+`scripts/10_sos_network_enrichment.py` runs `DROP TABLE ownership_clusters CASCADE`, which cascades to any views that depend on it, including `mv_cluster_stats` and `mv_leaderboard`. After any clustering pipeline run, these views must be **recreated** (not just refreshed):
+
+```bash
+PGPASSWORD=woa psql -h localhost -p 5434 -U woa who_owns_atl \
+  -f scripts/sql/04_create_materialized_views.sql
+```
+
+This file idempotently drops and recreates all four materialized views in dependency order (`mv_address_search` → `mv_parcel_permits` → `mv_cluster_stats` → `mv_leaderboard`). Safe to re-run at any time.
