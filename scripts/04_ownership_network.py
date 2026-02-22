@@ -1,4 +1,3 @@
-
 import re
 import networkx as nx
 from sqlalchemy import create_engine, text
@@ -9,7 +8,8 @@ engine = create_engine(DB_URL)
 
 # --- Tuning knobs ---
 # Skip names with many distinct addresses (likely generic labels like 'BRANDYWINE')
-NAME_ENTROPY_LIMIT = 20
+# Lowered to 10 to be more aggressive against generic labels.
+NAME_ENTROPY_LIMIT = 10
 
 # Skip addresses if shared by many entities (mailbox centers, office parks)
 # We check this at the STREET level (ignoring Suite/Unit)
@@ -21,7 +21,19 @@ CITY_ZIP_ONLY = re.compile(r'^[A-Z]+(\s+[A-Z]+)*\s+[A-Z]{2}\s+\d{5}(-\d+)?$')
 def normalize_street(addr: str) -> str:
     """Strip Suite/Unit/Apt from address to find the base building."""
     if not addr: return ""
-    return re.sub(r'\s+(STE|SUITE|UNIT|BLDG|OFFICE|#|APT)\s+.*$', '', addr, flags=re.IGNORECASE).strip()
+    # Remove junk characters
+    s = re.sub(r'[.,?]', '', addr).strip()
+    if not s or len(s) < 2: return ""
+    # Strip suite/unit
+    return re.sub(r'\s+(STE|SUITE|UNIT|BLDG|OFFICE|#|APT)\s+.*$', '', s, flags=re.IGNORECASE).strip()
+
+def is_junk_addr(addr: str) -> bool:
+    """Check if address is clearly a normalization artifact."""
+    if not addr: return True
+    # If it's just dots, hashes, or very short numbers
+    if re.match(r'^[.#\s?0-9]+$', addr) and len(addr.strip()) < 8:
+        return True
+    return False
 
 def build_owner_entities(engine):
     """Create a table of distinct (owner_name_norm, owner_addr_norm) pairs."""
@@ -85,19 +97,14 @@ def build_network(engine):
         if addr:
             addr_idx.setdefault(addr, []).append(eid)
             street = normalize_street(addr)
-            street_counts[street] = street_counts.get(street, 0) + 1
+            if street:
+                street_counts[street] = street_counts.get(street, 0) + 1
 
     # 1. Name Edges (with Entropy Filter)
     print(f"Filtering names with entropy > {NAME_ENTROPY_LIMIT}...")
     valid_name_items = []
     skipped_names = 0
-    for name, eids in name_idx.items():
-        # Count distinct addresses for this name
-        with engine.connect() as conn:
-            # Note: This could be slow in a loop. Better to fetch entropy for all names at once.
-            pass
     
-    # Optimization: Pre-calculate entropy for all names
     print("  Calculating name entropy...")
     with engine.connect() as conn:
         entropy_rows = conn.execute(text("""
@@ -123,12 +130,17 @@ def build_network(engine):
     valid_addr_items = []
     skipped_addr_cityzip = 0
     skipped_addr_hub = 0
+    skipped_addr_junk = 0
 
     for addr, eids in addr_idx.items():
         if CITY_ZIP_ONLY.match(addr):
             skipped_addr_cityzip += 1
             continue
         
+        if is_junk_addr(addr):
+            skipped_addr_junk += 1
+            continue
+
         street = normalize_street(addr)
         if street_counts.get(street, 0) > STREET_ENTITY_LIMIT:
             skipped_addr_hub += 1
@@ -136,7 +148,7 @@ def build_network(engine):
             
         valid_addr_items.append((addr, eids))
 
-    print(f"  Connecting by shared address (skipped {skipped_addr_cityzip:,} city/zip, {skipped_addr_hub:,} hubs)...")
+    print(f"  Connecting by shared address (skipped {skipped_addr_cityzip:,} city/zip, {skipped_addr_hub:,} hubs, {skipped_addr_junk:,} junk)...")
     with Pool(cpu_count()) as pool:
         results = pool.map(_get_edges, valid_addr_items)
         for chunk in results:
@@ -203,8 +215,4 @@ if __name__ == "__main__":
     build_owner_entities(engine)
     G = build_network(engine)
     assign_clusters(engine, G)
-    print("\nNOTE: DROP TABLE owner_entities/ownership_clusters CASCADE was run above.")
-    print("      mv_cluster_stats and mv_leaderboard have been dropped.")
-    print("      After the full pipeline, recreate with:")
-    print("        psql ... -f scripts/sql/04_create_materialized_views.sql")
     print("\nDone.")
