@@ -376,6 +376,38 @@ dl dd { margin: 0; color: var(--pico-color); }
   padding: 0.25rem 0;
 }
 
+/* ── Owner mailing address + section labels ─────────────────── */
+.meta-section-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--pico-muted-color);
+  margin: 0.9rem 0 0.25rem;
+}
+
+#owner-mail-addr { margin-bottom: 0.75rem; }
+
+.owner-mail {
+  font-size: 0.85rem;
+  color: var(--pico-color);
+  margin: 0;
+  line-height: 1.45;
+}
+
+/* ── External links ─────────────────────────────────────────── */
+#parcel-links { margin-bottom: 0.75rem; }
+
+.ext-link {
+  display: block;
+  font-size: 0.82rem;
+  color: var(--pico-primary);
+  text-decoration: none;
+  padding: 0.18rem 0;
+}
+
+.ext-link:hover { text-decoration: underline; }
+
 /* ── Owner profile link ─────────────────────────────────────── */
 #owner-profile-link {
   display: inline-block;

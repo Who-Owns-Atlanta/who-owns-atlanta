@@ -471,8 +471,53 @@ const parcelOwnerLine  = document.getElementById('parcel-owner-line');
 const parcelMeta       = document.getElementById('parcel-meta');
 const permitMeta       = document.getElementById('permit-meta');
 const parcelPermits    = document.getElementById('parcel-permits');
+const parcelLinks      = document.getElementById('parcel-links');
 const ownerProfileLink = document.getElementById('owner-profile-link');
 const panelClose       = document.getElementById('panel-close');
+
+// ---------------------------------------------------------------------------
+// Georgia property class codes
+// NOTE: State of Georgia stratification code used to group like properties for
+// analysis. Same codes appear in both Fulton (classcode) and DeKalb (classdscrp).
+// Sources:
+//   https://www.dekalbcountyga.gov/property-appraisal/appraisal-definitions
+//   http://share.myfultoncountyga.us/datashare/fultoncounty/Documents/PropertyClasses.pdf
+//   docs/FultonCountyPropertyClasses.pdf (local copy)
+// ---------------------------------------------------------------------------
+const GA_PROPERTY_CLASS = {
+  A1:'Agriculture Improved',          A3:'Agriculture Vacant Lot',
+  A4:'Agriculture Small Tract ≤9.99 Acres', A5:'Agriculture Property ≥10.00 Acres',
+  A6:'Agriculture Institution',       A9:'Agriculture Outbuilding',
+  B1:'Brownfield Improved',           B3:'Brownfield Vacant Lot',
+  B4:'Brownfield Small Tract',        B5:'Brownfield Large Tract',
+  C1:'Commercial Improved',           C3:'Commercial Vacant Lot',
+  C4:'Commercial Small Tract ≤4.99 Acres',  C5:'Commercial Large Tract ≥5.00 Acres',
+  C9:'Commercial Outbuilding',
+  E0:'Non-Profit Homes for the Aged', E1:'Public Property',
+  E2:'Religious Property',            E3:'Charitable Property',
+  E4:'Religious Property',            E5:'Non-Profit Hospital',
+  E6:'Educational Institution',       E9:'Exempt Outbuilding',
+  H1:'Historical Property',           H3:'Historical Vacant Lot',
+  H5:'Historical Large Tract',
+  I1:'Industrial Improved',           I3:'Industrial Vacant Lot',
+  I4:'Industrial Small Tract ≤9.99 Acres',  I5:'Industrial Large Tract ≥10.00 Acres',
+  I9:'Industrial Outbuilding',
+  J3:'Forest Land Conservation Vacant Lot', J4:'Forest Land Conservation Small Tract',
+  J5:'Forest Land Conservation Large Tract',
+  P1:'Preferential Assessment',       P3:'Preferential Vacant Lot',
+  P4:'Preferential Small Tract',      P5:'Preferential Large Tract',
+  Q4:'Qualified Timberland Small Tract',    Q5:'Qualified Timberland Large Tract',
+  R1:'Residential Improved',          R3:'Residential Vacant Lot',
+  R4:'Residential Small Tract ≤1.99 Acres', R5:'Residential Large Tract ≥2.00 Acres',
+  R9:'Residential Outbuilding',
+  T1:'Residential Transition Improved',    T3:'Residential Transition Vacant Lot',
+  T4:'Residential Transition Small Tract ≤1.99 Acres',
+  U1:'Improved Public Utility',       U2:'Utility Operating Property',
+  U3:'Utility Vacant Lot',            U4:'Utility Small Tract',
+  U5:'Utility Large Tract',           U9:'Public Utility Outbuilding',
+  V1:'Conservation Assessment',       V3:'Conservation Vacant Lot',
+  V4:'Conservation Small Tract',      V5:'Conservation Large Tract',
+};
 
 panelClose.addEventListener('click', closePanel);
 
@@ -500,7 +545,7 @@ function renderParcelPanel(p) {
 
   // Badges
   parcelBadges.innerHTML = '';
-  if (p.is_corporate)    parcelBadges.innerHTML += '<span class="badge-corporate">CORPORATE</span>';
+  if (p.is_corporate)     parcelBadges.innerHTML += '<span class="badge-corporate">CORPORATE</span>';
   if (p.is_institutional) parcelBadges.innerHTML += '<span class="badge-institutional">INSTITUTIONAL</span>';
 
   // Owner line
@@ -513,16 +558,60 @@ function renderParcelPanel(p) {
 
   // Metadata
   const meta = [];
-  if (p.neighborhood)      meta.push(['Neighborhood', p.neighborhood]);
-  if (p.npu)               meta.push(['NPU', p.npu]);
-  if (p.council_district)  meta.push(['Council', `District ${p.council_district}`]);
+
+  // County + parcel ID
+  meta.push(['County', p.county === 'fulton' ? 'Fulton County' : 'DeKalb County']);
+  meta.push(['Parcel ID', p.parcel_id]);
+
+  // Property class — same GA state code in both Fulton (classcode) and DeKalb (classdscrp)
+  if (p.property_class) {
+    meta.push(['Property class', GA_PROPERTY_CLASS[p.property_class] || p.property_class]);
+  }
+
+  // Co-owner (DeKalb ownernme2)
+  if (p.owner_name2) meta.push(['Co-owner', p.owner_name2]);
+
+  // Geographic context
+  if (p.neighborhood)     meta.push(['Neighborhood', p.neighborhood]);
+  if (p.npu)              meta.push(['NPU', p.npu]);
+  if (p.council_district) meta.push(['Council', `District ${p.council_district}`]);
+
+  // Physical details
   if (p.land_acres != null) meta.push(['Land', `${Number(p.land_acres).toFixed(2)} acres`]);
-  if (p.living_units)      meta.push(['Units', p.living_units]);
-  if (p.land_use)          meta.push(['Land use', p.land_use]);
+  if (p.living_units)       meta.push(['Units', p.living_units]);
+  if (p.land_use)           meta.push(['Land use', p.land_use]);
+
+  // Homestead exemption (Fulton only) — excode non-empty = homestead exempt
+  if (p.county === 'fulton') {
+    meta.push(['Exemption', p.exemption_code ? 'Homestead exempt' : 'Not homestead exempt']);
+  }
+
+  // Appraised value (DeKalb only)
+  if (p.appraised_value != null) {
+    meta.push(['Assessed value', '$' + Number(p.appraised_value).toLocaleString() + ' (DeKalb)']);
+  }
+
+  // Zoning / historic / overlay (skip if blank — API returns null when blank)
+  if (p.zoning)            meta.push(['Zoning', p.zoning]);
+  if (p.historic_district) meta.push(['Historic district', p.historic_district]);
+  if (p.overlay_district)  meta.push(['Overlay district', p.overlay_district]);
 
   parcelMeta.innerHTML = meta.map(([k, v]) =>
     `<dt>${escHtml(k)}</dt><dd>${escHtml(String(v))}</dd>`
   ).join('');
+
+  // Owner mailing address — rendered below the dl, above permits
+  const mailAddr = [p.owner_mail_addr1, p.owner_mail_addr2].filter(Boolean);
+  const mailBlock = parcelMeta.nextElementSibling?.id === 'owner-mail-addr'
+    ? parcelMeta.nextElementSibling
+    : (() => { const d = document.createElement('div'); d.id = 'owner-mail-addr'; parcelMeta.after(d); return d; })();
+  if (mailAddr.length) {
+    mailBlock.innerHTML = `<p class="meta-section-label">Owner mailing address</p>`
+      + `<p class="owner-mail">${mailAddr.map(escHtml).join('<br>')}</p>`;
+    mailBlock.hidden = false;
+  } else {
+    mailBlock.hidden = true;
+  }
 
   // Permits
   permitMeta.innerHTML = '';
@@ -548,6 +637,9 @@ function renderParcelPanel(p) {
     parcelPermits.open = false;
   }
 
+  // External links
+  renderParcelLinks(p);
+
   // Owner profile link
   if (p.cluster_id) {
     ownerProfileLink.href = `/owner/${p.cluster_id}/`;
@@ -555,6 +647,44 @@ function renderParcelPanel(p) {
   } else {
     ownerProfileLink.hidden = true;
   }
+}
+
+function renderParcelLinks(p) {
+  const items = [];
+
+  // qPublic — county-specific AppID
+  const qpAppId = p.county === 'fulton' ? '936' : '994';
+  const qpUrl = 'https://qpublic.schneidercorp.com/Application.aspx'
+    + `?AppID=${qpAppId}&PageTypeID=4&KeyValue=${encodeURIComponent(p.parcel_id)}`;
+  items.push(['qPublic record', qpUrl]);
+
+  // GA SOS direct link — only if matched entity has a sos_business_id
+  if (p.sos_business_id) {
+    items.push(['GA SOS filing', `https://ecorp.sos.ga.gov/BusinessSearch/BusinessInformation?businessId=${encodeURIComponent(p.sos_business_id)}`]);
+  }
+
+  // Google Maps — property address (labeled "Street View" per plan)
+  if (p.site_address) {
+    items.push(['Street View', `https://maps.google.com/?q=${encodeURIComponent(p.site_address)}`]);
+  }
+
+  // Google Maps — owner mailing address
+  const ownerMailStr = [p.owner_mail_addr1, p.owner_mail_addr2].filter(Boolean).join(', ');
+  if (ownerMailStr) {
+    items.push(['Owner address map', `https://maps.google.com/?q=${encodeURIComponent(ownerMailStr)}`]);
+  }
+
+  // OpenCorporates — only for corporate owners
+  if (p.is_corporate && p.owner_name) {
+    items.push(['OpenCorporates search', `https://opencorporates.com/companies?utf8=%E2%9C%93&q=${encodeURIComponent(p.owner_name)}&jurisdiction_code=us_ga`]);
+  }
+
+  parcelLinks.innerHTML = items.length
+    ? `<p class="meta-section-label">External records</p>`
+      + items.map(([label, url]) =>
+          `<a class="ext-link" href="${escHtml(url)}" target="_blank" rel="noopener noreferrer">${escHtml(label)} ↗</a>`
+        ).join('')
+    : '';
 }
 
 function showPanel()  { detailPanel.hidden = false; }

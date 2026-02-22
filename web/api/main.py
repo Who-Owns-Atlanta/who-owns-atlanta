@@ -85,7 +85,15 @@ def parcel(county: str, parcel_id: str, response: Response):
                         livunits            AS living_units,
                         city_neighborhood   AS neighborhood,
                         city_npu            AS npu,
-                        city_council        AS council_district
+                        city_council        AS council_district,
+                        owneraddr1          AS owner_mail_addr1,
+                        owneraddr2          AS owner_mail_addr2,
+                        excode              AS exemption_code,
+                        NULL::text          AS owner_name2,
+                        NULL::numeric       AS appraised_value,
+                        NULL::text          AS zoning,
+                        NULL::text          AS historic_district,
+                        NULL::text          AS overlay_district
                     FROM fulton_parcels
                     WHERE parcelid = %(pid)s
                 """, {"pid": parcel_id})
@@ -104,7 +112,19 @@ def parcel(county: str, parcel_id: str, response: Response):
                         NULL                                AS living_units,
                         city_neighborhood                   AS neighborhood,
                         city_npu                            AS npu,
-                        city_council                        AS council_district
+                        city_council                        AS council_district,
+                        pstladdress                         AS owner_mail_addr1,
+                        NULLIF(TRIM(
+                            COALESCE(NULLIF(TRIM(pstlcity),  '') || ', ', '') ||
+                            COALESCE(NULLIF(TRIM(pstlstate), ''), '')         ||
+                            COALESCE(' ' || NULLIF(TRIM(pstlzip5), ''), '')
+                        ), '')                              AS owner_mail_addr2,
+                        NULL::text                          AS exemption_code,
+                        NULLIF(TRIM(ownernme2), '')         AS owner_name2,
+                        totapr1                             AS appraised_value,
+                        NULLIF(TRIM(zoning), '')            AS zoning,
+                        NULLIF(TRIM(histdesc), '')          AS historic_district,
+                        NULLIF(TRIM(ovldesc), '')           AS overlay_district
                     FROM dekalb_parcels
                     WHERE parcelid = %(pid)s OR lowparcelid = %(pid)s
                     LIMIT 1
@@ -118,14 +138,16 @@ def parcel(county: str, parcel_id: str, response: Response):
             # Owner cluster — only expose if the cluster has >1 parcel (otherwise no profile page exists).
             # Use @> (array contains) — GIN index on parcel_ids (idx_oe_parcel_ids_gin) is used.
             cur.execute("""
-                SELECT oe.cluster_id, oc.parcel_count
+                SELECT oe.cluster_id, oc.parcel_count, oe.sos_business_id
                 FROM owner_entities oe
                 JOIN ownership_clusters oc USING (cluster_id)
                 WHERE oe.parcel_ids @> ARRAY[%(pid)s] AND oe.county = %(county)s
                 LIMIT 1
             """, {"pid": parcel_id, "county": county})
             oe = cur.fetchone()
-            result["cluster_id"] = oe["cluster_id"] if oe and oe["parcel_count"] >= 2 else None
+            has_profile = oe and oe["parcel_count"] >= 2
+            result["cluster_id"]      = oe["cluster_id"]      if has_profile else None
+            result["sos_business_id"] = oe["sos_business_id"] if has_profile else None
 
             # Permit summary
             cur.execute("""
