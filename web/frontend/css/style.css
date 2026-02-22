@@ -291,6 +291,23 @@ footer nav a:hover { color: var(--pico-primary); }
   flex-shrink: 0;
 }
 
+/* ── Hover tooltip ──────────────────────────────────────────── */
+.hover-tip {
+  font-size: 0.72rem;
+  line-height: 1.35;
+  max-width: 200px;
+  white-space: normal;
+}
+
+.hover-address {
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.hover-owner {
+  color: #475569;
+}
+
 /* ── Cluster loading overlay ────────────────────────────────── */
 #cluster-loading {
   position: absolute;

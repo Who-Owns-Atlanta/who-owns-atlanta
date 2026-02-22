@@ -53,18 +53,23 @@ done
 mkdir -p "$OUTPUT_DIR"
 
 # ---------------------------------------------------------------------------
-# Steps 1 + 2: Export GeoJSON and build tiles in one pipeline
+# Steps 1 + 2: Export GeoJSON and build tiles — two-pass strategy
 # ---------------------------------------------------------------------------
-# ogr2ogr writes to stdout (/vsistdout/); tippecanoe reads from stdin (-).
-# Both processes run concurrently — no intermediate file written to disk.
+# Two tippecanoe passes on different zoom ranges, merged with tile-join:
 #
-# Zoom 10–14:
-#   z10–12: simplified overview — color by is_corporate/is_institutional
-#   z13–14: full detail — color by cluster_id
+#   z10–12 (overview): minimal attributes + --simplification=10 to keep tiles
+#          small. cluster_size is unused here (overview opacity is flat 1.0).
 #
-# --read-parallel: tippecanoe parses stdin features across multiple threads.
-# --coalesce-densest-as-needed: merge features at low zoom rather than drop.
+#   z13–14 (detail): full attributes including site_address + owner_name for
+#          hover tooltips. Default simplification (geometry accuracy matters
+#          at this zoom for clicking and outlines).
+#
+# Both passes use --no-tile-size-limit --no-feature-limit to prevent the
+# feature-dropping that caused gray-square artifacts previously.
+#
 # --no-tile-compression: raw .pbf — nginx/CloudFront handle Content-Encoding.
+# Note: CloudFront auto-compression only applies to objects ≤ 10MB; large
+# low-zoom tiles must be pre-gzipped before S3 upload if compression is needed.
 
 # ---------------------------------------------------------------------------
 # Step 1: Materialize unnested parcel→cluster mapping for an efficient join
@@ -86,14 +91,52 @@ psql_cmd -c "
   ANALYZE _tile_oe_map;
 "
 
-echo "==> Exporting from PostGIS and building tiles (parallel pipeline)..."
+echo "==> Pass 1/2: z10–12 overview tiles (minimal attributes, simplified geometry)..."
 
-TILE_TMP="$WORK_DIR/tiles"
+TILE_TMP_LOW="$WORK_DIR/tiles_low"
 
 tippecanoe \
-  --output-to-directory "$TILE_TMP" \
+  --output-to-directory "$TILE_TMP_LOW" \
   --no-tile-compression \
   --minimum-zoom=10 \
+  --maximum-zoom=12 \
+  --layer=parcels \
+  --attribute-type=is_corporate:bool \
+  --attribute-type=is_institutional:bool \
+  --simplification=10 \
+  --no-tile-size-limit \
+  --no-feature-limit \
+  --quiet \
+  <(PGPASSWORD="$DB_PASS" ogr2ogr \
+      -f GeoJSON /vsistdout/ \
+      "PG:host=$DB_HOST port=$DB_PORT dbname=$DB_NAME user=$DB_USER password=$DB_PASS" \
+      -sql "
+        SELECT
+            p.geometry,
+            p.parcel_id,
+            p.county,
+            p.is_corporate::int     AS is_corporate,
+            p.is_institutional::int AS is_institutional,
+            m.cluster_id
+        FROM parcels_unified p
+        LEFT JOIN _tile_oe_map m
+          ON m.parcel_id = p.parcel_id AND m.county = p.county
+      " \
+      -nln parcels \
+      -lco COORDINATE_PRECISION=6)
+
+LOW_COUNT=$(find "$TILE_TMP_LOW" -name "*.pbf" | wc -l)
+LOW_SIZE=$(du -sh "$TILE_TMP_LOW" | cut -f1)
+echo "    z10–12: $LOW_COUNT tiles ($LOW_SIZE)"
+
+echo "==> Pass 2/2: z13–14 detail tiles (full attributes, tooltip data)..."
+
+TILE_TMP_HIGH="$WORK_DIR/tiles_high"
+
+tippecanoe \
+  --output-to-directory "$TILE_TMP_HIGH" \
+  --no-tile-compression \
+  --minimum-zoom=13 \
   --maximum-zoom=14 \
   --layer=parcels \
   --attribute-type=is_corporate:bool \
@@ -112,7 +155,9 @@ tippecanoe \
             p.is_corporate::int     AS is_corporate,
             p.is_institutional::int AS is_institutional,
             m.cluster_id,
-            m.cluster_size
+            m.cluster_size,
+            p.site_address,
+            p.owner_name
         FROM parcels_unified p
         LEFT JOIN _tile_oe_map m
           ON m.parcel_id = p.parcel_id AND m.county = p.county
@@ -120,9 +165,23 @@ tippecanoe \
       -nln parcels \
       -lco COORDINATE_PRECISION=6)
 
+HIGH_COUNT=$(find "$TILE_TMP_HIGH" -name "*.pbf" | wc -l)
+HIGH_SIZE=$(du -sh "$TILE_TMP_HIGH" | cut -f1)
+echo "    z13–14: $HIGH_COUNT tiles ($HIGH_SIZE)"
+
+echo "==> Merging zoom ranges with tile-join..."
+
+TILE_TMP="$WORK_DIR/tiles"
+
+tile-join \
+  --output-to-directory "$TILE_TMP" \
+  --no-tile-compression \
+  --no-tile-size-limit \
+  "$TILE_TMP_LOW" "$TILE_TMP_HIGH"
+
 TILE_COUNT=$(find "$TILE_TMP" -name "*.pbf" | wc -l)
 TILE_SIZE=$(du -sh "$TILE_TMP" | cut -f1)
-echo "    Built $TILE_COUNT tiles ($TILE_SIZE)"
+echo "    Merged: $TILE_COUNT tiles ($TILE_SIZE)"
 
 # ---------------------------------------------------------------------------
 # Step 3: Swap into place atomically

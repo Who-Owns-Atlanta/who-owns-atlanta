@@ -32,6 +32,7 @@ let selectedMarker  = null;
 let activeClusterId = null;   // cluster currently in "focus" mode
 let clusterMarkers  = [];     // teardrop pins placed for each cluster parcel (z13+ only)
 let clusterParcels  = [];     // parcel list for the active cluster (for zoom-toggling markers)
+const hoverPopup    = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 12 });
 
 // Add parcel tile layer once map is ready (only if URL is configured)
 map.on('load', () => {
@@ -92,8 +93,18 @@ map.on('load', () => {
 
   map.on('mouseenter', 'parcels-overview', () => { map.getCanvas().style.cursor = 'pointer'; });
   map.on('mouseenter', 'parcels-detail',   () => { map.getCanvas().style.cursor = 'pointer'; });
-  map.on('mouseleave', 'parcels-overview', () => { map.getCanvas().style.cursor = ''; });
-  map.on('mouseleave', 'parcels-detail',   () => { map.getCanvas().style.cursor = ''; });
+  map.on('mouseleave', 'parcels-overview', () => { map.getCanvas().style.cursor = ''; hoverPopup.remove(); });
+  map.on('mouseleave', 'parcels-detail',   () => { map.getCanvas().style.cursor = ''; hoverPopup.remove(); });
+
+  // Hover tooltip — z13+ only (detail layer has owner/address tile properties)
+  map.on('mousemove', 'parcels-detail', (e) => {
+    const p = e.features[0].properties;
+    if (!p.parcel_id) return;
+    hoverPopup
+      .setLngLat(e.lngLat)
+      .setHTML(`<div class="hover-tip"><div class="hover-address">${escHtml(p.site_address || p.parcel_id)}</div><div class="hover-owner">${escHtml(p.owner_name || '')}</div></div>`)
+      .addTo(map);
+  });
 
   updateLegend();
   map.on('zoomend', updateLegend);
