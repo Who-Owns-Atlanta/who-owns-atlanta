@@ -1,25 +1,25 @@
 # Plan: Interface Enhancements — Who Owns Atlanta?
 
 **Created:** 2026-02-22
-**Status:** Draft — edit before implementing
+**Status:** In progress — sections 1 & 2 complete (commit ca4a354, 2026-02-22)
 
 ---
 
-## 1. Parcel panel — data to add
+## 1. Parcel panel — data to add ✅ DONE (ca4a354)
 
 ### Add (clearly useful)
 
-| Field | Source | Notes |
-|---|---|---|
-| County | already in API response | Display explicitly — determines which external links to construct |
-| Parcel ID | already in API response | Show it; investigators copy this to look up records elsewhere |
-| Owner mailing address | Fulton: `owneraddr1`/`owneraddr2`; DeKalb: `pstladdress`/`pstlcity`/`pstlstate`/`pstlzip5` | Reveals PO boxes, out-of-state addresses, shared addresses across shell companies |
-| Homestead exemption status | Fulton: `excode` | Translate the code to human language: "Homestead exempt" / "Not exempt." A residential-looking parcel with no homestead exemption is almost certainly a rental. Don't show the raw code. |
-| Assessed/appraisal value | DeKalb: `totapr1` | Show for DeKalb parcels; contextualizes complaint activity. Fulton not available. Show with county label to avoid confusion. |
-| Zoning | DeKalb: `zoning` | Brief display. Skip if blank. |
-| Historic / overlay district | DeKalb: `histdesc`, `ovldesc` | Informative for neighborhoods people care about. Skip if blank. |
-| Second owner name | DeKalb: `ownernme2` | Often reveals a spouse, co-owner, or second entity name. Skip if blank. |
-| Property class | Fulton: `classcode`; DeKalb: `classdscrp` | Residential / commercial / exempt — meaningful context. |
+| Field | Source | Notes | Status |
+|---|---|---|---|
+| County | already in API response | Display explicitly — determines which external links to construct | ✅ |
+| Parcel ID | already in API response | Show it; investigators copy this to look up records elsewhere | ✅ |
+| Owner mailing address | Fulton: `owneraddr1`/`owneraddr2`; DeKalb: `pstladdress`/`pstlcity`/`pstlstate`/`pstlzip5` | Reveals PO boxes, out-of-state addresses, shared addresses across shell companies | ✅ |
+| Homestead exemption status | Fulton: `excode` | Translated: non-empty excode = "Homestead exempt", empty = "Not homestead exempt". Raw code not shown. | ✅ |
+| Assessed/appraisal value | DeKalb: `totapr1` | Shown for DeKalb parcels with "(DeKalb)" label. Fulton not available. | ✅ |
+| Zoning | DeKalb: `zoning` | Brief display. Skipped if blank (API returns NULL). | ✅ |
+| Historic / overlay district | DeKalb: `histdesc`, `ovldesc` | Skipped if blank. | ✅ |
+| Second owner name | DeKalb: `ownernme2` | Skipped if blank. | ✅ |
+| Property class | Fulton: `classcode`; DeKalb: `classdscrp` | Translated via `GA_PROPERTY_CLASS` lookup (State of Georgia stratification codes — same codes in both counties). Sources: dekalbcountyga.gov/property-appraisal/appraisal-definitions + docs/FultonCountyPropertyClasses.pdf | ✅ |
 
 ### Skip (noise > signal)
 
@@ -31,33 +31,26 @@
 
 ---
 
-## 2. External links from parcel panel
+## 2. External links from parcel panel ✅ DONE (ca4a354)
 
 ### High priority
 
-**qPublic — primary "dig deeper" link.** Has assessment values, tax history, deed records we don't store. County-specific URL format:
+**qPublic — primary "dig deeper" link.** ✅ Implemented.
+- Fulton: `AppID=936`, DeKalb: `AppID=994`. KeyValue = parcel_id (URL-encoded, space-separated format confirmed working).
+- Note: qPublic returns 403 to curl (bot protection) but links work fine in browser.
 
-- Fulton: `https://qpublic.schneidercorp.com/Application.aspx?AppID=936&PageTypeID=4&KeyValue={parcel_id}`
-  - Parcel ID format: space-separated, e.g. `17 014900051579`
-- DeKalb: `https://qpublic.schneidercorp.com/Application.aspx?AppID=994&PageTypeID=4&KeyValue={parcel_id}`
-  - Parcel ID format: e.g. `18 261 05 004`
+**GA SOS direct link** ✅ Implemented. `sos_business_id` fetched from `owner_entities` in the cluster sub-query and added to API response. Link shown only when non-null.
 
-Verify both URL formats against live qPublic before implementing — the KeyValue format may need confirmation.
+**Google Maps (property address)** ✅ Implemented. Labeled "Street View".
 
-**GA SOS direct link** — `https://ecorp.sos.ga.gov/BusinessSearch/BusinessInformation?businessId={sos_business_id}` — only show if we have a confirmed SOS match (`sos_business_id` is not null). Direct link to state records is better than asking someone to search.
+**Google Maps (owner mailing address)** ✅ Implemented. Labeled "Owner address map".
 
-
-**Google Maps (property address)** — `https://maps.google.com/?q={site_address}`. Street view is genuinely useful for assessing property condition. Label the link "Street View" to set expectations.
-
-**Google Maps (owner mailing address)** — same pattern, applied to the owner's mailing address. An address that resolves to a strip mall, a UPS Store, or another state is investigatively interesting.
-
-***OpenCorporates/Bizapedia*** — Link the company name / owner name to these sites to help users find "the person behind the person" across other states.
-
-
+**OpenCorporates** ✅ Implemented. Shown only for `is_corporate` parcels. Links to `opencorporates.com/companies` search with `jurisdiction_code=us_ga`.
 
 ### Skip
 
 - Generic web search by owner name — unreliable for common names; misleads more than helps. (Different logic applies on owner profile pages for corporate entities — see section 4.)
+- Bizapedia — OpenCorporates covers the use case adequately.
 
 ---
 
@@ -185,13 +178,14 @@ All of these are computable at static build time from existing data.
 
 ## 7. Implementation notes (for later)
 
-- Owner mailing address must be added to the `/api/parcel/` response (currently not returned)
-- Fulton `excode` needs a lookup table to translate to human-readable exemption labels ([../docs/FultonCountyPropertyClasses.pdf](../docs/FultonCountyPropertyClasses.pdf)
-- DeKalb `totapr1` is not currently returned by the parcel API
-- RA/officer relationship data is in `owner_entities.sos_registered_agent_id` and `ga_business_officer` — needs a build-time query to compute related-cluster lists
+- ~~Owner mailing address must be added to the `/api/parcel/` response~~ ✅ Done
+- ~~Fulton `excode` needs a lookup table~~ ✅ Done — binary translation (non-empty = homestead exempt). Full per-code translation not needed; all values are homestead variants.
+- ~~DeKalb `totapr1` is not currently returned by the parcel API~~ ✅ Done
+- ~~qPublic URL formats need to be verified~~ ✅ Confirmed — bot protection blocks curl but URLs work in browser
+- ~~GA SOS `sos_business_id` availability~~ ✅ Done — field is on `owner_entities`, fetched in cluster sub-query, shown when non-null
+- RA/officer relationship data is in `owner_entities.sos_registered_agent_id` and `ga_business_officer` — needs a build-time query to compute related-cluster lists (sections 4–5)
 - The commercial-RA threshold (suggested ≤ 25 clusters) needs to be validated against actual data distribution before implementing
-- qPublic URL formats need to be verified against live site — KeyValue format may differ from what's documented here
-- GA SOS `sos_business_id` availability — check what fraction of matched entities have this populated before designing the link
+- `GA_PROPERTY_CLASS` hardcoded in `app.js` — same State of Georgia codes used in both counties. DeKalb `classdscrp` column name is misleading; it stores codes not descriptions.
 
 ---
 
