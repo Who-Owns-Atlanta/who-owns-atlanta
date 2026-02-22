@@ -1,81 +1,62 @@
-"""Enrich ownership clusters using GA SOS data.
-
-TWO-PASS DESIGN to prevent mega-cluster expansion:
-
-Pass 1 — Base graph (tight address cap):
-  Rebuild name + address edges as script 04, but with BASE_MAX_ADDR_ENTITIES = 10.
-  The original cap of 100 allowed office park addresses (92 entities at one address)
-  to form massive cliques. Capping at 10 keeps only genuine small-portfolio linkages.
-  Compute base cluster assignments and parcel counts.
-
-Pass 2 — SOS edges (size-gated):
-  Add three SOS-derived edge types:
-    1. Shared non-commercial registered agent
-    2. Shared officer (by first+last name)
-    3. Shared SOS principal address
-  A SOS edge is only added if BOTH endpoints' base clusters have <= MAX_MERGE_PARCELS
-  parcels. This allows SOS to merge small portfolios but never expands a large cluster.
-
-Final: re-run connected components, update cluster_id + ownership_clusters.
-"""
-
 import re
 import networkx as nx
 from sqlalchemy import create_engine, text
+from multiprocessing import Pool, cpu_count
 
 DB_URL = "postgresql://woa:woa@localhost:5434/who_owns_atl"
 engine = create_engine(DB_URL)
 
 # --- Tuning knobs ---
-BASE_MAX_ADDR_ENTITIES = 10   # base graph: skip address if shared by more entities
-                               # (100 in script 04 allowed office-park mega-clusters)
 MAX_RA_ENTITIES        = 100  # skip RA if it manages this many of our entities
 MAX_OFFICER_ENTITIES   = 10   # skip officer if appears this many times among our entities
 MAX_SOS_ADDR_ENTITIES  = 20   # skip SOS address if this many entities share it
-MAX_MERGE_PARCELS      = 200  # SOS edge gate: skip if either base cluster > this many parcels
 
-# Known commercial / professional registered agent firms — always skip for RA edges.
+# SOS edge gate: skip if resulting merged cluster would be > this many parcels
+# This prevents daisy-chaining multiple 200-parcel groups into one 1000-parcel group.
+MAX_MERGE_PARCELS      = 400
+
+# Skip addresses (Pass 1 & Pass 2) if shared by many entities at the street level
+STREET_ENTITY_LIMIT    = 50
+
+# Expanded Professional Blacklist
 COMMERCIAL_RA_SKIP = {
-    "CORPORATION SERVICE COMPANY",
-    "C T CORPORATION SYSTEM",
-    "CT CORPORATION SYSTEM",
-    "COGENCY GLOBAL INC",
-    "NORTHWEST REGISTERED AGENT SERVICE INC",
-    "NORTHWEST REGISTERED AGENT LLC",
-    "REGISTERED AGENTS INC",
-    "NATIONAL REGISTERED AGENTS INC",
-    "UNITED STATES CORPORATION AGENTS INC",
-    "CORPORATE CREATIONS NETWORK INC",
-    "CSC OF COBB COUNTY INC",
-    "VCORP AGENT SERVICES INC",
-    "INCORP SERVICES INC",
-    "ANDERSON REGISTERED AGENTS INC",
-    "REPUBLIC REGISTERED AGENT LLC",
-    "ACCESS MANAGEMENT GROUP",
-    "LEGALINC CORPORATE SERVICES INC",
-    "PARACORP INC",
-    "NONE",
-    "",
+    "CORPORATION SERVICE COMPANY", "C T CORPORATION SYSTEM", "CT CORPORATION SYSTEM",
+    "COGENCY GLOBAL INC", "NORTHWEST REGISTERED AGENT SERVICE INC", "NORTHWEST REGISTERED AGENT LLC",
+    "REGISTERED AGENTS INC", "NATIONAL REGISTERED AGENTS INC", "UNITED STATES CORPORATION AGENTS INC",
+    "CORPORATE CREATIONS NETWORK INC", "CSC OF COBB COUNTY INC", "VCORP AGENT SERVICES INC",
+    "INCORP SERVICES INC", "ANDERSON REGISTERED AGENTS INC", "REPUBLIC REGISTERED AGENT LLC",
+    "ACCESS MANAGEMENT GROUP", "LEGALINC CORPORATE SERVICES INC", "PARACORP INC", "PARACORP INCORPORATED",
+    "HOMEOWNER MANAGEMENT SERVICES INC", "HOMEOWNER MANAGEMENT SERVICES INC.",
+    "COMMUNITY MANAGEMENT ASSOCIATES INC", "COMMUNITY MANAGEMENT ASSOCIATES INC.",
+    "COMMUNITY MANAGEMENT ASSOCIATES, INC.", "FIELDSTONE REALTY PARTNERS LLC", "FIELDSTONE REALTY PARTNERS, LLC",
+    "SENTRY MANAGEMENT INC", "SENTRY MANAGEMENT INC.", "HOMESIDE PROPERTIES", "HOMESIDE PROPERTIES, INC",
+    "HOMESIDE PROPERTIES, INC.", "SILVERLEAF MANAGEMENT GROUP LLC", "SILVERLEAF MANAGEMENT GROUP, LLC",
+    "GEORGIA REGISTERED AGENT LLC", "GEORGIA REGISTERED AGENT", "BUSINESS FILINGS INCORPORATED",
+    "UNIVERSAL REGISTERED AGENTS INC", "UNIVERSAL REGISTERED AGENTS, INC.",
+    "BCS CORPORATE SERVICES INC", "BCS CORPORATE SERVICES, INC.",
+    "TERRAPIN CORPORATE SERVICES LLC", "TERRAPIN CORPORATE SERVICES, LLC",
+    "HERITAGE PROPERTY MANAGEMENT SERVICES LLC", "HERITAGE PROPERTY MANAGEMENT SERVICES, LLC",
+    "ATLANTA COMMUNITY SERVICES INC", "ATLANTA COMMUNITY SERVICES, INC.",
+    "BEACON COMMUNITY MANAGEMENT SERVICES LLC", "BEACON COMMUNITY MANAGEMENT SERVICES, LLC",
+    "BEACON MANAGEMENT SERVICES", "TOLLEY COMMUNITY MANAGEMENT", "POSOLUTIONS INC", "POSOLUTIONS, INC",
+    "CANOPY SERVICES INC", "CANOPY SERVICES, INC.", "SPI AGENT SOLUTIONS INC", "SPI AGENT SOLUTIONS, INC.",
+    "PMI NORTHEAST ATLANTA", "LEE MASON", "NONE", "",
 }
 
 _STRIP_PUNCT = re.compile(r'[^A-Z0-9 ]')
 _CITY_ZIP_ONLY = re.compile(r'^[A-Z]+(\s+[A-Z]+)*\s+[A-Z]{2}\s+\d{5}(-\d+)?$')
 
+def normalize_street(addr: str) -> str:
+    """Strip Suite/Unit/Apt from address to find the base building."""
+    if not addr: return ""
+    return re.sub(r'\s+(STE|SUITE|UNIT|BLDG|OFFICE|#|APT)\s+.*$', '', addr, flags=re.IGNORECASE).strip()
 
 def ra_key(name: str, street: str = "") -> str:
-    """Create a composite key for RA grouping (Name + Street) to resolve fragmented IDs and city inconsistencies."""
-    if not name:
-        return ""
+    if not name: return ""
     name_part = _STRIP_PUNCT.sub("", name.upper()).strip()
-    # Normalize street: remove punctuation and 'UNIT/STE' suffixes for matching
     street_part = _STRIP_PUNCT.sub("", (street or "").upper()).strip()
-    street_part = re.sub(r'\b(STE|SUITE|UNIT|BLDG|OFFICE|#)\s+.*$', '', street_part).strip()
+    street_part = re.sub(r'\b(STE|SUITE|UNIT|BLDG|OFFICE|#)\s+.*$', '', street_part, flags=re.IGNORECASE).strip()
     return f"{name_part}|{street_part}"
-
-
-# ---------------------------------------------------------------------------
-# Load entities
-# ---------------------------------------------------------------------------
 
 def load_entities(engine):
     print("Loading owner_entities...")
@@ -87,413 +68,203 @@ def load_entities(engine):
                    sos_registered_agent_address
             FROM owner_entities
         """)).fetchall()
-    print(f"  {len(rows):,} entities loaded")
     return rows
 
-
-# ---------------------------------------------------------------------------
-# Pass 1: base graph with tight address cap
-# ---------------------------------------------------------------------------
-
 def build_base_graph(entities):
-    print(f"\nPass 1: base graph (address cap = {BASE_MAX_ADDR_ENTITIES})...")
+    print(f"\nPass 1: base graph (STREET-level cap = {STREET_ENTITY_LIMIT})...")
     G = nx.Graph()
-    name_idx: dict[str, list[int]] = {}
-    addr_idx: dict[str, list[int]] = {}
+    name_idx = {}
+    addr_idx = {}
+    street_counts = {}
 
     for eid, name, addr, count, *_ in entities:
         G.add_node(eid)
         name_idx.setdefault(name, []).append(eid)
         if addr:
             addr_idx.setdefault(addr, []).append(eid)
+            street = normalize_street(addr)
+            street_counts[street] = street_counts.get(street, 0) + 1
 
-    name_edges = 0
     for name, eids in name_idx.items():
         if len(eids) > 1:
             for i in range(len(eids)):
                 for j in range(i + 1, len(eids)):
                     G.add_edge(eids[i], eids[j], rel="same_name")
-                    name_edges += 1
 
-    addr_edges = 0
-    skipped_city_zip = 0
-    skipped_large = 0
     for addr, eids in addr_idx.items():
-        if _CITY_ZIP_ONLY.match(addr):
-            skipped_city_zip += 1
-            continue
-        if len(eids) > BASE_MAX_ADDR_ENTITIES:
-            skipped_large += 1
-            continue
+        if _CITY_ZIP_ONLY.match(addr): continue
+        street = normalize_street(addr)
+        if street_counts.get(street, 0) > STREET_ENTITY_LIMIT: continue
         if len(eids) > 1:
             for i in range(len(eids)):
                 for j in range(i + 1, len(eids)):
                     G.add_edge(eids[i], eids[j], rel="same_addr")
-                    addr_edges += 1
-
-    print(f"  {name_edges:,} name edges, {addr_edges:,} addr edges")
-    print(f"  Skipped: {skipped_city_zip:,} city/zip-only, {skipped_large:,} large office addresses")
-    print(f"  Graph: {G.number_of_nodes():,} nodes, {G.number_of_edges():,} edges")
     return G
 
-
 def compute_base_clusters(G, entities):
-    """Assign base cluster IDs and compute parcel counts per base cluster."""
-    print("  Computing base clusters...")
     components = list(nx.connected_components(G))
-    # entity_id → base_cluster_id
-    base_cluster_of: dict[int, int] = {}
+    base_cluster_of = {}
     for cid, component in enumerate(components):
-        for eid in component:
-            base_cluster_of[eid] = cid
-
-    # base_cluster_id → total parcel count
-    parcel_count_of: dict[int, int] = {}
+        for eid in component: base_cluster_of[eid] = cid
+    
+    parcel_count_of = {}
     eid_to_count = {eid: count for eid, _, _, count, *_ in entities}
     for eid, cid in base_cluster_of.items():
         parcel_count_of[cid] = parcel_count_of.get(cid, 0) + eid_to_count.get(eid, 0)
-
-    n_clusters = len(components)
-    large = sum(1 for v in parcel_count_of.values() if v > MAX_MERGE_PARCELS)
-    print(f"  {n_clusters:,} base clusters, {large:,} with >{MAX_MERGE_PARCELS} parcels (protected from SOS expansion)")
     return base_cluster_of, parcel_count_of
 
-
 def can_merge(eid1, eid2, base_cluster_of, parcel_count_of):
-    """True if both endpoints' base clusters are small enough to allow a SOS merge."""
-    cid1 = base_cluster_of.get(eid1, -1)
-    cid2 = base_cluster_of.get(eid2, -1)
-    if cid1 == cid2:
-        return True  # same base cluster — SOS edge just confirms existing link
-    return (parcel_count_of.get(cid1, 0) <= MAX_MERGE_PARCELS and
-            parcel_count_of.get(cid2, 0) <= MAX_MERGE_PARCELS)
+    cid1, cid2 = base_cluster_of.get(eid1, -1), base_cluster_of.get(eid2, -1)
+    if cid1 == cid2: return True
+    return (parcel_count_of.get(cid1, 0) + parcel_count_of.get(cid2, 0)) <= MAX_MERGE_PARCELS
 
-
-# ---------------------------------------------------------------------------
-# Pass 2: SOS edges (size-gated)
-# ---------------------------------------------------------------------------
-
-def add_ra_edges(G, entities, base_cluster_of, parcel_count_of):
-    print(f"\nPass 2a: shared registered-agent edges (Name + RA Street)...")
-    ra_idx: dict[str, list[int]] = {}
-    ra_names: dict[str, str] = {}
-
-    for row in entities:
-        eid = row[0]
-        ra_name = row[6]
-        match_type = row[7]
-        ra_street = row[8]
-        
-        if not ra_name or match_type not in ('exact', 'trgm_high'):
-            continue
-        
-        # Check base name (stripped) against skip list
-        name_only = _STRIP_PUNCT.sub("", ra_name.upper()).strip()
-        if name_only in COMMERCIAL_RA_SKIP:
-            continue
-            
-        # Group by Name + RA Street (ignoring City)
-        key = ra_key(ra_name, ra_street)
-        ra_idx.setdefault(key, []).append(eid)
-        ra_names[key] = ra_name or ""
-
-    added = skipped_large = skipped_gate = 0
-    for key, eids in ra_idx.items():
-        if len(eids) < 2:
-            continue
-        if len(eids) > MAX_RA_ENTITIES:
-            skipped_large += 1
-            continue
+def _get_sos_edges(args):
+    """Parallel worker to check merge constraints for SOS edges."""
+    idx_items, base_cluster_of, parcel_count_of = args
+    edges = []
+    for key, eids in idx_items:
+        if len(eids) < 2: continue
         for i in range(len(eids)):
             for j in range(i + 1, len(eids)):
-                if not can_merge(eids[i], eids[j], base_cluster_of, parcel_count_of):
-                    skipped_gate += 1
-                    continue
-                if not G.has_edge(eids[i], eids[j]):
-                    G.add_edge(eids[i], eids[j], rel="shared_ra", ra=ra_names[key])
+                if can_merge(eids[i], eids[j], base_cluster_of, parcel_count_of):
+                    edges.append((eids[i], eids[j], key))
+    return edges
+
+def add_ra_edges(G, entities, base_cluster_of, parcel_count_of):
+    print(f"\nPass 2a: shared registered-agent edges...")
+    ra_idx = {}
+    for row in entities:
+        eid, ra_name, match_type, ra_street = row[0], row[6], row[7], row[8]
+        if not ra_name or match_type not in ('exact', 'trgm_high'): continue
+        name_only = _STRIP_PUNCT.sub("", ra_name.upper()).strip()
+        if name_only in COMMERCIAL_RA_SKIP: continue
+        key = ra_key(ra_name, ra_street)
+        ra_idx.setdefault(key, []).append(eid)
+
+    valid_items = [(k, v) for k, v in ra_idx.items() if len(v) <= MAX_RA_ENTITIES]
+    added = 0
+    with Pool(cpu_count()) as pool:
+        results = pool.map(_get_sos_edges, [(valid_items[i:i + 500], base_cluster_of, parcel_count_of) for i in range(0, len(valid_items), 500)])
+        for chunk in results:
+            for u, v, label in chunk:
+                if not G.has_edge(u, v):
+                    G.add_edge(u, v, rel="shared_ra", label=label)
                     added += 1
-
-    print(f"  {added:,} edges added  |  {skipped_large:,} RAs too large  |  {skipped_gate:,} blocked by size gate")
+    print(f"  {added:,} RA edges added")
     return added
-
 
 def add_officer_edges(G, engine, entities, base_cluster_of, parcel_count_of):
     print(f"Pass 2b: shared officer edges...")
-
-    enriched = {
-        row[0]: row[4] # eid: cn
-        for row in entities
-        if row[4] and row[7] in ('exact', 'trgm_high')
-    }
-    if not enriched:
-        print("  No enriched entities — skipping")
-        return 0
-
+    enriched = {row[0]: row[4] for row in entities if row[4] and row[7] in ('exact', 'trgm_high')}
+    if not enriched: return 0
     cns = list({cn for cn in enriched.values()})
     with engine.begin() as conn:
         conn.execute(text("CREATE TEMP TABLE _enrich_cns (control_number TEXT) ON COMMIT DROP"))
-        CHUNK = 5000
-        for i in range(0, len(cns), CHUNK):
-            conn.execute(text("INSERT INTO _enrich_cns VALUES (:cn)"),
-                         [{"cn": cn} for cn in cns[i:i+CHUNK]])
+        for i in range(0, len(cns), 5000):
+            conn.execute(text("INSERT INTO _enrich_cns VALUES (:cn)"), [{"cn": cn} for cn in cns[i:i+5000]])
         rows = conn.execute(text("""
-            SELECT o.control_number,
-                   upper(trim(o.first_name)) AS fn,
-                   upper(trim(o.last_name))  AS ln
-            FROM sos.officers o
-            JOIN _enrich_cns ec ON ec.control_number = o.control_number
+            SELECT o.control_number, upper(trim(o.first_name)), upper(trim(o.last_name))
+            FROM sos.officers o JOIN _enrich_cns ec ON ec.control_number = o.control_number
             WHERE o.first_name IS NOT NULL AND trim(o.first_name) <> ''
-              AND o.last_name  IS NOT NULL AND trim(o.last_name)  <> ''
+              AND o.last_name IS NOT NULL AND trim(o.last_name) <> ''
         """)).fetchall()
 
-    print(f"  {len(rows):,} officer records for {len(cns):,} SOS entities")
-
-    officer_cns: dict[tuple, set] = {}
+    off_idx = {}
+    cn_to_eids = {}
+    for eid, cn in enriched.items(): cn_to_eids.setdefault(cn, []).append(eid)
     for cn, fn, ln in rows:
         if fn and ln and len(ln) > 1:
-            officer_cns.setdefault((fn, ln), set()).add(cn)
+            off_idx.setdefault(f"{fn} {ln}", []).extend(cn_to_eids.get(cn, []))
 
-    cn_to_eids: dict[str, list[int]] = {}
-    for eid, cn in enriched.items():
-        cn_to_eids.setdefault(cn, []).append(eid)
-
-    added = skipped_large = skipped_gate = 0
-    for (fn, ln), cns_for_officer in officer_cns.items():
-        eids_for_officer = []
-        for cn in cns_for_officer:
-            eids_for_officer.extend(cn_to_eids.get(cn, []))
-        if len(eids_for_officer) < 2:
-            continue
-        if len(eids_for_officer) > MAX_OFFICER_ENTITIES:
-            skipped_large += 1
-            continue
-        for i in range(len(eids_for_officer)):
-            for j in range(i + 1, len(eids_for_officer)):
-                if not can_merge(eids_for_officer[i], eids_for_officer[j],
-                                 base_cluster_of, parcel_count_of):
-                    skipped_gate += 1
-                    continue
-                if not G.has_edge(eids_for_officer[i], eids_for_officer[j]):
-                    G.add_edge(eids_for_officer[i], eids_for_officer[j],
-                               rel="shared_officer", officer=f"{fn} {ln}")
+    valid_items = [(k, list(set(v))) for k, v in off_idx.items() if len(set(v)) <= MAX_OFFICER_ENTITIES]
+    added = 0
+    with Pool(cpu_count()) as pool:
+        results = pool.map(_get_sos_edges, [(valid_items[i:i+500], base_cluster_of, parcel_count_of) for i in range(0, len(valid_items), 500)])
+        for chunk in results:
+            for u, v, label in chunk:
+                if not G.has_edge(u, v):
+                    G.add_edge(u, v, rel="shared_officer", label=label)
                     added += 1
-
-    print(f"  {added:,} edges added  |  {skipped_large:,} officers too large  |  {skipped_gate:,} blocked by size gate")
+    print(f"  {added:,} Officer edges added")
     return added
-
 
 def add_sos_addr_edges(G, engine, entities, base_cluster_of, parcel_count_of):
     print(f"Pass 2c: shared SOS principal address edges...")
-
-    enriched_cns = {
-        row[0]: row[4] # eid: cn
-        for row in entities
-        if row[4] and row[7] in ('exact', 'trgm_high')
-    }
-    if not enriched_cns:
-        return 0
-
-    cns = list({cn for cn in enriched_cns.values()})
+    enriched = {row[0]: row[4] for row in entities if row[4] and row[7] in ('exact', 'trgm_high')}
+    if not enriched: return 0
+    cns = list({cn for cn in enriched.values()})
     with engine.begin() as conn:
         conn.execute(text("CREATE TEMP TABLE _enrich_cns2 (control_number TEXT) ON COMMIT DROP"))
-        CHUNK = 5000
-        for i in range(0, len(cns), CHUNK):
-            conn.execute(text("INSERT INTO _enrich_cns2 VALUES (:cn)"),
-                         [{"cn": cn} for cn in cns[i:i+CHUNK]])
+        for i in range(0, len(cns), 5000):
+            conn.execute(text("INSERT INTO _enrich_cns2 VALUES (:cn)"), [{"cn": cn} for cn in cns[i:i+5000]])
         rows = conn.execute(text("""
-            SELECT a.control_number,
-                   upper(trim(a.street_address1))             AS street,
-                   upper(trim(coalesce(a.street_address2,''))) AS unit,
-                   upper(trim(a.city))                        AS city,
-                   upper(trim(a.state))                       AS state
-            FROM sos.addresses a
-            JOIN _enrich_cns2 ec ON ec.control_number = a.control_number
+            SELECT a.control_number, upper(trim(a.street_address1)), upper(trim(coalesce(a.street_address2,''))),
+                   upper(trim(a.city)), upper(trim(a.state))
+            FROM sos.addresses a JOIN _enrich_cns2 ec ON ec.control_number = a.control_number
             WHERE a.street_address1 IS NOT NULL AND trim(a.street_address1) <> ''
-              AND a.city IS NOT NULL AND trim(a.city) <> ''
         """)).fetchall()
 
-    print(f"  {len(rows):,} SOS address records")
-
-    addr_cns: dict[tuple, set] = {}
+    addr_idx = {}
+    cn_to_eids = {}
+    for eid, cn in enriched.items(): cn_to_eids.setdefault(cn, []).append(eid)
     for cn, street, unit, city, state in rows:
-        if street and city:
-            # Include unit/suite in key so different suites at the same building
-            # (e.g. a law firm or registered-agent service) are not merged.
-            addr_cns.setdefault((street, unit, city, state or ''), set()).add(cn)
+        key = f"{street} {unit} {city} {state}".strip()
+        addr_idx.setdefault(key, []).extend(cn_to_eids.get(cn, []))
 
-    cn_to_eids: dict[str, list[int]] = {}
-    for eid, cn in enriched_cns.items():
-        cn_to_eids.setdefault(cn, []).append(eid)
-
-    added = skipped_large = skipped_gate = 0
-    for (street, unit, city, state), cns_for_addr in addr_cns.items():
-        eids_for_addr = []
-        for cn in cns_for_addr:
-            eids_for_addr.extend(cn_to_eids.get(cn, []))
-        if len(eids_for_addr) < 2:
-            continue
-        if len(eids_for_addr) > MAX_SOS_ADDR_ENTITIES:
-            skipped_large += 1
-            continue
-        for i in range(len(eids_for_addr)):
-            for j in range(i + 1, len(eids_for_addr)):
-                if not can_merge(eids_for_addr[i], eids_for_addr[j],
-                                 base_cluster_of, parcel_count_of):
-                    skipped_gate += 1
-                    continue
-                if not G.has_edge(eids_for_addr[i], eids_for_addr[j]):
-                    G.add_edge(eids_for_addr[i], eids_for_addr[j],
-                               rel="shared_sos_addr",
-                               addr=f"{street} {unit}, {city}".strip())
+    valid_items = [(k, list(set(v))) for k, v in addr_idx.items() if len(set(v)) <= MAX_SOS_ADDR_ENTITIES]
+    added = 0
+    with Pool(cpu_count()) as pool:
+        results = pool.map(_get_sos_edges, [(valid_items[i:i+500], base_cluster_of, parcel_count_of) for i in range(0, len(valid_items), 500)])
+        for chunk in results:
+            for u, v, label in chunk:
+                if not G.has_edge(u, v):
+                    G.add_edge(u, v, rel="shared_sos_addr", label=label)
                     added += 1
-
-    print(f"  {added:,} edges added  |  {skipped_large:,} addresses too large  |  {skipped_gate:,} blocked by size gate")
+    print(f"  {added:,} SOS Addr edges added")
     return added
-
-
-# ---------------------------------------------------------------------------
-# Re-cluster and write back
-# ---------------------------------------------------------------------------
 
 def reassign_clusters(engine, G):
     print("\nFinding connected components...")
     components = list(nx.connected_components(G))
     components.sort(key=len, reverse=True)
-    print(f"  {len(components):,} clusters")
-
     cluster_map = {eid: cid for cid, comp in enumerate(components, 1) for eid in comp}
 
-    print("Writing cluster assignments...")
     with engine.begin() as conn:
         conn.execute(text("CREATE TEMP TABLE tmp_clusters (entity_id BIGINT, cluster_id INT)"))
         updates = [{"eid": eid, "cid": cid} for eid, cid in cluster_map.items()]
-        CHUNK = 50000
-        for i in range(0, len(updates), CHUNK):
-            conn.execute(text("INSERT INTO tmp_clusters VALUES (:eid, :cid)"),
-                         updates[i:i+CHUNK])
-        conn.execute(text("""
-            UPDATE owner_entities oe
-            SET cluster_id = tc.cluster_id
-            FROM tmp_clusters tc WHERE oe.entity_id = tc.entity_id
-        """))
-        conn.execute(text("DROP TABLE tmp_clusters"))
-
-    print("Rebuilding ownership_clusters...")
-    with engine.begin() as conn:
+        for i in range(0, len(updates), 50000):
+            conn.execute(text("INSERT INTO tmp_clusters VALUES (:eid, :cid)"), updates[i:i+50000])
+        conn.execute(text("UPDATE owner_entities oe SET cluster_id = tc.cluster_id FROM tmp_clusters tc WHERE oe.entity_id = tc.entity_id"))
         conn.execute(text("DROP TABLE IF EXISTS ownership_clusters CASCADE"))
         conn.execute(text("""
             CREATE TABLE ownership_clusters AS
             WITH name_ranks AS (
-                -- Deduplicate names per cluster, ordered by entity parcel count DESC
-                -- so the largest entity name sorts first (primary display name).
-                SELECT cluster_id, owner_name_norm,
-                       MAX(array_length(parcel_ids, 1)) AS max_pc
-                FROM owner_entities
-                GROUP BY cluster_id, owner_name_norm
+                SELECT cluster_id, owner_name_norm, MAX(array_length(parcel_ids, 1)) AS max_pc
+                FROM owner_entities GROUP BY cluster_id, owner_name_norm
             ),
             name_arrays AS (
-                SELECT cluster_id,
-                       ARRAY_AGG(owner_name_norm ORDER BY max_pc DESC, owner_name_norm)
-                           AS owner_names
-                FROM name_ranks
-                GROUP BY cluster_id
+                SELECT cluster_id, ARRAY_AGG(owner_name_norm ORDER BY max_pc DESC, owner_name_norm) AS owner_names
+                FROM name_ranks GROUP BY cluster_id
             )
-            SELECT
-                oe.cluster_id,
-                COUNT(*)                                                     AS entity_count,
-                SUM(oe.count)                                                AS parcel_count,
-                na.owner_names,
-                ARRAY_AGG(DISTINCT oe.owner_addr_norm ORDER BY oe.owner_addr_norm)
-                    FILTER (WHERE oe.owner_addr_norm != '')                  AS owner_addresses,
-                COUNT(DISTINCT oe.sos_control_number)
-                    FILTER (WHERE oe.sos_control_number IS NOT NULL)         AS sos_entity_count,
-                MODE() WITHIN GROUP (ORDER BY oe.sos_status)                AS primary_sos_status,
-                MODE() WITHIN GROUP (ORDER BY oe.sos_foreign_state)
-                    FILTER (WHERE oe.sos_foreign_state IS NOT NULL
-                              AND oe.sos_foreign_state <> '')                AS primary_foreign_state,
-                ARRAY_AGG(DISTINCT oe.sos_registered_agent ORDER BY oe.sos_registered_agent)
-                    FILTER (WHERE oe.sos_registered_agent IS NOT NULL
-                              AND oe.sos_registered_agent <> '')             AS registered_agents
-            FROM owner_entities oe
-            JOIN name_arrays na USING (cluster_id)
-            GROUP BY oe.cluster_id, na.owner_names
-            ORDER BY parcel_count DESC
+            SELECT oe.cluster_id, COUNT(*) AS entity_count, SUM(oe.count) AS parcel_count, na.owner_names,
+                   ARRAY_AGG(DISTINCT oe.owner_addr_norm ORDER BY oe.owner_addr_norm) FILTER (WHERE oe.owner_addr_norm != '') AS owner_addresses,
+                   COUNT(DISTINCT oe.sos_control_number) FILTER (WHERE oe.sos_control_number IS NOT NULL) AS sos_entity_count,
+                   MODE() WITHIN GROUP (ORDER BY oe.sos_status) AS primary_sos_status
+            FROM owner_entities oe JOIN name_arrays na USING (cluster_id)
+            GROUP BY oe.cluster_id, na.owner_names ORDER BY parcel_count DESC
         """))
-        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_oc_cluster ON ownership_clusters (cluster_id)"))
-
     return len(components)
 
-
-# ---------------------------------------------------------------------------
-# Stats
-# ---------------------------------------------------------------------------
-
-def print_stats(engine):
-    with engine.connect() as conn:
-        size_dist = conn.execute(text("""
-            SELECT
-              count(*) FILTER (WHERE parcel_count = 1)                AS single,
-              count(*) FILTER (WHERE parcel_count BETWEEN 2 AND 5)    AS tiny,
-              count(*) FILTER (WHERE parcel_count BETWEEN 6 AND 50)   AS small,
-              count(*) FILTER (WHERE parcel_count BETWEEN 51 AND 500) AS medium,
-              count(*) FILTER (WHERE parcel_count BETWEEN 501 AND 5000) AS large,
-              count(*) FILTER (WHERE parcel_count > 5000)             AS mega
-            FROM ownership_clusters
-        """)).fetchone()
-
-        top = conn.execute(text("""
-            SELECT cluster_id, parcel_count, entity_count, sos_entity_count,
-                   primary_sos_status, primary_foreign_state, owner_names[1:3]
-            FROM ownership_clusters
-            ORDER BY parcel_count DESC LIMIT 20
-        """)).fetchall()
-
-    print(f"\n--- Cluster size distribution ---")
-    print(f"  single={size_dist[0]:,}  tiny={size_dist[1]:,}  small={size_dist[2]:,}  "
-          f"medium={size_dist[3]:,}  large={size_dist[4]:,}  mega={size_dist[5]:,}")
-
-    print(f"\nTop 20 clusters:")
-    for r in top:
-        names = (r.owner_names or [])[:3]
-        state = f" [{r.primary_foreign_state}]" if r.primary_foreign_state else ""
-        status = r.primary_sos_status or ""
-        print(f"  {r.cluster_id:>6}: {r.parcel_count:>5} parcels, "
-              f"{r.entity_count} entities, {r.sos_entity_count or 0} SOS"
-              f"{state} {status} — {names}")
-
-
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
-
-def main():
-    with engine.connect() as conn:
-        n_orig = conn.execute(text("SELECT count(*) FROM ownership_clusters")).scalar()
-    print(f"Starting cluster count: {n_orig:,}")
-
-    entities = load_entities(engine)
-
-    # Pass 1: base graph with tight cap
-    base_G = build_base_graph(entities)
-    base_cluster_of, parcel_count_of = compute_base_clusters(base_G, entities)
-
-    # Pass 2: add SOS edges to the same graph (size-gated)
-    ra_added      = add_ra_edges(base_G, entities, base_cluster_of, parcel_count_of)
-    officer_added = add_officer_edges(base_G, engine, entities, base_cluster_of, parcel_count_of)
-    addr_added    = add_sos_addr_edges(base_G, engine, entities, base_cluster_of, parcel_count_of)
-
-    total_new = ra_added + officer_added + addr_added
-    print(f"\nTotal SOS edges added: {total_new:,}")
-    print(f"Final graph: {base_G.number_of_nodes():,} nodes, {base_G.number_of_edges():,} edges")
-
-    n_after = reassign_clusters(engine, base_G)
-    print(f"\n--- Cluster changes ---")
-    print(f"  Before (script 04 original): 476,537")
-    print(f"  After SOS enrichment:        {n_after:,}")
-    print(f"  Net merges:                  {476537 - n_after:,}")
-    print_stats(engine)
-    print("\nDone.")
-
-
 if __name__ == "__main__":
-    main()
+    entities = load_entities(engine)
+    G = build_base_graph(entities)
+    base_cluster_of, parcel_count_of = compute_base_clusters(G, entities)
+    add_ra_edges(G, entities, base_cluster_of, parcel_count_of)
+    add_officer_edges(G, engine, entities, base_cluster_of, parcel_count_of)
+    add_sos_addr_edges(G, engine, entities, base_cluster_of, parcel_count_of)
+    reassign_clusters(engine, G)
+    print("\nDone.")
+    print("\nNOTE: DROP TABLE ownership_clusters CASCADE was run above.")
+    print("      mv_cluster_stats and mv_leaderboard have been dropped.")
+    print("      Recreate them:")
+    print("        psql ... -f scripts/sql/04_create_materialized_views.sql")
