@@ -1,7 +1,7 @@
 # Plan: Interface Enhancements — Who Owns Atlanta?
 
 **Created:** 2026-02-22
-**Status:** In progress — sections 1 & 2 complete (commit ca4a354, 2026-02-22)
+**Status:** In progress — sections 1, 2 & 3 complete (section 3 commit pending 2026-02-22)
 
 **Also done (tracked separately):**
 - Data provenance — `datasources.json` + parcel panel source dividers + FAQ accordion → `planning/10_data_provenance.md` (commit 473484a, 2026-02-22)

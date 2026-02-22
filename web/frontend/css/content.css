@@ -166,7 +166,22 @@ td.flags-cell .badge-state {
   margin-bottom: 1.25rem;
 }
 
-.owner-header h1 { margin-bottom: 0.25rem; }
+.owner-header h1 { margin-bottom: 0.15rem; }
+
+.owner-quicknav {
+  display: flex;
+  gap: 1.1rem;
+  flex-wrap: wrap;
+  margin: 0.2rem 0 0;
+}
+
+.owner-quicknav a {
+  font-size: 0.82rem;
+  color: var(--pico-primary);
+  text-decoration: none;
+}
+
+.owner-quicknav a:hover { text-decoration: underline; }
 
 .alt-name-list {
   list-style: none;
@@ -177,6 +192,18 @@ td.flags-cell .badge-state {
 }
 
 .alt-name-list li + li { margin-top: 0.15rem; }
+
+/* AKA section — fuller list below the fold */
+.aka-list {
+  columns: 2;
+  column-gap: 2rem;
+  margin: 0 0 1.5rem 0;
+  font-size: 0.875rem;
+}
+
+.aka-list li { break-inside: avoid; margin-bottom: 0.2rem; }
+
+@media (max-width: 640px) { .aka-list { columns: 1; } }
 
 .owner-flags {
   flex: 0 0 auto;
@@ -216,6 +243,133 @@ td.flags-cell .badge-state {
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
+
+/* ── Profile section labels (County Tax Parcel, SOS, Neighborhood) ── */
+.profile-section-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--pico-muted-color);
+  margin: 1.5rem 0 0.4rem;
+}
+
+.src-ref {
+  font-weight: 400;
+  font-size: 0.78rem;
+}
+
+.src-ref a {
+  color: var(--pico-muted-color);
+  text-decoration: none;
+}
+
+.src-ref a:hover { color: var(--pico-primary); }
+
+.cap-note {
+  font-size: 0.72rem;
+  font-weight: 400;
+  color: var(--pico-muted-color);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* ── Profile definition list ─────────────────────────────────── */
+.profile-dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 1.25rem;
+  row-gap: 0.3rem;
+  font-size: 0.875rem;
+  margin: 0 0 1.25rem 0;
+}
+
+.profile-dl dt {
+  color: var(--pico-muted-color);
+  white-space: nowrap;
+}
+
+.profile-dl dd { margin: 0; }
+
+/* Mailing address list inside profile-dl */
+.address-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 0.85rem;
+}
+
+.address-list li + li { margin-top: 0.15rem; }
+
+/* ── SOS status warn ─────────────────────────────────────────── */
+.sos-status-warn {
+  color: #b45309;
+  font-weight: 600;
+}
+
+/* ── Neighborhood list ───────────────────────────────────────── */
+.neighborhood-list {
+  list-style: none;
+  margin: 0 0 1.25rem 0;
+  padding: 0;
+  font-size: 0.875rem;
+}
+
+.neighborhood-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 0.2rem 0;
+  border-bottom: 1px solid #f1f5f9;
+  gap: 1rem;
+}
+
+.neighborhood-list li:last-child { border-bottom: none; }
+
+.nbhd-name { color: var(--pico-color); }
+
+.nbhd-count {
+  color: var(--pico-muted-color);
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+/* ── RA list (registered agents) ─────────────────────────────── */
+.ra-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 0.85rem;
+}
+
+.ra-list li + li { margin-top: 0.2rem; }
+
+/* ── Parcel table cap note ───────────────────────────────────── */
+.table-cap-note {
+  font-size: 0.8rem;
+  font-weight: 400;
+  color: var(--pico-muted-color);
+}
+
+.table-cap-msg {
+  font-size: 0.85rem;
+  color: var(--pico-muted-color);
+  margin-bottom: 0.75rem;
+}
+
+/* ── Sources footnote ────────────────────────────────────────── */
+.sources-footnote {
+  font-size: 0.82rem;
+  color: var(--pico-muted-color);
+  margin-top: 1.5rem;
+}
+
+.sources-footnote a {
+  color: var(--pico-muted-color);
+  text-decoration: none;
+}
+
+.sources-footnote a:hover { color: var(--pico-primary); }
 
 /* ── SOS details ─────────────────────────────────────────────── */
 .sos-details {
