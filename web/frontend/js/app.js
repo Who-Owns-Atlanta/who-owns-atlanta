@@ -44,7 +44,6 @@ map.on('load', () => {
   });
 
   // Zoom 10-12: color by ownership type
-  // Start invisible on cluster deep link to avoid flash before dimming is applied.
   map.addLayer({
     id: 'parcels-overview',
     type: 'fill',
@@ -53,7 +52,6 @@ map.on('load', () => {
     maxzoom: 13,
     paint: {
       'fill-color': OVERVIEW_COLOR,
-      'fill-opacity': pendingClusterId ? 0 : 1,
       'fill-outline-color': 'rgba(0,0,0,0.1)',
     },
   });
@@ -67,7 +65,7 @@ map.on('load', () => {
     minzoom: 13,
     paint: {
       'fill-color': clusterColor(),
-      'fill-opacity': pendingClusterId ? 0 : detailOpacity(),
+      'fill-opacity': detailOpacity(),
       'fill-outline-color': 'rgba(0,0,0,0.15)',
     },
   });
@@ -168,13 +166,9 @@ function enterClusterMode(clusterId, parcels) {
   activeClusterId = clusterId;
   clusterParcels  = parcels || [];
 
-  // Dim non-cluster parcels so the owner's properties stand out.
-  const clusterStr = String(clusterId);
-  const isMatch    = ['==', ['to-string', ['get', 'cluster_id']], clusterStr];
-  const dimOpacity = ['case', isMatch, 0.85, 0.07];
-
-  if (map.getLayer('parcels-detail'))   map.setPaintProperty('parcels-detail',   'fill-opacity', dimOpacity);
-  if (map.getLayer('parcels-overview')) map.setPaintProperty('parcels-overview', 'fill-opacity', dimOpacity);
+  // Keep normal parcel coloring in cluster mode — pins provide the visual indicator.
+  if (map.getLayer('parcels-detail'))   map.setPaintProperty('parcels-detail',   'fill-opacity', detailOpacity());
+  if (map.getLayer('parcels-overview')) map.setPaintProperty('parcels-overview', 'fill-opacity', 1.0);
 
   // Remove any previous cluster markers.
   for (const m of clusterMarkers) m.remove();
@@ -187,7 +181,7 @@ function enterClusterMode(clusterId, parcels) {
 function placeClusterMarkers(parcels) {
   for (const p of parcels) {
     if (!p.lon || !p.lat) continue;
-    const marker = new maplibregl.Marker({ color: '#f97316', scale: 0.75 })
+    const marker = new maplibregl.Marker({ color: '#16a34a', scale: 0.75 })
       .setLngLat([p.lon, p.lat])
       .addTo(map);
     marker.getElement().style.cursor = 'pointer';
@@ -236,9 +230,6 @@ map.on('load', () => {
         map.fitBounds(bounds, { padding: 80, maxZoom: 15, duration: 0 });
       }
 
-      // Load detail panel for first parcel, then enter cluster mode.
-      // Parcel layers are currently invisible (fill-opacity:0); enterClusterMode
-      // sets them to the cluster dim expression so they appear already in context.
       const first = data.parcels[0];
       await loadParcel(first.county, first.parcel_id);
       highlightCluster(pendingClusterId, data.parcels);
