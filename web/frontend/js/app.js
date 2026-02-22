@@ -17,7 +17,7 @@ const PARCEL_TILES_URL = (DEV_HOSTNAMES.includes(window.location.hostname))
 // ---------------------------------------------------------------------------
 
 // Detect ?cluster=ID before map init so we can suppress the parcel flash.
-const pendingClusterId = parseInt(new URLSearchParams(window.location.search).get('cluster')) || null;
+let pendingClusterId = parseInt(new URLSearchParams(window.location.search).get('cluster')) || null;
 
 const map = new maplibregl.Map({
   container: 'map',
@@ -151,6 +151,7 @@ map.on('load', () => {
 
   // Hover tooltip — z13+ only (detail layer has owner/address tile properties)
   map.on('mousemove', 'parcels-detail', (e) => {
+    if (activeClusterId || pendingClusterId) return;
     const p = e.features[0].properties;
     if (!p.parcel_id) return;
     hoverPopup
@@ -278,6 +279,7 @@ function highlightCluster(clusterId, parcels) {
 function enterClusterMode(clusterId, parcels) {
   activeClusterId = clusterId;
   clusterParcels  = parcels || [];
+  hoverPopup.remove();
 
   // Keep normal parcel coloring in cluster mode — pins provide the visual indicator.
   if (map.getLayer('parcels-detail'))   map.setPaintProperty('parcels-detail',   'fill-opacity', detailOpacity());
@@ -329,7 +331,9 @@ map.on('load', () => {
   const clusterLoading = document.getElementById('cluster-loading');
   clusterLoading.hidden = false;
 
-  fetch(`/api/owner/${pendingClusterId}`)
+  const clusterToLoad = pendingClusterId;
+
+  fetch(`/api/owner/${clusterToLoad}`)
     .then(r => r.ok ? r.json() : null)
     .then(async data => {
       clusterLoading.hidden = true;
@@ -348,9 +352,13 @@ map.on('load', () => {
 
       const first = data.parcels[0];
       await loadParcel(first.county, first.parcel_id);
-      highlightCluster(pendingClusterId, data.parcels);
+      highlightCluster(clusterToLoad, data.parcels);
+      pendingClusterId = null;
     })
-    .catch(() => { clusterLoading.hidden = true; });
+    .catch(() => {
+      clusterLoading.hidden = true;
+      pendingClusterId = null;
+    });
 });
 
 // ---------------------------------------------------------------------------
