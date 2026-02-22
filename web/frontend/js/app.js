@@ -94,6 +94,9 @@ map.on('load', () => {
   map.on('mouseleave', 'parcels-overview', () => { map.getCanvas().style.cursor = ''; });
   map.on('mouseleave', 'parcels-detail',   () => { map.getCanvas().style.cursor = ''; });
 
+  updateLegend();
+  map.on('zoomend', updateLegend);
+
 });
 
 // ---------------------------------------------------------------------------
@@ -139,6 +142,42 @@ const OVERVIEW_COLOR = [
 ];
 
 // ---------------------------------------------------------------------------
+// Map legend
+// ---------------------------------------------------------------------------
+
+function swatch(color, label, shape) {
+  if (shape === 'pin') {
+    // Mimic a teardrop pin using a circle + point-down triangle
+    return `<div class="legend-item">` +
+      `<svg width="11" height="15" viewBox="0 0 11 15" style="flex-shrink:0">` +
+      `<ellipse cx="5.5" cy="5.5" rx="5" ry="5" fill="${color}"/>` +
+      `<polygon points="5.5,15 2,8 9,8" fill="${color}"/>` +
+      `</svg>${label}</div>`;
+  }
+  return `<div class="legend-item"><span class="legend-swatch" style="background:${color}"></span>${label}</div>`;
+}
+
+function updateLegend() {
+  const legend = document.getElementById('map-legend');
+  legend.hidden = false;
+  if (map.getZoom() >= 13) {
+    legend.innerHTML =
+      swatch('#dc2626', 'Corporate') +
+      swatch('#d97706', 'Institutional') +
+      swatch('#3b82f6', 'Individual portfolio') +
+      swatch('#94a3b8', 'Single owner');
+  } else {
+    legend.innerHTML =
+      swatch('rgba(220,38,38,0.8)',  'Corporate') +
+      swatch('rgba(217,119,6,0.8)',  'Institutional') +
+      swatch('rgba(148,163,184,0.6)', 'Other');
+  }
+  if (activeClusterId) {
+    legend.innerHTML += swatch('#16a34a', 'In cluster', 'pin');
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Highlight helpers
 // ---------------------------------------------------------------------------
 
@@ -169,6 +208,8 @@ function enterClusterMode(clusterId, parcels) {
   // Keep normal parcel coloring in cluster mode — pins provide the visual indicator.
   if (map.getLayer('parcels-detail'))   map.setPaintProperty('parcels-detail',   'fill-opacity', detailOpacity());
   if (map.getLayer('parcels-overview')) map.setPaintProperty('parcels-overview', 'fill-opacity', 1.0);
+
+  updateLegend();
 
   // Remove any previous cluster markers.
   for (const m of clusterMarkers) m.remove();
@@ -201,6 +242,7 @@ function exitClusterMode() {
   if (selectedMarker) { selectedMarker.remove(); selectedMarker = null; }
   if (map.getLayer('parcels-detail'))   map.setPaintProperty('parcels-detail',   'fill-opacity', detailOpacity());
   if (map.getLayer('parcels-overview')) map.setPaintProperty('parcels-overview', 'fill-opacity', 1.0);
+  updateLegend();
 }
 
 // ---------------------------------------------------------------------------
