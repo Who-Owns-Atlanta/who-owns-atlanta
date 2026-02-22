@@ -22,9 +22,11 @@ const pendingClusterId = parseInt(new URLSearchParams(window.location.search).ge
 const map = new maplibregl.Map({
   container: 'map',
   style: 'https://tiles.openfreemap.org/styles/liberty',
-  center: [-84.388, 33.749],  // Atlanta
-  zoom: 12,
+  center: [-84.388, 33.749],  // Fallback center
+  zoom: 10,                   // Initial zoom while loading
 });
+
+const ATLANTA_BOUNDS = [[-84.551, 33.637], [-84.289, 33.887]];
 
 map.addControl(new maplibregl.NavigationControl(), 'top-left');
 
@@ -32,10 +34,15 @@ let selectedMarker  = null;
 let activeClusterId = null;   // cluster currently in "focus" mode
 let clusterMarkers  = [];     // teardrop pins placed for each cluster parcel (z13+ only)
 let clusterParcels  = [];     // parcel list for the active cluster (for zoom-toggling markers)
+let activeAreaFilter = null;  // { label, geometry } when an area filter is active
 const hoverPopup    = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 12 });
 
 // Add parcel tile layer once map is ready (only if URL is configured)
 map.on('load', () => {
+  if (!pendingClusterId) {
+    map.fitBounds(ATLANTA_BOUNDS, { padding: 40, duration: 0 });
+  }
+
   if (!PARCEL_TILES_URL) return;
 
   map.addSource('parcels', {
@@ -98,6 +105,23 @@ map.on('load', () => {
       'line-width': 2,
       'line-dasharray': [4, 3],
       'line-opacity': 0.9,
+    },
+  });
+
+  // Area filter overlay — world rectangle with a hole cut out for the selected area.
+  // Empty by default; filled by setAreaFilter() via makeOutsideMask().
+  map.addSource('area-overlay', {
+    type: 'geojson',
+    data: { type: 'FeatureCollection', features: [] },
+  });
+
+  map.addLayer({
+    id: 'area-overlay',
+    type: 'fill',
+    source: 'area-overlay',
+    paint: {
+      'fill-color': '#000',
+      'fill-opacity': 0.65,
     },
   });
 
@@ -535,6 +559,159 @@ function renderParcelPanel(p) {
 
 function showPanel()  { detailPanel.hidden = false; }
 function closePanel() { detailPanel.hidden = true; highlightParcel(null); highlightCluster(null); }
+
+// ---------------------------------------------------------------------------
+// Area filter — neighborhood / NPU / council district
+// ---------------------------------------------------------------------------
+
+const filterToggle   = document.getElementById('filter-toggle');
+const filterPanel    = document.getElementById('filter-panel');
+const filterNbInput  = document.getElementById('filter-neighborhood');
+const filterNbList   = document.getElementById('filter-neighborhood-results');
+const filterNpuSel   = document.getElementById('filter-npu');
+const filterCouncil  = document.getElementById('filter-council');
+const filterActive   = document.getElementById('filter-active');
+const filterLabel    = document.getElementById('filter-active-label');
+const filterClear    = document.getElementById('filter-clear');
+
+const geoCache = {};  // keyed by 'neighborhoods' | 'npu' | 'council'
+
+async function loadGeoData() {
+  if (geoCache.neighborhoods) return;
+  const [nb, npu, council] = await Promise.all([
+    fetch('/geojson/neighborhoods.json').then(r => r.json()),
+    fetch('/geojson/npu.json').then(r => r.json()),
+    fetch('/geojson/council_districts.json').then(r => r.json()),
+  ]);
+  geoCache.neighborhoods = nb.features;
+  geoCache.npu           = npu.features;
+  geoCache.council       = council.features;
+
+  npu.features
+    .map(f => f.properties.NAME).sort()
+    .forEach(n => filterNpuSel.append(Object.assign(document.createElement('option'), { value: n, textContent: `NPU ${n}` })));
+
+  council.features
+    .map(f => f.properties.NAME).sort((a, b) => +a - +b)
+    .forEach(n => filterCouncil.append(Object.assign(document.createElement('option'), { value: n, textContent: `District ${n}` })));
+}
+
+// Build a world rectangle with the selected geometry cut out as a hole.
+// Rendering this as a fill layer dims everything outside the selection.
+function makeOutsideMask(geometry) {
+  const worldRing = [[-180,-90],[180,-90],[180,90],[-180,90],[-180,-90]];
+  const holeRings = geometry.type === 'Polygon'
+    ? geometry.coordinates
+    : geometry.coordinates.flat(); // MultiPolygon → flatten polygon rings
+  return {
+    type: 'Feature',
+    geometry: { type: 'Polygon', coordinates: [worldRing, ...holeRings] },
+  };
+}
+
+function geomBounds(geometry) {
+  const coords = geometry.type === 'Polygon'
+    ? geometry.coordinates.flat()
+    : geometry.coordinates.flat(2);
+  const lons = coords.map(c => c[0]);
+  const lats = coords.map(c => c[1]);
+  return [[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]];
+}
+
+function setAreaFilter(label, geometry) {
+  activeAreaFilter = { label, geometry };
+  if (map.getSource('area-overlay'))
+    map.getSource('area-overlay').setData({ type: 'FeatureCollection', features: [makeOutsideMask(geometry)] });
+  filterLabel.textContent = label;
+  filterActive.hidden = false;
+  filterToggle.classList.add('active');
+  filterPanel.hidden = true;
+  map.fitBounds(geomBounds(geometry), { padding: 40, maxZoom: 15 });
+}
+
+function clearAreaFilter() {
+  activeAreaFilter = null;
+  if (map.getSource('area-overlay'))
+    map.getSource('area-overlay').setData({ type: 'FeatureCollection', features: [] });
+  filterActive.hidden = true;
+  filterToggle.classList.remove('active');
+  filterNbInput.value  = '';
+  filterNpuSel.value   = '';
+  filterCouncil.value  = '';
+  filterNbList.hidden  = true;
+}
+
+// Filter toggle open/close
+filterToggle.addEventListener('click', async () => {
+  const opening = filterPanel.hidden;
+  filterPanel.hidden = !opening;
+  if (opening) await loadGeoData();
+});
+
+// Close filter panel when clicking outside
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.filter-wrapper')) filterPanel.hidden = true;
+});
+
+// Neighborhood text search
+let nbTimeout = null;
+filterNbInput.addEventListener('input', () => {
+  clearTimeout(nbTimeout);
+  const q = filterNbInput.value.trim().toLowerCase();
+  if (!q || !geoCache.neighborhoods) { filterNbList.hidden = true; return; }
+  nbTimeout = setTimeout(() => {
+    const matches = geoCache.neighborhoods
+      .filter(f => f.properties.NAME.toLowerCase().includes(q))
+      .slice(0, 10);
+    if (!matches.length) { filterNbList.hidden = true; return; }
+    filterNbList.innerHTML = matches.map(f =>
+      `<li data-name="${escHtml(f.properties.NAME)}">${escHtml(f.properties.NAME)}</li>`
+    ).join('');
+    filterNbList.hidden = false;
+  }, 150);
+});
+
+filterNbList.addEventListener('click', (e) => {
+  const li = e.target.closest('li');
+  if (!li) return;
+  const name = li.dataset.name;
+  const feat = geoCache.neighborhoods.find(f => f.properties.NAME === name);
+  if (!feat) return;
+  filterNbInput.value = name;
+  filterNbList.hidden = true;
+  filterNpuSel.value  = '';
+  filterCouncil.value = '';
+  setAreaFilter(`Neighborhood: ${name}`, feat.geometry);
+});
+
+filterNbInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') filterNbList.hidden = true;
+});
+
+// NPU select
+filterNpuSel.addEventListener('change', () => {
+  const val = filterNpuSel.value;
+  if (!val) { clearAreaFilter(); return; }
+  const feat = geoCache.npu.find(f => f.properties.NAME === val);
+  if (!feat) return;
+  filterNbInput.value  = '';
+  filterCouncil.value  = '';
+  setAreaFilter(`NPU ${val}`, feat.geometry);
+});
+
+// Council select
+filterCouncil.addEventListener('change', () => {
+  const val = filterCouncil.value;
+  if (!val) { clearAreaFilter(); return; }
+  const feat = geoCache.council.find(f => f.properties.NAME === val);
+  if (!feat) return;
+  filterNbInput.value = '';
+  filterNpuSel.value  = '';
+  setAreaFilter(`Council District ${val}`, feat.geometry);
+});
+
+// Clear button
+filterClear.addEventListener('click', clearAreaFilter);
 
 // ---------------------------------------------------------------------------
 // Utilities
