@@ -54,6 +54,16 @@ scripts/rebuild_all.sh
 
 ---
 
+## Frontend Production Deployment
+
+Before deploying the frontend to production, perform these manual verification steps:
+
+1. **Set Production Tile URL**: Update `PROD_TILES_URL` in `web/frontend/js/app.js` with the live CloudFront distribution URL (e.g. `https://tiles.who-owns-atlanta.org/tiles/{z}/{x}/{y}.pbf`).
+2. **Verify Hostname Logic**: Ensure the production domain is **not** included in the `DEV_HOSTNAMES` array in `app.js` to avoid broken tile requests.
+3. **API CORS Policy**: The FastAPI `woa_api` currentlly allows all origins (`*`). Review this for production and consider restricting to `who-owns-atlanta.org`.
+
+---
+
 ## Materialized view refresh schedule
 
 | View | Refresh trigger |
