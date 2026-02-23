@@ -1,7 +1,7 @@
 # Plan: Interface Enhancements — Who Owns Atlanta?
 
 **Created:** 2026-02-22
-**Status:** In progress — sections 1, 2 & 3 complete (section 3 commit pending 2026-02-22)
+**Status:** In progress — sections 1, 2, 3 & 4 (RA linkage) complete
 
 **Also done (tracked separately):**
 - Data provenance — `datasources.json` + parcel panel source dividers + FAQ accordion → `planning/10_data_provenance.md` (commit 473484a, 2026-02-22)
@@ -114,7 +114,7 @@ Same logic as RA. An officer who appears as principal/member/manager across 5 di
 
 A PO box or street address shared by multiple distinct owner entities is a meaningful signal. Link to clusters sharing that address.
 
-### Neighborhood / NPU → leaderboard filtered by area
+### Neighborhood / NPU / Council District → leaderboard filtered by area
 
 From the parcel panel: "See top owners in Vine City" links to a pre-generated neighborhood leaderboard page. From the owner profile: "View all parcels in [neighborhood]" links to the filtered map view or a neighborhood stats page.
 
@@ -166,6 +166,7 @@ Currently shows: rank, owner names, parcel count, acreage, corporate/institution
 | Addition | Notes |
 |---|---|
 | Connection count | Number of related clusters via shared RA/officer. Sortable. |
+| Link to /agents/ | Add "Registered Agents" link in the leaderboard page nav / header alongside the existing Leaderboard link. |
 
 
 ***Potential Future additions per row:***
