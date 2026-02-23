@@ -6,15 +6,20 @@ __pycache__/
 dist/
 build/
 
+
 # Virtual environments
 .venv/
 venv/
+.playwright-mcp/
+
+# Generated files to S3
+/web/frontend/tiles/
 
 # uv
 .python-version
 
 # Data files (too large for git)
-data/
+/data/
 
 # Symlinks to external repos
 tmp_nbh_accela

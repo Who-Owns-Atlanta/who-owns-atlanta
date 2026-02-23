@@ -89,8 +89,7 @@ _BASE_HEAD = """\
   <header>
     <a href="/" class="site-name">Who Owns Atlanta?</a>
     <nav class="header-nav">
-      <a href="/l/">Leaderboard</a>
-      <a href="/l/agents/">Registered Agents</a>
+      <a href="/l/">Leaderboards</a>
     </nav>
   </header>
   <main class="content-main">
@@ -100,8 +99,7 @@ _BASE_FOOT = """\
   </main>
   <footer>
     <nav>
-      <a href="/l/">Leaderboard</a>
-      <a href="/l/agents/">Registered Agents</a>
+      <a href="/l/">Leaderboards</a>
       <a href="/about/">About</a>
       <a href="/methodology/">Methodology</a>
       <a href="/faq/">FAQ</a>
@@ -112,7 +110,27 @@ _BASE_FOOT = """\
 """
 
 LEADERBOARD_TMPL = _BASE_HEAD + """\
-    <h1>Top Landlords in Atlanta</h1>
+    <h1>Leaderboards</h1>
+    <nav class="leaderboard-subnav">
+      <div class="subnav-group">
+        <span class="subnav-label">Overall</span>
+        <span class="subnav-current">Global</span>
+        <a href="/l/agents/">Registered Agents</a>
+      </div>
+      <div class="subnav-group">
+        <span class="subnav-label">County</span>
+        <a href="/l/fulton/">Fulton</a>
+        <a href="/l/dekalb/">DeKalb</a>
+      </div>
+      <div class="subnav-group">
+        <span class="subnav-label">Atlanta</span>
+        <a href="/l/atlanta/council/">Council Districts</a>
+        <a href="/l/atlanta/npu/">NPUs</a>
+        <a href="/l/atlanta/neighborhood/">Neighborhoods</a>
+      </div>
+    </nav>
+
+    <h2>Global — Top Landlords in Atlanta</h2>
     <p class="lead">Ranked by parcel count across Fulton and DeKalb counties.
       <span class="muted">{{ total }} owners shown.</span></p>
 
@@ -340,6 +358,7 @@ OWNER_TMPL = _BASE_HEAD + """\
 """ + _BASE_FOOT
 
 AGENTS_INDEX_TMPL = _BASE_HEAD + """\
+    <p class="breadcrumb"><a href="/l/">← Leaderboards</a></p>
     <h1>Registered Agents</h1>
     <p class="lead">Individual registered agents appearing across multiple owner clusters.
       <span class="muted">{{ total }} agents shown.</span></p>
@@ -369,6 +388,7 @@ AGENTS_INDEX_TMPL = _BASE_HEAD + """\
 """ + _BASE_FOOT
 
 AGENT_TMPL = _BASE_HEAD + """\
+    <p class="breadcrumb"><a href="/l/">← Leaderboards</a> / <a href="/l/agents/">Registered Agents</a></p>
     <div class="owner-header">
       <div class="owner-names">
         <h1>{{ agent_name | e }}</h1>
@@ -401,7 +421,7 @@ AGENT_TMPL = _BASE_HEAD + """\
 """ + _BASE_FOOT
 
 GEO_INDEX_TMPL = _BASE_HEAD + """\
-    <p class="breadcrumb"><a href="/l/">← Leaderboard</a></p>
+    <p class="breadcrumb"><a href="/l/">← Leaderboards</a></p>
     <h1>{{ index_title }}</h1>
     <p class="lead">{{ index_lead }}
       <span class="muted">{{ total }} areas.</span></p>
@@ -1046,7 +1066,7 @@ def _build_geo_section(env, area_rows, output_dir, url_base, geo_type_label, are
             "top_owner": rows[0]["primary_name"] if rows else "",
         })
 
-    index_rows.sort(key=lambda r: -r["total_parcels"])
+    index_rows.sort(key=lambda r: r["area"])
     index_html = idx_tmpl.render(
         page_title=index_title,
         meta_description=index_lead,
@@ -1124,7 +1144,7 @@ def build_geo_leaderboard_pages(conn, output_dir):
             area_name=f"{county.title()} County",
             geo_type_label="county",
             index_url="/l/",
-            index_label="Leaderboard",
+            index_label="Leaderboards",
             rows=rows[:100],
             total=min(len(rows), 100),
             area_total_parcels=county_total,
@@ -1241,11 +1261,11 @@ def main():
         if not args.owner_only:
             build_leaderboard(conn, output_dir, cluster_connection_count)
             build_geo_leaderboard_pages(conn, output_dir)
-        if not args.leaderboard_only:
-            # Build agent pages
+            # Agent pages are fast; always build unless owner-only
             print("Building agent pages...", end=" ", flush=True)
             n_agents = build_agent_pages(linkable_agents, agent_clusters, output_dir)
             print(f"done ({n_agents} pages)")
+        if not args.leaderboard_only:
 
             build_owner_pages(conn, output_dir, args.min_parcels, args.workers,
                               cluster_ids_override=cluster_ids_override,

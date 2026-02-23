@@ -64,6 +64,56 @@ body.content-page main {
 
 .lead .muted { color: #94a3b8; }
 
+/* ── Breadcrumb ──────────────────────────────────────────────── */
+.breadcrumb {
+  font-size: 0.85rem;
+  color: var(--pico-muted-color);
+  margin-bottom: 1rem;
+}
+
+/* ── Leaderboard subnav (hub page) ───────────────────────────── */
+.leaderboard-subnav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.5rem;
+  align-items: baseline;
+  margin: 0.25rem 0 2rem;
+  padding: 0.75rem 1rem;
+  background: var(--pico-card-background-color, #f8fafc);
+  border: 1px solid var(--pico-muted-border-color, #e2e8f0);
+  border-radius: 6px;
+  font-size: 0.9rem;
+}
+
+.subnav-group {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.subnav-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--pico-muted-color);
+  white-space: nowrap;
+}
+
+.subnav-current {
+  font-weight: 600;
+  color: var(--pico-color);
+}
+
+.leaderboard-subnav a {
+  color: var(--pico-primary);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.leaderboard-subnav a:hover { text-decoration: underline; }
+
 /* ── Tables ─────────────────────────────────────────────────── */
 .table-scroll {
   overflow-x: auto;
