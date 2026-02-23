@@ -358,9 +358,17 @@ td.flags-cell .badge-state {
 }
 
 /* ── Neighborhood list ───────────────────────────────────────── */
+.neighborhood-scroll {
+  max-height: 16.5rem; /* ~10 rows */
+  overflow-y: auto;
+  margin-bottom: 1.25rem;
+  border: 1px solid #f1f5f9;
+  border-radius: 4px;
+}
+
 .neighborhood-list {
   list-style: none;
-  margin: 0 0 1.25rem 0;
+  margin: 0;
   padding: 0;
   font-size: 0.875rem;
 }
@@ -369,20 +377,32 @@ td.flags-cell .badge-state {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  padding: 0.2rem 0;
+  padding: 0.2rem 0.5rem;
   border-bottom: 1px solid #f1f5f9;
-  gap: 1rem;
+  gap: 0.75rem;
 }
 
 .neighborhood-list li:last-child { border-bottom: none; }
 
-.nbhd-name { color: var(--pico-color); }
+.nbhd-name {
+  color: var(--pico-color);
+  flex: 1;
+}
 
 .nbhd-count {
   color: var(--pico-muted-color);
   font-size: 0.82rem;
   white-space: nowrap;
 }
+
+.nbhd-map-link {
+  font-size: 0.78rem;
+  color: var(--pico-muted-color);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.nbhd-map-link:hover { color: var(--pico-primary); }
 
 /* ── RA list (registered agents) ─────────────────────────────── */
 .ra-list {

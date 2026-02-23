@@ -280,15 +280,18 @@ OWNER_TMPL = _BASE_HEAD + """\
 
     {# ── Neighborhood breakdown ── #}
     {% if neighborhoods %}
-    <p class="profile-section-label">NEIGHBORHOOD BREAKDOWN <span class="src-ref"><a href="/faq/#data-sources">*</a></span> <span class="cap-note">(top 5)</span></p>
+    <p class="profile-section-label">NEIGHBORHOOD BREAKDOWN <span class="src-ref"><a href="/faq/#data-sources">*</a></span></p>
+    <div class="neighborhood-scroll">
     <ul class="neighborhood-list">
       {% for nbhd in neighborhoods %}
       <li>
         <span class="nbhd-name">{{ nbhd.name | e }}</span>
         <span class="nbhd-count">{{ nbhd.count }} parcel{{ 's' if nbhd.count != 1 else '' }}</span>
+        <a href="/?cluster={{ cluster_id }}&geo=neighborhood&area={{ nbhd.name_enc }}" class="nbhd-map-link" title="View on map">map →</a>
       </li>
       {% endfor %}
     </ul>
+    </div>
     {% endif %}
 
     {# ── Related owners ── #}
@@ -737,10 +740,9 @@ def fetch_neighborhood_concentration_batch(conn, cluster_ids):
         by_cluster = defaultdict(list)
         for row in cur.fetchall():
             cid, nbhd, count = row
-            by_cluster[cid].append({"name": nbhd, "count": int(count)})
+            by_cluster[cid].append({"name": nbhd, "name_enc": quote_plus(nbhd), "count": int(count)})
 
-    # Take top 5 per cluster
-    return {cid: rows[:5] for cid, rows in by_cluster.items()}
+    return dict(by_cluster)
 
 def fetch_linkable_agent_ids(conn):
     """Returns {ra_id: {name, cluster_count}} for individual (non-commercial) RAs in ≥2 clusters."""
