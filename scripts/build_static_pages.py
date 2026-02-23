@@ -10,6 +10,7 @@ Usage:
 
 import argparse
 import os
+import re
 import sys
 import time
 import multiprocessing
@@ -88,8 +89,8 @@ _BASE_HEAD = """\
   <header>
     <a href="/" class="site-name">Who Owns Atlanta?</a>
     <nav class="header-nav">
-      <a href="/leaderboard/">Leaderboard</a>
-      <a href="/agents/">Registered Agents</a>
+      <a href="/l/">Leaderboard</a>
+      <a href="/l/agents/">Registered Agents</a>
     </nav>
   </header>
   <main class="content-main">
@@ -99,7 +100,8 @@ _BASE_FOOT = """\
   </main>
   <footer>
     <nav>
-      <a href="/leaderboard/">Leaderboard</a>
+      <a href="/l/">Leaderboard</a>
+      <a href="/l/agents/">Registered Agents</a>
       <a href="/about/">About</a>
       <a href="/methodology/">Methodology</a>
       <a href="/faq/">FAQ</a>
@@ -398,9 +400,86 @@ AGENT_TMPL = _BASE_HEAD + """\
     <p class="sources-footnote"><a href="/faq/#data-sources">ⓘ Data sources</a></p>
 """ + _BASE_FOOT
 
+GEO_INDEX_TMPL = _BASE_HEAD + """\
+    <p class="breadcrumb"><a href="/l/">← Leaderboard</a></p>
+    <h1>{{ index_title }}</h1>
+    <p class="lead">{{ index_lead }}
+      <span class="muted">{{ total }} areas.</span></p>
+
+    <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>{{ area_label }}</th>
+          <th class="num">Parcels</th>
+          <th>Top owner</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td><a href="{{ r.url }}">{{ r.area | e }}</a></td>
+          <td class="num">{{ r.total_parcels }}</td>
+          <td class="muted">{{ r.top_owner | e }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+
+    <p class="sources-footnote"><a href="/faq/#data-sources">ⓘ Data sources</a></p>
+""" + _BASE_FOOT
+
+GEO_LEADERBOARD_TMPL = _BASE_HEAD + """\
+    <p class="breadcrumb"><a href="{{ index_url }}">← {{ index_label }}</a></p>
+    <h1>{{ area_name | e }}</h1>
+    <p class="lead">Top property owners within this {{ geo_type_label }}.
+      <span class="muted">{{ total }} owners shown, {{ area_total_parcels }} total parcels.</span></p>
+
+    <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Owner</th>
+          <th class="num">In area</th>
+          <th class="num">Total</th>
+          <th>Flags</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td class="rank">{{ loop.index }}</td>
+          <td class="owner-cell">
+            <a href="/owner/{{ r.cluster_id }}/">{{ r.primary_name | e }}</a>
+          </td>
+          <td class="num">{{ r.local_parcel_count }}</td>
+          <td class="num muted">{{ r.total_parcel_count }}</td>
+          <td class="flags-cell">
+            {% if r.is_corporate %}<span class="badge-corporate">CORPORATE</span>{% endif %}
+            {% if r.is_institutional %}<span class="badge-institutional">INSTITUTIONAL</span>{% endif %}
+            {% if r.foreign_state and r.foreign_state != 'Georgia' %}
+            <span class="badge-state">{{ r.foreign_state | e }}</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+
+    <p class="sources-footnote"><a href="/faq/#data-sources">ⓘ Data sources</a></p>
+""" + _BASE_FOOT
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+def slugify(name):
+    """'Old Fourth Ward' → 'old-fourth-ward', 'NPU A' → 'npu-a'"""
+    s = re.sub(r'[^a-z0-9]+', '-', name.lower())
+    return s.strip('-')
 
 def fmt_acres(val):
     if val is None:
@@ -719,6 +798,82 @@ def fetch_address_linkage(conn):
         return result
 
 
+def fetch_geo_data(conn, col_name):
+    """Fetch (area, cluster_id, primary_name, flags, local_parcel_count) for one
+    Atlanta geographic field ('city_neighborhood', 'city_council', 'city_npu').
+    Returns {area: [rows sorted by local_parcel_count desc]}.
+    """
+    with conn.cursor() as cur:
+        cur.execute(f"""
+            WITH area_map AS (
+                SELECT parcelid, {col_name} AS area FROM fulton_parcels WHERE {col_name} IS NOT NULL
+                UNION ALL
+                SELECT parcelid, {col_name} FROM dekalb_parcels WHERE {col_name} IS NOT NULL
+            )
+            SELECT am.area,
+                   oe.cluster_id,
+                   oc.owner_names[1] AS primary_name,
+                   ml.corporate_parcel_count > 0 AS is_corporate,
+                   ml.institutional_parcel_count > 0 AS is_institutional,
+                   ml.primary_foreign_state,
+                   ml.parcel_count AS total_parcel_count,
+                   COUNT(*) AS local_parcel_count
+            FROM owner_entities oe
+            CROSS JOIN LATERAL unnest(oe.parcel_ids) AS u(pid)
+            JOIN area_map am ON am.parcelid = u.pid
+            JOIN ownership_clusters oc ON oc.cluster_id = oe.cluster_id
+            JOIN mv_leaderboard ml ON ml.cluster_id = oe.cluster_id
+            GROUP BY 1, 2, 3, 4, 5, 6, 7
+            ORDER BY area, local_parcel_count DESC
+        """)
+        by_area = defaultdict(list)
+        for row in cur.fetchall():
+            area, cid, name, is_corp, is_inst, fstate, total_count, local_count = row
+            by_area[area].append({
+                "cluster_id": cid,
+                "primary_name": name or f"Cluster {cid}",
+                "is_corporate": bool(is_corp),
+                "is_institutional": bool(is_inst),
+                "foreign_state": fstate,
+                "total_parcel_count": int(total_count),
+                "local_parcel_count": int(local_count),
+            })
+        return dict(by_area)
+
+
+def fetch_county_geo_data(conn):
+    """Top owners by parcel count per county. Returns {county: [rows]}."""
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT oe.county,
+                   oe.cluster_id,
+                   oc.owner_names[1] AS primary_name,
+                   ml.corporate_parcel_count > 0 AS is_corporate,
+                   ml.institutional_parcel_count > 0 AS is_institutional,
+                   ml.primary_foreign_state,
+                   ml.parcel_count AS total_parcel_count,
+                   SUM(oe.count) AS local_parcel_count
+            FROM owner_entities oe
+            JOIN ownership_clusters oc ON oc.cluster_id = oe.cluster_id
+            JOIN mv_leaderboard ml ON ml.cluster_id = oe.cluster_id
+            GROUP BY 1, 2, 3, 4, 5, 6, 7
+            ORDER BY county, local_parcel_count DESC
+        """)
+        by_county = defaultdict(list)
+        for row in cur.fetchall():
+            county, cid, name, is_corp, is_inst, fstate, total_count, local_count = row
+            by_county[county].append({
+                "cluster_id": cid,
+                "primary_name": name or f"Cluster {cid}",
+                "is_corporate": bool(is_corp),
+                "is_institutional": bool(is_inst),
+                "foreign_state": fstate,
+                "total_parcel_count": int(total_count),
+                "local_parcel_count": int(local_count),
+            })
+        return dict(by_county)
+
+
 def build_cluster_related(linkable_agents, agent_clusters, address_groups=None):
     """Compute related-cluster lists from RA co-membership and shared mailing addresses.
 
@@ -798,10 +953,12 @@ def build_leaderboard(conn, output_dir, cluster_connection_count=None):
             "connection_count": counts.get(r["cluster_id"], 0),
         })
 
-    out_path = output_dir / "leaderboard" / "index.html"
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(render_leaderboard(rows))
-    print(f"done ({len(rows)} rows → {out_path})")
+    html = render_leaderboard(rows)
+    for dest in [output_dir / "l" / "index.html",
+                 output_dir / "leaderboard" / "index.html"]:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(html)
+    print(f"done ({len(rows)} rows)")
 
 def build_agent_pages(linkable_agents, agent_clusters, output_dir):
     """Generate /agent/{ra_id}/index.html for each linkable registered agent,
@@ -841,11 +998,141 @@ def build_agent_pages(linkable_agents, agent_clusters, output_dir):
         rows=index_rows,
         total=len(index_rows),
     )
-    index_path = output_dir / "agents" / "index.html"
-    index_path.parent.mkdir(parents=True, exist_ok=True)
-    index_path.write_text(index_html)
+    for dest in [output_dir / "l" / "agents" / "index.html",
+                 output_dir / "agents" / "index.html"]:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(index_html)
 
     return written
+
+
+def _build_geo_section(env, area_rows, output_dir, url_base, geo_type_label, area_label,
+                       index_title, index_lead, area_display_fn=None):
+    """Build individual area pages + index page for one geo dimension.
+    area_display_fn: optional callable(raw_area) -> display string (e.g. 'District 5')
+    Returns number of area pages written.
+    """
+    geo_tmpl = env.from_string(GEO_LEADERBOARD_TMPL)
+    idx_tmpl = env.from_string(GEO_INDEX_TMPL)
+    index_url = f"/{url_base}/"
+    written = 0
+    index_rows = []
+
+    for area, rows in area_rows.items():
+        slug = slugify(str(area))
+        display = area_display_fn(area) if area_display_fn else str(area)
+        area_total = sum(r["local_parcel_count"] for r in rows)
+        top50 = rows[:50]
+
+        html = geo_tmpl.render(
+            page_title=f"{display} — Top Property Owners",
+            meta_description=f"Top property owners in {display}, ranked by local parcel count.",
+            area_name=display,
+            geo_type_label=geo_type_label,
+            index_url=index_url,
+            index_label=index_title,
+            rows=top50,
+            total=len(top50),
+            area_total_parcels=area_total,
+        )
+        out_path = output_dir / slug / "index.html"
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(html)
+        written += 1
+        index_rows.append({
+            "area": display,
+            "url": f"/{url_base}/{slug}/",
+            "total_parcels": area_total,
+            "top_owner": rows[0]["primary_name"] if rows else "",
+        })
+
+    index_rows.sort(key=lambda r: -r["total_parcels"])
+    index_html = idx_tmpl.render(
+        page_title=index_title,
+        meta_description=index_lead,
+        index_title=index_title,
+        index_lead=index_lead,
+        area_label=area_label,
+        rows=index_rows,
+        total=len(index_rows),
+    )
+    idx_path = output_dir / "index.html"
+    idx_path.parent.mkdir(parents=True, exist_ok=True)
+    idx_path.write_text(index_html)
+
+    return written
+
+
+def build_geo_leaderboard_pages(conn, output_dir):
+    """Generate all geo leaderboard pages under /l/."""
+    env = Environment(loader=BaseLoader())
+    base = output_dir / "l"
+
+    print("Building geo leaderboards...")
+
+    # Atlanta neighborhoods
+    print("  neighborhood...", end=" ", flush=True)
+    nbhd_data = fetch_geo_data(conn, "city_neighborhood")
+    n = _build_geo_section(
+        env, nbhd_data, base / "atlanta" / "neighborhood",
+        url_base="l/atlanta/neighborhood",
+        geo_type_label="Atlanta neighborhood",
+        area_label="Neighborhood",
+        index_title="Atlanta Neighborhoods",
+        index_lead="Top property owners by Atlanta neighborhood.",
+    )
+    print(f"{n} pages")
+
+    # Atlanta council districts
+    print("  council...", end=" ", flush=True)
+    council_data = fetch_geo_data(conn, "city_council")
+    n = _build_geo_section(
+        env, council_data, base / "atlanta" / "council",
+        url_base="l/atlanta/council",
+        geo_type_label="Atlanta council district",
+        area_label="District",
+        index_title="Atlanta City Council Districts",
+        index_lead="Top property owners by Atlanta City Council district.",
+        area_display_fn=lambda v: f"District {v}",
+    )
+    print(f"{n} pages")
+
+    # Atlanta NPUs
+    print("  npu...", end=" ", flush=True)
+    npu_data = fetch_geo_data(conn, "city_npu")
+    n = _build_geo_section(
+        env, npu_data, base / "atlanta" / "npu",
+        url_base="l/atlanta/npu",
+        geo_type_label="Atlanta NPU",
+        area_label="NPU",
+        index_title="Atlanta NPUs",
+        index_lead="Top property owners by Atlanta Neighborhood Planning Unit (NPU).",
+        area_display_fn=lambda v: f"NPU {v}",
+    )
+    print(f"{n} pages")
+
+    # County leaderboards
+    print("  county...", end=" ", flush=True)
+    county_data = fetch_county_geo_data(conn)
+    env2 = Environment(loader=BaseLoader())
+    geo_tmpl = env2.from_string(GEO_LEADERBOARD_TMPL)
+    for county, rows in county_data.items():
+        county_total = sum(r["local_parcel_count"] for r in rows)
+        html = geo_tmpl.render(
+            page_title=f"{county.title()} County — Top Property Owners",
+            meta_description=f"Top property owners in {county.title()} County by parcel count.",
+            area_name=f"{county.title()} County",
+            geo_type_label="county",
+            index_url="/l/",
+            index_label="Leaderboard",
+            rows=rows[:100],
+            total=min(len(rows), 100),
+            area_total_parcels=county_total,
+        )
+        out_path = base / county / "index.html"
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(html)
+    print(f"{len(county_data)} pages")
 
 
 def worker(args):
@@ -953,6 +1240,7 @@ def main():
 
         if not args.owner_only:
             build_leaderboard(conn, output_dir, cluster_connection_count)
+            build_geo_leaderboard_pages(conn, output_dir)
         if not args.leaderboard_only:
             # Build agent pages
             print("Building agent pages...", end=" ", flush=True)

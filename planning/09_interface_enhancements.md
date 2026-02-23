@@ -1,7 +1,7 @@
 # Plan: Interface Enhancements — Who Owns Atlanta?
 
 **Created:** 2026-02-22
-**Status:** In progress — sections 1–6 complete (officers deferred: ga_business_officer table empty)
+**Status:** In progress — sections 1–6 complete + geo leaderboard hierarchy complete (officers deferred: ga_business_officer table empty)
 
 **Also done (tracked separately):**
 - Data provenance — `datasources.json` + parcel panel source dividers + FAQ accordion → `planning/10_data_provenance.md` (commit 473484a, 2026-02-22)
@@ -158,15 +158,31 @@ A simple list, not a diagram. Computed at static page build time.
 
 ---
 
-## 6. Leaderboard additions
+## 6. Leaderboard additions ✅ DONE
 
 Currently shows: rank, owner names, parcel count, acreage, corporate/institutional flags.
 
 ***Additions per row:***
-| Addition | Notes |
-|---|---|
-| Connection count | Number of related clusters via shared RA/officer. Sortable. |
-| Link to /agents/ | Add "Registered Agents" link in the leaderboard page nav / header alongside the existing Leaderboard link. |
+| Addition | Notes | Status |
+|---|---|---|
+| Connection count | Number of related clusters via shared RA/officer. Sortable. | ✅ Done |
+| Link to /agents/ | Add "Registered Agents" link in the leaderboard page nav / header alongside the existing Leaderboard link. | ✅ Done |
+
+## 6b. Geographic leaderboard hierarchy ✅ DONE
+
+URL structure under `/l/`:
+- `/l/` — global leaderboard (also backward-compat `/leaderboard/`)
+- `/l/agents/` — registered agents index (also backward-compat `/agents/`)
+- `/l/atlanta/neighborhood/{slug}/` — 245 pages, one per city neighborhood
+- `/l/atlanta/council/{n}/` — 12 pages, one per council district
+- `/l/atlanta/npu/{letter}/` — 25 pages, one per NPU
+- `/l/fulton/` — Fulton County parcel owners
+- `/l/dekalb/` — DeKalb County parcel owners
+
+Each area page shows: rank, owner name, parcels in area, total parcels, corporate/institutional flags.
+`city_neighborhood`, `city_council`, `city_npu` are City of Atlanta fields present on both `fulton_parcels` and `dekalb_parcels` tables — DeKalb entries are Atlanta parcels straddling the county line. No county-specific neighborhood pages needed.
+
+Fast query pattern: `CROSS JOIN LATERAL unnest(oe.parcel_ids)` from `owner_entities` side + JOIN to area_map CTE (1.7s vs 2m22s for reverse direction).
 
 
 ***Potential Future additions per row:***
@@ -187,8 +203,8 @@ All of these are computable at static build time from existing data.
 - ~~DeKalb `totapr1` is not currently returned by the parcel API~~ ✅ Done
 - ~~qPublic URL formats need to be verified~~ ✅ Confirmed — bot protection blocks curl but URLs work in browser
 - ~~GA SOS `sos_business_id` availability~~ ✅ Done — field is on `owner_entities`, fetched in cluster sub-query, shown when non-null
-- RA/officer relationship data is in `owner_entities.sos_registered_agent_id` and `ga_business_officer` — needs a build-time query to compute related-cluster lists (sections 4–5)
-- The commercial-RA threshold (suggested ≤ 25 clusters) needs to be validated against actual data distribution before implementing
+- ~~RA/officer relationship data needs a build-time query~~ ✅ Done — `fetch_linkable_agent_ids()` + `fetch_agent_clusters()` + commercial RA blocklist implemented; 24 individual agents linked
+- ~~The commercial-RA threshold needs validation~~ ✅ Done — blocklist approach used (ILIKE patterns); `fetch_address_linkage()` adds shared mailing address connections (269 address groups, 2–10 clusters each)
 - `GA_PROPERTY_CLASS` hardcoded in `app.js` — same State of Georgia codes used in both counties. DeKalb `classdscrp` column name is misleading; it stores codes not descriptions.
 
 ---
