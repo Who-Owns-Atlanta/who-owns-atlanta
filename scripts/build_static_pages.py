@@ -117,7 +117,7 @@ OWNER_TMPL = _BASE_HEAD + """\
       <div class="owner-names">
         <h1>{{ primary_name | e }}</h1>
         <nav class="owner-quicknav">
-          {% if alt_names %}<a href="#aka">other names →</a>{% endif %}
+          {% if alt_names %}<a href="#aka">names on record →</a>{% endif %}
           <a href="#parcels">parcels →</a>
           <a href="/?cluster={{ cluster_id }}">view on map →</a>
         </nav>
@@ -223,7 +223,7 @@ OWNER_TMPL = _BASE_HEAD + """\
     {% endif %}
 
     {% if alt_names %}
-    <h2 id="aka">Also known as</h2>
+    <h2 id="aka">Names on record</h2>
     <ul class="alt-name-list aka-list">
       {% for name in alt_names %}<li>{{ name | e }}</li>{% endfor %}
     </ul>
