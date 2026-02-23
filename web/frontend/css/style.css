@@ -20,12 +20,23 @@ html, body {
 body {
   display: flex;
   flex-direction: column;
-  height: 100dvh;
+  height: 100vh;
+  height: 100dvh; /* dvh preferred; 100vh fallback above for older Firefox */
   background: var(--pico-background-color);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Pico classless constrains body > header/main/footer with responsive max-widths.
+   Override so the map and layout fill the full viewport width. */
+body > header,
+body > main,
+body > footer {
+  max-width: none;
 }
 
 /* ── Header ─────────────────────────────────────────────────── */
-header {
+body > header {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
@@ -458,7 +469,7 @@ dl dd { margin: 0; color: var(--pico-color); }
 }
 
 /* ── Footer nav ─────────────────────────────────────────────── */
-footer {
+body > footer {
   flex: 0 0 auto;
   background: #fff;
   border-top: 1px solid #e2e8f0;
