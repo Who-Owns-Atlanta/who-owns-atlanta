@@ -273,7 +273,7 @@ OWNER_TMPL = _BASE_HEAD + """\
     {# ── Related owners ── #}
     {% if related_owners %}
     <h2 id="related">Related owners</h2>
-    <p class="related-subhead">Connected via shared registered agent.</p>
+    <p class="related-subhead">Connected via shared registered agent or mailing address.</p>
     <div class="table-scroll">
     <table class="related-table">
       <thead>
@@ -690,33 +690,70 @@ def fetch_agent_clusters(conn, ra_ids):
         return result
 
 
-def build_cluster_related(linkable_agents, agent_clusters):
-    """Compute related-cluster lists from RA co-membership. No DB needed.
+def fetch_address_linkage(conn):
+    """Returns {addr: [{cluster_id, primary_name, parcel_count}, ...]} for addresses
+    shared by 2–10 clusters (real street addresses only — must start with a digit)."""
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT addr, oc.cluster_id, oc.owner_names[1] AS primary_name, oc.parcel_count
+            FROM ownership_clusters oc, unnest(oc.owner_addresses) AS addr
+            WHERE oc.owner_addresses IS NOT NULL
+              AND addr ~ '^[0-9]'
+              AND addr IN (
+                SELECT addr
+                FROM ownership_clusters, unnest(owner_addresses) AS addr
+                WHERE owner_addresses IS NOT NULL AND addr ~ '^[0-9]'
+                GROUP BY addr
+                HAVING COUNT(DISTINCT cluster_id) BETWEEN 2 AND 10
+              )
+            ORDER BY addr, oc.parcel_count DESC
+        """)
+        result = defaultdict(list)
+        for row in cur.fetchall():
+            addr, cluster_id, primary_name, parcel_count = row
+            result[addr].append({
+                "cluster_id": cluster_id,
+                "primary_name": primary_name or f"Cluster {cluster_id}",
+                "parcel_count": int(parcel_count),
+            })
+        return result
+
+
+def build_cluster_related(linkable_agents, agent_clusters, address_groups=None):
+    """Compute related-cluster lists from RA co-membership and shared mailing addresses.
 
     Returns:
         cluster_related: {cluster_id: [{cluster_id, primary_name, parcel_count, via}, ...]}
             sorted by parcel_count desc, capped at 15.
         cluster_connection_count: {cluster_id: N} (pre-cap total, for leaderboard badge)
     """
-    # staging[cid][ocid] = {primary_name, parcel_count, via_agents: set}
+    # staging[cid][ocid] = {primary_name, parcel_count, via_reasons: set of strings}
     staging = defaultdict(dict)
+
+    def _link(cid, other_c, reason):
+        ocid = other_c["cluster_id"]
+        if ocid not in staging[cid]:
+            staging[cid][ocid] = {
+                "cluster_id": ocid,
+                "primary_name": other_c["primary_name"],
+                "parcel_count": other_c["parcel_count"],
+                "via_reasons": set(),
+            }
+        staging[cid][ocid]["via_reasons"].add(reason)
 
     for ra_id, clusters in agent_clusters.items():
         agent_name = linkable_agents[ra_id]["name"]
         for this_c in clusters:
-            cid = this_c["cluster_id"]
             for other_c in clusters:
-                ocid = other_c["cluster_id"]
-                if cid == ocid:
-                    continue
-                if ocid not in staging[cid]:
-                    staging[cid][ocid] = {
-                        "cluster_id": ocid,
-                        "primary_name": other_c["primary_name"],
-                        "parcel_count": other_c["parcel_count"],
-                        "via_agents": set(),
-                    }
-                staging[cid][ocid]["via_agents"].add(agent_name)
+                if this_c["cluster_id"] != other_c["cluster_id"]:
+                    _link(this_c["cluster_id"], other_c, f"Shared RA: {agent_name}")
+
+    for addr, clusters in (address_groups or {}).items():
+        reason = "Shared address"
+        for this_c in clusters:
+            for other_c in clusters:
+                if this_c["cluster_id"] != other_c["cluster_id"]:
+                    _link(this_c["cluster_id"], other_c, reason)
 
     cluster_related = {}
     cluster_connection_count = {}
@@ -726,7 +763,7 @@ def build_cluster_related(linkable_agents, agent_clusters):
                 "cluster_id": ocid,
                 "primary_name": info["primary_name"],
                 "parcel_count": info["parcel_count"],
-                "via": "Shared RA: " + ", ".join(sorted(info["via_agents"])),
+                "via": ", ".join(sorted(info["via_reasons"])),
             }
             for ocid, info in others.items()
         ]
@@ -906,7 +943,13 @@ def main():
         print(f"{len(linkable_agents)} individual RAs across ≥2 clusters")
 
         agent_clusters = fetch_agent_clusters(conn, linkable_agent_ids)
-        cluster_related, cluster_connection_count = build_cluster_related(linkable_agents, agent_clusters)
+
+        print("Fetching shared mailing address groups...", end=" ", flush=True)
+        address_groups = fetch_address_linkage(conn)
+        print(f"{len(address_groups)} addresses shared by 2–10 clusters")
+
+        cluster_related, cluster_connection_count = build_cluster_related(
+            linkable_agents, agent_clusters, address_groups)
 
         if not args.owner_only:
             build_leaderboard(conn, output_dir, cluster_connection_count)
