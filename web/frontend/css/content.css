@@ -458,6 +458,19 @@ td.flags-cell .badge-state {
 
 .map-link:hover { text-decoration: underline; }
 
+td.map-link-cell {
+  white-space: nowrap;
+  text-align: right;
+}
+
+td.map-link-cell a {
+  font-size: 0.8rem;
+  color: var(--pico-muted-color);
+  text-decoration: none;
+}
+
+td.map-link-cell a:hover { color: var(--pico-primary); }
+
 /* ── Prose pages (about, methodology, faq) ──────────────────── */
 .content-prose p,
 .content-prose ul,

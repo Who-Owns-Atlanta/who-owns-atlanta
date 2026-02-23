@@ -16,6 +16,7 @@ import time
 import multiprocessing
 from collections import defaultdict
 from pathlib import Path
+from urllib.parse import quote_plus
 
 import psycopg2
 import psycopg2.extras
@@ -465,6 +466,7 @@ GEO_LEADERBOARD_TMPL = _BASE_HEAD + """\
           <th class="num">In area</th>
           <th class="num">Total</th>
           <th>Flags</th>
+          {% if geo_key %}<th></th>{% endif %}
         </tr>
       </thead>
       <tbody>
@@ -483,6 +485,9 @@ GEO_LEADERBOARD_TMPL = _BASE_HEAD + """\
             <span class="badge-state">{{ r.foreign_state | e }}</span>
             {% endif %}
           </td>
+          {% if geo_key %}
+          <td class="map-link-cell"><a href="/?cluster={{ r.cluster_id }}&geo={{ geo_key }}&area={{ area_raw_enc }}" title="View on map" class="map-link">map →</a></td>
+          {% endif %}
         </tr>
         {% endfor %}
       </tbody>
@@ -1027,7 +1032,7 @@ def build_agent_pages(linkable_agents, agent_clusters, output_dir):
 
 
 def _build_geo_section(env, area_rows, output_dir, url_base, geo_type_label, area_label,
-                       index_title, index_lead, area_display_fn=None):
+                       index_title, index_lead, area_display_fn=None, geo_key=None):
     """Build individual area pages + index page for one geo dimension.
     area_display_fn: optional callable(raw_area) -> display string (e.g. 'District 5')
     Returns number of area pages written.
@@ -1051,6 +1056,8 @@ def _build_geo_section(env, area_rows, output_dir, url_base, geo_type_label, are
             geo_type_label=geo_type_label,
             index_url=index_url,
             index_label=index_title,
+            geo_key=geo_key,
+            area_raw_enc=quote_plus(str(area)) if geo_key else "",
             rows=top50,
             total=len(top50),
             area_total_parcels=area_total,
@@ -1100,6 +1107,7 @@ def build_geo_leaderboard_pages(conn, output_dir):
         area_label="Neighborhood",
         index_title="Atlanta Neighborhoods",
         index_lead="Top property owners by Atlanta neighborhood.",
+        geo_key="neighborhood",
     )
     print(f"{n} pages")
 
@@ -1114,6 +1122,7 @@ def build_geo_leaderboard_pages(conn, output_dir):
         index_title="Atlanta City Council Districts",
         index_lead="Top property owners by Atlanta City Council district.",
         area_display_fn=lambda v: f"District {v}",
+        geo_key="council",
     )
     print(f"{n} pages")
 
@@ -1128,6 +1137,7 @@ def build_geo_leaderboard_pages(conn, output_dir):
         index_title="Atlanta NPUs",
         index_lead="Top property owners by Atlanta Neighborhood Planning Unit (NPU).",
         area_display_fn=lambda v: f"NPU {v}",
+        geo_key="npu",
     )
     print(f"{n} pages")
 

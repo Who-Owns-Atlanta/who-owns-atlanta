@@ -17,7 +17,10 @@ const PARCEL_TILES_URL = (DEV_HOSTNAMES.includes(window.location.hostname))
 // ---------------------------------------------------------------------------
 
 // Detect ?cluster=ID before map init so we can suppress the parcel flash.
-let pendingClusterId = parseInt(new URLSearchParams(window.location.search).get('cluster')) || null;
+const _initParams     = new URLSearchParams(window.location.search);
+let pendingClusterId  = parseInt(_initParams.get('cluster')) || null;
+const pendingGeoType  = _initParams.get('geo')  || null;  // 'neighborhood' | 'npu' | 'council'
+const pendingGeoArea  = _initParams.get('area') || null;  // raw GeoJSON NAME value
 
 const map = new maplibregl.Map({
   container: 'map',
@@ -39,7 +42,7 @@ const hoverPopup    = new maplibregl.Popup({ closeButton: false, closeOnClick: f
 
 // Add parcel tile layer once map is ready (only if URL is configured)
 map.on('load', () => {
-  if (!pendingClusterId) {
+  if (!pendingClusterId && !pendingGeoType) {
     map.fitBounds(ATLANTA_BOUNDS, { padding: 40, duration: 0 });
   }
 
@@ -341,8 +344,9 @@ map.on('load', () => {
 
       const withCoords = data.parcels.filter(p => p.lon && p.lat);
 
-      // Fit map to the cluster's bounding box so the full pin spread is visible.
-      if (withCoords.length) {
+      // Fit map to the cluster's bounding box — unless a geo area deep link is
+      // also present, in which case the geo handler owns the viewport.
+      if (withCoords.length && !pendingGeoType) {
         const bounds = withCoords.reduce(
           (b, p) => b.extend([p.lon, p.lat]),
           new maplibregl.LngLatBounds([withCoords[0].lon, withCoords[0].lat], [withCoords[0].lon, withCoords[0].lat])
@@ -359,6 +363,26 @@ map.on('load', () => {
       clusterLoading.hidden = true;
       pendingClusterId = null;
     });
+});
+
+// ---------------------------------------------------------------------------
+// ?geo=+?area= deep link — apply area filter on page load
+// ---------------------------------------------------------------------------
+
+map.on('load', async () => {
+  if (!pendingGeoType || !pendingGeoArea) return;
+  await loadGeoData();
+  const cacheKey = pendingGeoType === 'neighborhood' ? 'neighborhoods'
+                 : pendingGeoType === 'npu'          ? 'npu'
+                 :                                     'council';
+  const feat = geoCache[cacheKey].find(f => f.properties.NAME === pendingGeoArea);
+  if (!feat) return;
+  const label = pendingGeoType === 'neighborhood' ? `Neighborhood: ${pendingGeoArea}`
+              : pendingGeoType === 'npu'          ? `NPU ${pendingGeoArea}`
+              :                                     `Council District ${pendingGeoArea}`;
+  // Always fly to the geo area — geo handler owns the viewport.
+  // Cluster handler skips its own fitBounds when pendingGeoType is set.
+  setAreaFilter(label, feat.geometry);
 });
 
 // ---------------------------------------------------------------------------
