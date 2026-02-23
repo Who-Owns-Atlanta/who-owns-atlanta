@@ -89,7 +89,6 @@ _BASE_HEAD = """\
     <a href="/" class="site-name">Who Owns Atlanta?</a>
     <nav class="header-nav">
       <a href="/leaderboard/">Leaderboard</a>
-      <a href="/agents/">Registered Agents</a>
     </nav>
   </header>
   <main class="content-main">
@@ -123,7 +122,6 @@ LEADERBOARD_TMPL = _BASE_HEAD + """\
           <th class="num">Parcels</th>
           <th class="num">Acres</th>
           <th>Flags</th>
-          <th class="num">Connected</th>
         </tr>
       </thead>
       <tbody>
@@ -145,7 +143,6 @@ LEADERBOARD_TMPL = _BASE_HEAD + """\
             <span class="badge-state">{{ r.foreign_state | e }}</span>
             {% endif %}
           </td>
-          <td class="num">{% if r.connection_count > 0 %}<a href="/owner/{{ r.cluster_id }}/#related" class="connection-count">{{ r.connection_count }}</a>{% endif %}</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -268,33 +265,6 @@ OWNER_TMPL = _BASE_HEAD + """\
       </li>
       {% endfor %}
     </ul>
-    {% endif %}
-
-    {# ── Related owners ── #}
-    {% if related_owners %}
-    <h2 id="related">Related owners</h2>
-    <p class="related-subhead">Connected via shared registered agent.</p>
-    <div class="table-scroll">
-    <table class="related-table">
-      <thead>
-        <tr>
-          <th>Owner</th>
-          <th>Via</th>
-          <th class="num">Parcels</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for r in related_owners %}
-        <tr>
-          <td><a href="/owner/{{ r.cluster_id }}/">{{ r.primary_name | e }}</a></td>
-          <td class="connection-via">{{ r.via | e }}</td>
-          <td class="num">{{ r.parcel_count }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    </div>
-    {% if related_owners|length == 15 %}<p class="cap-note">Showing top 15 related owners.</p>{% endif %}
     {% endif %}
 
     {% if alt_names %}
@@ -422,7 +392,7 @@ def render_leaderboard(rows):
         total=len(rows),
     )
 
-def render_owner(cluster_id, stats, parcels, county_breakdown, sos_data, neighborhoods, linkable_agent_ids=frozenset(), cluster_related=None):
+def render_owner(cluster_id, stats, parcels, county_breakdown, sos_data, neighborhoods, linkable_agent_ids=frozenset()):
     names = stats["owner_names"] or []
     primary_name = names[0] if names else f"Cluster {cluster_id}"
     alt_names = sorted(names[1:]) if len(names) > 1 else []
@@ -441,9 +411,6 @@ def render_owner(cluster_id, stats, parcels, county_breakdown, sos_data, neighbo
     sos_states = sos_data.get("states", [])
     sos_business_types = sos_data.get("business_types", [])
     sos_agents = sos_data.get("agents", [])
-
-    # Related owners
-    related_owners = (cluster_related or {}).get(cluster_id, [])
 
     # Parcel table cap
     parcel_count_raw = fmt_int(stats["parcel_count"])
@@ -476,7 +443,6 @@ def render_owner(cluster_id, stats, parcels, county_breakdown, sos_data, neighbo
         sos_agents=sos_agents,
         sos_warn_statuses=SOS_WARN_STATUSES,
         linkable_agent_ids=linkable_agent_ids,
-        related_owners=related_owners,
         neighborhoods=neighborhoods,
         parcels=parcels_display,
         parcel_table_capped=parcel_table_capped,
@@ -690,61 +656,13 @@ def fetch_agent_clusters(conn, ra_ids):
         return result
 
 
-def build_cluster_related(linkable_agents, agent_clusters):
-    """Compute related-cluster lists from RA co-membership. No DB needed.
-
-    Returns:
-        cluster_related: {cluster_id: [{cluster_id, primary_name, parcel_count, via}, ...]}
-            sorted by parcel_count desc, capped at 15.
-        cluster_connection_count: {cluster_id: N} (pre-cap total, for leaderboard badge)
-    """
-    # staging[cid][ocid] = {primary_name, parcel_count, via_agents: set}
-    staging = defaultdict(dict)
-
-    for ra_id, clusters in agent_clusters.items():
-        agent_name = linkable_agents[ra_id]["name"]
-        for this_c in clusters:
-            cid = this_c["cluster_id"]
-            for other_c in clusters:
-                ocid = other_c["cluster_id"]
-                if cid == ocid:
-                    continue
-                if ocid not in staging[cid]:
-                    staging[cid][ocid] = {
-                        "cluster_id": ocid,
-                        "primary_name": other_c["primary_name"],
-                        "parcel_count": other_c["parcel_count"],
-                        "via_agents": set(),
-                    }
-                staging[cid][ocid]["via_agents"].add(agent_name)
-
-    cluster_related = {}
-    cluster_connection_count = {}
-    for cid, others in staging.items():
-        rows = [
-            {
-                "cluster_id": ocid,
-                "primary_name": info["primary_name"],
-                "parcel_count": info["parcel_count"],
-                "via": "Shared RA: " + ", ".join(sorted(info["via_agents"])),
-            }
-            for ocid, info in others.items()
-        ]
-        rows.sort(key=lambda r: -r["parcel_count"])
-        cluster_connection_count[cid] = len(rows)
-        cluster_related[cid] = rows[:15]
-
-    return cluster_related, cluster_connection_count
-
-
 # ---------------------------------------------------------------------------
 # Build
 # ---------------------------------------------------------------------------
 
-def build_leaderboard(conn, output_dir, cluster_connection_count=None):
+def build_leaderboard(conn, output_dir):
     print("Building leaderboard...", end=" ", flush=True)
     rows_raw = fetch_leaderboard(conn)
-    counts = cluster_connection_count or {}
 
     rows = []
     for r in rows_raw:
@@ -758,7 +676,6 @@ def build_leaderboard(conn, output_dir, cluster_connection_count=None):
             "is_corporate": bool(r["corporate_parcel_count"]),
             "is_institutional": bool(r["institutional_parcel_count"]),
             "foreign_state": r["primary_foreign_state"],
-            "connection_count": counts.get(r["cluster_id"], 0),
         })
 
     out_path = output_dir / "leaderboard" / "index.html"
@@ -813,7 +730,7 @@ def build_agent_pages(linkable_agents, agent_clusters, output_dir):
 
 def worker(args):
     """Worker function run in a subprocess. Processes a slice of cluster_ids."""
-    cluster_ids, output_dir, db_url, worker_id, linkable_agent_ids, cluster_related = args
+    cluster_ids, output_dir, db_url, worker_id, linkable_agent_ids = args
     output_dir = Path(output_dir)
     written = 0
 
@@ -835,7 +752,7 @@ def worker(args):
                 county_breakdown = county_map.get(cid, {})
                 sos_data = sos_map.get(cid, {})
                 neighborhoods = nbhd_map.get(cid, [])
-                html = render_owner(cid, stats, parcels, county_breakdown, sos_data, neighborhoods, linkable_agent_ids, cluster_related)
+                html = render_owner(cid, stats, parcels, county_breakdown, sos_data, neighborhoods, linkable_agent_ids)
                 out_path = output_dir / "owner" / str(cid) / "index.html"
                 out_path.parent.mkdir(parents=True, exist_ok=True)
                 out_path.write_text(html)
@@ -846,7 +763,7 @@ def worker(args):
     return written
 
 
-def build_owner_pages(conn, output_dir, min_parcels, num_workers, cluster_ids_override=None, linkable_agent_ids=frozenset(), cluster_related=None):
+def build_owner_pages(conn, output_dir, min_parcels, num_workers, cluster_ids_override=None, linkable_agent_ids=frozenset()):
     if cluster_ids_override is not None:
         cluster_ids = cluster_ids_override
         print(f"Building {len(cluster_ids)} owner pages (from --cluster-ids) "
@@ -859,7 +776,7 @@ def build_owner_pages(conn, output_dir, min_parcels, num_workers, cluster_ids_ov
 
     # Split cluster_ids evenly across workers
     chunks = [cluster_ids[i::num_workers] for i in range(num_workers)]
-    work_args = [(chunk, str(output_dir), DB_URL, i, linkable_agent_ids, cluster_related or {}) for i, chunk in enumerate(chunks)]
+    work_args = [(chunk, str(output_dir), DB_URL, i, linkable_agent_ids) for i, chunk in enumerate(chunks)]
 
     t0 = time.time()
     with multiprocessing.Pool(processes=num_workers) as pool:
@@ -906,10 +823,9 @@ def main():
         print(f"{len(linkable_agents)} individual RAs across ≥2 clusters")
 
         agent_clusters = fetch_agent_clusters(conn, linkable_agent_ids)
-        cluster_related, cluster_connection_count = build_cluster_related(linkable_agents, agent_clusters)
 
         if not args.owner_only:
-            build_leaderboard(conn, output_dir, cluster_connection_count)
+            build_leaderboard(conn, output_dir)
         if not args.leaderboard_only:
             # Build agent pages
             print("Building agent pages...", end=" ", flush=True)
@@ -918,8 +834,7 @@ def main():
 
             build_owner_pages(conn, output_dir, args.min_parcels, args.workers,
                               cluster_ids_override=cluster_ids_override,
-                              linkable_agent_ids=linkable_agent_ids,
-                              cluster_related=cluster_related)
+                              linkable_agent_ids=linkable_agent_ids)
     finally:
         conn.close()
 
