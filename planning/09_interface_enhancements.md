@@ -1,7 +1,7 @@
 # Plan: Interface Enhancements — Who Owns Atlanta?
 
 **Created:** 2026-02-22
-**Status:** In progress — sections 1, 2, 3 & 4 (RA linkage) complete
+**Status:** In progress — sections 1–6 complete (officers deferred: ga_business_officer table empty)
 
 **Also done (tracked separately):**
 - Data provenance — `datasources.json` + parcel panel source dividers + FAQ accordion → `planning/10_data_provenance.md` (commit 473484a, 2026-02-22)
