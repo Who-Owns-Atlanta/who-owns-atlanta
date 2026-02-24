@@ -339,8 +339,11 @@ map.on('load', () => {
   fetch(`/api/owner/${clusterToLoad}`)
     .then(r => r.ok ? r.json() : null)
     .then(async data => {
-      clusterLoading.hidden = true;
-      if (!data || !data.parcels.length) return;
+      if (!data || !data.parcels.length) {
+        clusterLoading.hidden = true;
+        pendingClusterId = null;
+        return;
+      }
 
       const withCoords = data.parcels.filter(p => p.lon && p.lat);
 
@@ -357,6 +360,8 @@ map.on('load', () => {
       const first = data.parcels[0];
       await loadParcel(first.county, first.parcel_id);
       highlightCluster(clusterToLoad, data.parcels);
+
+      clusterLoading.hidden = true;
       pendingClusterId = null;
     })
     .catch(() => {
