@@ -18,11 +18,10 @@
 - [x] Ownership network/graph logic (`scripts/04_ownership_network.py`, `owner_entities` + `ownership_clusters`)
 - [x] SOS name matching — `scripts/08_match_sos.py`
 - [x] SOS enrichment of `owner_entities` — `scripts/09_enrich_owners_sos.py`
-- [x] SOS network enrichment — `scripts/10_sos_network_enrichment.py` - **LOOSENED LIMITS FOR LEGIT CORPORATE PORTFOLIOS**
+- [x] SOS network enrichment — `scripts/10_sos_network_enrichment.py` - **REFINED FOR "HORIZONTAL HOLDINGS" ALIGNMENT**
 - [x] Atlanta city Tax_Parcel enrichment — `scripts/11_city_enrichment.py`
 
 ## What's NOT in place yet
-- [ ] "Parent" company / DBA assignment per ownership group
 - [ ] Web interface — see `planning/04_web_interface.md`
 - [ ] Tests
 
@@ -32,12 +31,15 @@
 - [ ] Metro expansion (Gwinnett, Cobb, Clayton)
 - [ ] Corporate ownership choropleth
 
-## Database stats (Post-Residential Focus)
-- **Total Unified Parcels:** 576,170 (filtered from 615k; removed industrial/public land)
+## Database stats (Post-Refinement)
+- **Total Unified Parcels:** 576,170 (Residential focus)
 - **Fulton County:** 370,189 total (61,555 corporate, 28,958 institutional)
 - **DeKalb County:** 245,766 total (35,555 corporate, 14,789 institutional)
-- **Ownership clusters:** 460,775 total (post-refined SOS matching)
-- **Top Cluster:** Invitation Homes (4,288 parcels)
+- **Ownership clusters:** ~472,428 total (Post-Institutional Isolation)
+- **Top Clusters (Firm-level):**
+    - **Invitation Homes / Tricon Hub:** ~5,072 parcels
+    - **Amherst / Pretium (Progress) Hub:** ~3,599 parcels
+    - **FirstKey Homes:** ~1,709 parcels
 
 ## Decisions made
 - **Primary data:** Fulton County + DeKalb County only. Atlanta city data is redundant (counties cover it).
@@ -46,6 +48,7 @@
 - **libpostal:** Docker container (`woa_libpostal` on port 6789, `clicksend/libpostal-rest`)
 - **Pipeline:** Ordered scripts (`scripts/01_load.py`, `02_flag...`, `03_normalize...`, `04_network...`)
 - **Owner filtering:** Two flags — `is_corporate` (SOS-resolvable) and `is_institutional` (government, education, trusts, HOAs)
+- **Institutional Isolation:** Institutional entities are excluded from forming edges in the ownership graph to prevent "mega-cluster" bridges.
 - **GA SOS scraper:** Converted from JS/Puppeteer to Python/Playwright. Cloudflare Turnstile blocks headless. Needs 2captcha or bulk download.
 
 ## Database stats

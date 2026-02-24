@@ -41,6 +41,8 @@ COMMERCIAL_RA_SKIP = {
     "BEACON MANAGEMENT SERVICES", "TOLLEY COMMUNITY MANAGEMENT", "POSOLUTIONS INC", "POSOLUTIONS, INC",
     "CANOPY SERVICES INC", "CANOPY SERVICES, INC.", "SPI AGENT SOLUTIONS INC", "SPI AGENT SOLUTIONS, INC.",
     "PMI NORTHEAST ATLANTA", "LEE MASON", "NONE", "",
+    "ZENBUSINESS INC", "REGISTERED AGENT SOLUTIONS INC", "REGISTERED AGENT SOLUTIONS, INC.",
+    "CSC OF COBB COUNTY, INC.", "NORTHWEST REGISTERED AGENT SERVICE, INC.",
 }
 
 _STRIP_PUNCT = re.compile(r'[^A-Z0-9 ]')
@@ -65,7 +67,7 @@ def load_entities(engine):
             SELECT entity_id, owner_name_norm, owner_addr_norm, count,
                    sos_control_number, sos_registered_agent_id,
                    sos_registered_agent, sos_match_type,
-                   sos_registered_agent_address
+                   sos_registered_agent_address, is_institutional
             FROM owner_entities
         """)).fetchall()
     return rows
@@ -77,8 +79,12 @@ def build_base_graph(entities):
     addr_idx = {}
     street_counts = {}
 
-    for eid, name, addr, count, *_ in entities:
+    for row in entities:
+        eid, name, addr, count = row[0], row[1], row[2], row[3]
+        inst = row[9]
         G.add_node(eid)
+        if inst: continue
+        
         name_idx.setdefault(name, []).append(eid)
         if addr:
             addr_idx.setdefault(addr, []).append(eid)

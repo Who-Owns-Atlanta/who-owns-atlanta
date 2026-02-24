@@ -26,5 +26,28 @@ The dataset was "polluted" with non-residential (industrial, public, utility) pr
 *   **Mega-Cluster Reduction**: Large public "hubs" fragmented, focusing the network purely on private residential ownership.
 *   **Increased SOS Linkage**: 53k RA edges, 20k Officer edges, and 40k SOS Address edges now active in the graph.
 
+### 2026-02-23: "Horizontal Holdings" Alignment & Institutional Isolation
+
+#### Issue
+The "mega-cluster" (Cluster 1) remained bloated at 20k+ parcels, merging disparate corporate landlords (Invitation Homes, D.R. Horton, etc.) through shared institutional "hubs" like Development Authorities and professional Registered Agent addresses that were not sufficiently filtered by street-level entropy.
+
+#### Actions
+1.  **Institutional Isolation (`scripts/04_ownership_network.py` & `scripts/10_sos_network_enrichment.py`)**:
+    *   Explicitly excluded all entities flagged as `is_institutional` from forming edges in the ownership graph.
+    *   This prevents "Development Authorities" or "Housing Authorities" from acting as bridges between unrelated corporate property owners.
+2.  **Expanded RA Skip List (`scripts/10_sos_network_enrichment.py`)**:
+    *   Added more professional proxy agents to the `COMMERCIAL_RA_SKIP` list: `ZenBusiness Inc`, `Registered Agent Solutions Inc`, `CSC of Cobb County, Inc.`, and `Northwest Registered Agent Service, Inc.`.
+3.  **Benchmarking against "Horizontal Holdings"**:
+    *   Validated results against the methodology in Shelton & Seymour (2024).
+    *   Adjusted for 2-county coverage (Fulton/DeKalb), our consolidated clusters now closely match the paper's 5-county findings.
+
+#### Results
+*   **Mega-Cluster Fragmented**: Cluster 1 (20k+) was broken into logical firm-level or sector-level clusters.
+*   **Accurate Firm Totals**:
+    *   **Invitation Homes (Cluster 2)**: ~5,072 parcels (matches expectation for 2 core counties vs 7.8k in 5 counties).
+    *   **Amherst / Pretium (Cluster 4)**: ~3,599 parcels.
+    *   **FirstKey Homes (Cluster 8)**: ~1,709 parcels.
+*   **Developer Isolation**: Major homebuilders like D.R. Horton are now correctly isolated into their own clusters (e.g., Cluster 1 now represents a builder/developer hub).
+
 ### Verification
-Confirmed top 500 leaderboard (`mv_leaderboard`) now correctly reflects residential corporate landlords and developers without public/industrial noise.
+Ran `scripts/investigate_cluster.py` to confirm that shortest paths between unrelated firms (e.g., BAF Assets to FYR SFR) are no longer present in the graph.

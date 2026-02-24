@@ -47,6 +47,7 @@ def build_owner_entities(engine):
                 owner_name_norm,
                 owner_addr_norm,
                 county,
+                is_institutional,
                 count,
                 parcel_ids
             FROM (
@@ -54,6 +55,7 @@ def build_owner_entities(engine):
                     UPPER(TRIM(owner_name)) AS owner_name_norm,
                     COALESCE(owner_addr_norm, '') AS owner_addr_norm,
                     county,
+                    BOOL_OR(is_institutional) AS is_institutional,
                     COUNT(*) AS count,
                     ARRAY_AGG(parcel_id) AS parcel_ids
                 FROM parcels_unified
@@ -80,7 +82,7 @@ def build_network(engine):
     print("Loading entities for graph construction...")
     with engine.connect() as conn:
         entities = conn.execute(text("""
-            SELECT entity_id, owner_name_norm, owner_addr_norm
+            SELECT entity_id, owner_name_norm, owner_addr_norm, is_institutional
             FROM owner_entities
         """)).fetchall()
 
@@ -90,9 +92,13 @@ def build_network(engine):
     name_idx = {}
     addr_idx = {}
     street_counts = {}
+    is_inst = {}
 
-    for eid, name, addr in entities:
+    for eid, name, addr, inst in entities:
         G.add_node(eid)
+        is_inst[eid] = inst
+        if inst: continue # Skip indexing for institutional bridges
+        
         name_idx.setdefault(name, []).append(eid)
         if addr:
             addr_idx.setdefault(addr, []).append(eid)
@@ -109,7 +115,9 @@ def build_network(engine):
     with engine.connect() as conn:
         entropy_rows = conn.execute(text("""
             SELECT owner_name_norm, COUNT(DISTINCT owner_addr_norm) 
-            FROM owner_entities GROUP BY owner_name_norm
+            FROM owner_entities 
+            WHERE NOT is_institutional
+            GROUP BY owner_name_norm
         """)).fetchall()
         name_entropy = {row[0]: row[1] for row in entropy_rows}
 
