@@ -1,7 +1,7 @@
 # Plan: Interface Enhancements — Who Owns Atlanta?
 
 **Created:** 2026-02-22
-**Status:** In progress — sections 1–6 complete + geo leaderboard hierarchy complete (officers deferred: ga_business_officer table empty)
+**Status:** In progress — sections 1–6 complete + geo leaderboard hierarchy complete (officers now sourced from sos.officers)
 
 **Also done (tracked separately):**
 - Data provenance — `datasources.json` + parcel panel source dividers + FAQ accordion → `planning/10_data_provenance.md` (commit 473484a, 2026-02-22)
@@ -73,11 +73,10 @@ We can pre-calculate a "Signature" for each owner on their profile page.:
 |---|---|---|
 | County breakdown | computed from parcel list | "237 parcels in Fulton, 98 in DeKalb" |
 | SOS status | `ownership_clusters.primary_sos_status` | Display prominently with a colored indicator. Active = fine; Dissolved / Admin Dissolved / Owes Annual Registration = flag. A dissolved LLC collecting rent is a red flag. (as of 2/18/2026)|
-| SOS registration date | `ga_business.registration_date` | When was this entity formed? |
-| Last annual registration year | `ga_business.last_annual_registration_year` | Entity that hasn't filed in years while owning dozens of properties is notable. |
+| SOS registration date | `sos.entities.commencement_date` | When was this entity formed? |
 | Foreign state of incorporation | `owner_entities.sos_foreign_state` | Wyoming / Delaware LLC owning 50 Atlanta properties vs. a Georgia LLC. |
-| Business purpose | `ga_business.business_purpose` | Often blank; show when present. "Property management" vs. something incongruous. |
-| Principal office address | `ga_business.principal_office_address` | Residential address? PO box? Same address as another cluster? |
+| Business purpose | `sos.entities.business_type_desc` | Often blank; show when present. "Property management" vs. something incongruous. |
+| Principal office address | `sos.addresses` | Residential address? PO box? Same address as another cluster? |
 | Owner mailing addresses | `ownership_clusters.owner_addresses[]` | All mailing addresses across entities in cluster — reveals shared PO boxes, out-of-state management. |
 | Neighborhood concentration | computed from parcel list | Top 3–5 neighborhoods by parcel count, with percentages. Clusters often dominate specific neighborhoods. |
 

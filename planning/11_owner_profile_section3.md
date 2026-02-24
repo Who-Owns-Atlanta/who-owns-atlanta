@@ -13,9 +13,9 @@ owner name + badges, a stats row, a collapsible SOS block (status + state only),
 and a parcel table. This plan adds county breakdown, rich SOS detail, neighborhood concentration,
 owner mailing addresses, and data provenance dividers consistent with the parcel panel pattern.
 
-`ga_business` and `ga_business_officer` tables are currently **empty**. All SOS detail
-comes from per-entity columns on `owner_entities` (sos_status, sos_business_type,
-sos_foreign_state, sos_registered_agent, etc.).
+`ga_business` and `ga_business_officer` tables have been removed. All SOS detail
+comes from the `sos` schema (sos.entities, sos.officers) joined via `sos_control_number`
+on `owner_entities`.
 
 **Sections 4 & 5 compatibility:** RA names shown as plain text only (section 4 adds links).
 No related-owners section (section 5). No connection badges (section 6).
@@ -205,7 +205,7 @@ query by `cluster_id = ANY(batch)`, key result by cluster_id.
 | RA page links | Section 4 | `<span class="ra-name">` wraps agent name text |
 | Related owners | Section 5 | Nothing — purely additive new section |
 | Connection count | Section 6 | Nothing — purely additive stat |
-| Officers table | When ga_business_officer has data | Template gated on `officers\|length > 0` |
+| Officers table | When sos.officers has data | Template gated on `officers\|length > 0` |
 
 ---
 

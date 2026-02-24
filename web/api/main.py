@@ -199,13 +199,15 @@ def owner(cluster_id: int, response: Response):
 
             # Officers from SOS (one query across all entities in cluster)
             cur.execute("""
-                SELECT DISTINCT gbo.name, gbo.title
+                SELECT DISTINCT 
+                    trim(concat_ws(' ', o.first_name, o.last_name, o.company_name)) AS name,
+                    o.description AS title
                 FROM owner_entities oe
-                JOIN ga_business_officer gbo
-                    ON gbo.control_number = oe.sos_control_number
+                JOIN sos.officers o
+                    ON o.control_number = oe.sos_control_number
                 WHERE oe.cluster_id = %(cid)s
                   AND oe.sos_control_number IS NOT NULL
-                ORDER BY gbo.title, gbo.name
+                ORDER BY title, name
             """, {"cid": cluster_id})
             result["officers"] = cur.fetchall()
 
