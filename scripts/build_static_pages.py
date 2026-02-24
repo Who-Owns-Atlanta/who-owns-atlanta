@@ -839,17 +839,16 @@ def fetch_geo_data(conn, col_name):
             )
             SELECT am.area,
                    oe.cluster_id,
-                   oc.owner_names[1] AS primary_name,
-                   ml.corporate_parcel_count > 0 AS is_corporate,
-                   ml.institutional_parcel_count > 0 AS is_institutional,
-                   ml.primary_foreign_state,
-                   ml.parcel_count AS total_parcel_count,
+                   mc.owner_names[1] AS primary_name,
+                   mc.corporate_parcel_count > 0 AS is_corporate,
+                   mc.institutional_parcel_count > 0 AS is_institutional,
+                   mc.primary_foreign_state,
+                   mc.parcel_count AS total_parcel_count,
                    COUNT(*) AS local_parcel_count
             FROM owner_entities oe
             CROSS JOIN LATERAL unnest(oe.parcel_ids) AS u(pid)
             JOIN area_map am ON am.parcelid = u.pid
-            JOIN ownership_clusters oc ON oc.cluster_id = oe.cluster_id
-            JOIN mv_leaderboard ml ON ml.cluster_id = oe.cluster_id
+            JOIN mv_cluster_stats mc ON mc.cluster_id = oe.cluster_id
             GROUP BY 1, 2, 3, 4, 5, 6, 7
             ORDER BY area, local_parcel_count DESC
         """)
@@ -874,15 +873,14 @@ def fetch_county_geo_data(conn):
         cur.execute("""
             SELECT oe.county,
                    oe.cluster_id,
-                   oc.owner_names[1] AS primary_name,
-                   ml.corporate_parcel_count > 0 AS is_corporate,
-                   ml.institutional_parcel_count > 0 AS is_institutional,
-                   ml.primary_foreign_state,
-                   ml.parcel_count AS total_parcel_count,
+                   mc.owner_names[1] AS primary_name,
+                   mc.corporate_parcel_count > 0 AS is_corporate,
+                   mc.institutional_parcel_count > 0 AS is_institutional,
+                   mc.primary_foreign_state,
+                   mc.parcel_count AS total_parcel_count,
                    SUM(oe.count) AS local_parcel_count
             FROM owner_entities oe
-            JOIN ownership_clusters oc ON oc.cluster_id = oe.cluster_id
-            JOIN mv_leaderboard ml ON ml.cluster_id = oe.cluster_id
+            JOIN mv_cluster_stats mc ON mc.cluster_id = oe.cluster_id
             GROUP BY 1, 2, 3, 4, 5, 6, 7
             ORDER BY county, local_parcel_count DESC
         """)
@@ -1049,7 +1047,7 @@ def _build_geo_section(env, area_rows, output_dir, url_base, geo_type_label, are
         slug = slugify(str(area))
         display = area_display_fn(area) if area_display_fn else str(area)
         area_total = sum(r["local_parcel_count"] for r in rows)
-        top50 = rows[:50]
+        top100 = rows[:100]
 
         html = geo_tmpl.render(
             page_title=f"{display} — Top Property Owners",
@@ -1060,8 +1058,8 @@ def _build_geo_section(env, area_rows, output_dir, url_base, geo_type_label, are
             index_label=index_title,
             geo_key=geo_key,
             area_raw_enc=quote_plus(str(area)) if geo_key else "",
-            rows=top50,
-            total=len(top50),
+            rows=top100,
+            total=len(top100),
             area_total_parcels=area_total,
         )
         out_path = output_dir / slug / "index.html"
@@ -1157,8 +1155,8 @@ def build_geo_leaderboard_pages(conn, output_dir):
             geo_type_label="county",
             index_url="/l/",
             index_label="Leaderboards",
-            rows=rows[:100],
-            total=min(len(rows), 100),
+            rows=rows[:500],
+            total=min(len(rows), 500),
             area_total_parcels=county_total,
         )
         out_path = base / county / "index.html"
