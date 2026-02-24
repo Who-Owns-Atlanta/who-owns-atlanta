@@ -29,18 +29,21 @@ CORPORATE_PATTERN = (
 )
 
 # Non-individual owners that won't resolve in SOS
+# MOVED: authority, development, real estate (when institutional) to here.
 INSTITUTIONAL_PATTERN = (
     r'\m('
     r'city\s+of|county|state\s+of|united\s+states'
     r'|marta|board\s+of\s+(education|regents)'
     r'|department\s+of|dept\s+of'
-    r'|authority'
-    r'|trust|trustee'
-    r'|college|university|school\s+district'
+    r'|authority|development\s+authority|housing\s+authority'
+    r'|trust|trustee|estate\s+of'
+    r'|college|university|school\s+district|school\s+system'
     r'|church|ministry|ministries|congregation|diocese|temple|mosque|synagogue'
     r'|homeowners|h\s*o\s*a'
     r'|salvation\s+army|habitat\s+for\s+humanity'
     r'|cemetery'
+    r'|railway|railroad|seaboard|norfolk\s+southern|georgia\s+power|bellsouth'
+    r'|atlanta\s+neighborhood\s+development'
     r')\M'
 )
 
@@ -58,34 +61,34 @@ def flag_owners(engine):
                 conn.execute(text(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {flag} BOOLEAN DEFAULT FALSE;"))
                 conn.execute(text(f"UPDATE {table} SET {flag} = FALSE;"))
 
-            # Corporate flag
-            pattern = CORPORATE_PATTERN
-            result = conn.execute(text(f"""
-                UPDATE {table} SET is_corporate = TRUE WHERE {col1} ~* :pattern
-            """), {"pattern": pattern})
-            print(f"  is_corporate via {col1}: {result.rowcount:,}")
-
-            if col2:
-                result = conn.execute(text(f"""
-                    UPDATE {table} SET is_corporate = TRUE
-                    WHERE NOT is_corporate AND {col2} ~* :pattern
-                """), {"pattern": pattern})
-                print(f"  is_corporate via {col2}: +{result.rowcount:,}")
-
-            # Institutional flag (only on rows not already corporate)
+            # Institutional flag FIRST (captures authorities/utilities that might match corporate patterns)
             pattern = INSTITUTIONAL_PATTERN
             result = conn.execute(text(f"""
-                UPDATE {table} SET is_institutional = TRUE
-                WHERE NOT is_corporate AND {col1} ~* :pattern
+                UPDATE {table} SET is_institutional = TRUE WHERE {col1} ~* :pattern
             """), {"pattern": pattern})
             print(f"  is_institutional via {col1}: {result.rowcount:,}")
 
             if col2:
                 result = conn.execute(text(f"""
                     UPDATE {table} SET is_institutional = TRUE
-                    WHERE NOT is_corporate AND NOT is_institutional AND {col2} ~* :pattern
+                    WHERE NOT is_institutional AND {col2} ~* :pattern
                 """), {"pattern": pattern})
                 print(f"  is_institutional via {col2}: +{result.rowcount:,}")
+
+            # Corporate flag (only on rows not already institutional)
+            pattern = CORPORATE_PATTERN
+            result = conn.execute(text(f"""
+                UPDATE {table} SET is_corporate = TRUE 
+                WHERE NOT is_institutional AND {col1} ~* :pattern
+            """), {"pattern": pattern})
+            print(f"  is_corporate via {col1}: {result.rowcount:,}")
+
+            if col2:
+                result = conn.execute(text(f"""
+                    UPDATE {table} SET is_corporate = TRUE
+                    WHERE NOT is_institutional AND NOT is_corporate AND {col2} ~* :pattern
+                """), {"pattern": pattern})
+                print(f"  is_corporate via {col2}: +{result.rowcount:,}")
 
     # Summary
     with engine.connect() as conn:

@@ -12,14 +12,14 @@
 - [x] Python dependencies (geopandas, psycopg2-binary, sqlalchemy, geoalchemy2, networkx, requests, playwright, rapidfuzz)
 - [x] PostgreSQL/PostGIS database (Docker — `woa_postgis` on port 5434)
 - [x] Data loading pipeline (GeoJSON → PostGIS: `scripts/01_load_parcels.py`)
-- [x] Schema unification (Fulton + DeKalb → `parcels_unified` view)
-- [x] Corporate/institutional owner flagging (`scripts/02_flag_corporate_owners.py`)
+- [x] Schema unification (Fulton + DeKalb → `parcels_unified` view) - **FILTERED TO RESIDENTIAL ONLY**
+- [x] Corporate/institutional owner flagging (`scripts/02_flag_corporate_owners.py`) - **REFINED FOR PUBLIC AUTHORITIES**
 - [x] Address normalization via libpostal (`scripts/03_normalize_addresses.py`, `addr_norm_lookup` table)
 - [x] Ownership network/graph logic (`scripts/04_ownership_network.py`, `owner_entities` + `ownership_clusters`)
-- [x] SOS name matching — `scripts/08_match_sos.py` (53,323 matched, prioritized Active status and resolved Name Reservation duplicates)
-- [x] SOS enrichment of `owner_entities` — `scripts/09_enrich_owners_sos.py` (53,323 entities enriched, including RA address)
-- [x] SOS network enrichment — `scripts/10_sos_network_enrichment.py` (8,952 net merges, 110K SOS edges, composite RA Name+Street grouping)
-- [x] Atlanta city Tax_Parcel enrichment — `scripts/11_city_enrichment.py` (171,287 parcels enriched)
+- [x] SOS name matching — `scripts/08_match_sos.py`
+- [x] SOS enrichment of `owner_entities` — `scripts/09_enrich_owners_sos.py`
+- [x] SOS network enrichment — `scripts/10_sos_network_enrichment.py` - **LOOSENED LIMITS FOR LEGIT CORPORATE PORTFOLIOS**
+- [x] Atlanta city Tax_Parcel enrichment — `scripts/11_city_enrichment.py`
 
 ## What's NOT in place yet
 - [ ] "Parent" company / DBA assignment per ownership group
@@ -27,17 +27,17 @@
 - [ ] Tests
 
 ## Stretch / future
-- [ ] Residential-only / homestead filtering — homestead data not available for all counties; defer until coverage is consistent
-- [ ] Additional Accela record types (code complaints etc.) — same script, different `--type`; defer until building complaints are well-established
-- [ ] Metro expansion (Gwinnett, Cobb, Clayton) — see `planning/06_metro_expansion.md`
-- [ ] Corporate ownership choropleth (neighborhood-level aggregate layer toggle)
+- [ ] Homestead integration — defer until DeKalb coverage is verified
+- [ ] Additional Accela record types (code complaints etc.)
+- [ ] Metro expansion (Gwinnett, Cobb, Clayton)
+- [ ] Corporate ownership choropleth
 
-## Database stats
-- **Fulton County:** 370,189 parcels (67,719 corporate, 22,620 institutional)
-- **DeKalb County:** 245,766 parcels (37,093 corporate, 13,036 institutional)
-- **Total:** 615,955 parcels
-- **Ownership clusters:** 467,585 total (post-SOS refined matching)
-- **SOS matched owners:** 53,323 distinct names
+## Database stats (Post-Residential Focus)
+- **Total Unified Parcels:** 576,170 (filtered from 615k; removed industrial/public land)
+- **Fulton County:** 370,189 total (61,555 corporate, 28,958 institutional)
+- **DeKalb County:** 245,766 total (35,555 corporate, 14,789 institutional)
+- **Ownership clusters:** 460,775 total (post-refined SOS matching)
+- **Top Cluster:** Invitation Homes (4,288 parcels)
 
 ## Decisions made
 - **Primary data:** Fulton County + DeKalb County only. Atlanta city data is redundant (counties cover it).

@@ -8,8 +8,8 @@ engine = create_engine(DB_URL)
 
 # --- Tuning knobs ---
 # Skip names with many distinct addresses (likely generic labels like 'BRANDYWINE')
-# Lowered to 10 to be more aggressive against generic labels.
-NAME_ENTROPY_LIMIT = 10
+# Increased to 100 as institutional noise (MARTA, GA Power) is now institutional-flagged.
+NAME_ENTROPY_LIMIT = 100
 
 # Skip addresses if shared by many entities (mailbox centers, office parks)
 # We check this at the STREET level (ignoring Suite/Unit)

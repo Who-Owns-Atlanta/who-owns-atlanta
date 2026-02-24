@@ -7,13 +7,13 @@ DB_URL = "postgresql://woa:woa@localhost:5434/who_owns_atl"
 engine = create_engine(DB_URL)
 
 # --- Tuning knobs ---
-MAX_RA_ENTITIES        = 100  # skip RA if it manages this many of our entities
-MAX_OFFICER_ENTITIES   = 10   # skip officer if appears this many times among our entities
-MAX_SOS_ADDR_ENTITIES  = 20   # skip SOS address if this many entities share it
+MAX_RA_ENTITIES        = 500  # skip RA if it manages this many of our entities
+MAX_OFFICER_ENTITIES   = 50   # skip officer if appears this many times among our entities
+MAX_SOS_ADDR_ENTITIES  = 100  # skip SOS address if this many entities share it
 
 # SOS edge gate: skip if resulting merged cluster would be > this many parcels
-# This prevents daisy-chaining multiple 200-parcel groups into one 1000-parcel group.
-MAX_MERGE_PARCELS      = 400
+# Increased to 10,000 now that institutional noise is removed.
+MAX_MERGE_PARCELS      = 10000
 
 # Skip addresses (Pass 1 & Pass 2) if shared by many entities at the street level
 STREET_ENTITY_LIMIT    = 50

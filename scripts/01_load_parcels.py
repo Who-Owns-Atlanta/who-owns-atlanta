@@ -35,8 +35,10 @@ def load_dekalb(engine):
 
 
 def create_unified_view(engine):
-    """Create a unified parcels view with common columns from both counties."""
-    print("Creating unified parcels view...")
+    """Create a unified parcels view with common columns from both counties.
+    FILTERED to residential properties only (R*, T*, or C* with living units).
+    """
+    print("Creating unified parcels view (residential focus)...")
     with engine.begin() as conn:
         conn.execute(text("DROP VIEW IF EXISTS parcels_unified CASCADE;"))
         conn.execute(text("""
@@ -62,6 +64,10 @@ def create_unified_view(engine):
                 is_institutional,
                 geometry
             FROM fulton_parcels
+            WHERE 
+                classcode LIKE 'R%' OR 
+                classcode LIKE 'T%' OR 
+                (classcode LIKE 'C%' AND livunits::int > 0)
 
             UNION ALL
 
@@ -84,7 +90,11 @@ def create_unified_view(engine):
                 is_corporate,
                 is_institutional,
                 geometry
-            FROM dekalb_parcels;
+            FROM dekalb_parcels
+            WHERE 
+                classdscrp LIKE 'R%' OR 
+                classdscrp LIKE 'T%' OR 
+                (classdscrp LIKE 'C%' AND 1=1) -- DeKalb living_units is NULL/sparse, keeping C for now
         """))
     print("  Created parcels_unified view")
 
