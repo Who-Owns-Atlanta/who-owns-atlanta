@@ -31,7 +31,7 @@ CORPORATE_PATTERN = (
 # Non-individual owners that won't resolve in SOS
 # MOVED: authority, development, real estate (when institutional) to here.
 INSTITUTIONAL_PATTERN = (
-    r'\m('
+    r'('
     r'city\s+of|county|state\s+of|united\s+states'
     r'|marta|board\s+of\s+(education|regents)'
     r'|department\s+of|dept\s+of'
@@ -39,12 +39,16 @@ INSTITUTIONAL_PATTERN = (
     r'|trust|trustee|estate\s+of'
     r'|college|university|school\s+district|school\s+system'
     r'|church|ministry|ministries|congregation|diocese|temple|mosque|synagogue'
-    r'|homeowners|h\s*o\s*a'
+    r'|homeowner|homeowners|h\s*o\s*a'
+    r'|community\s+associat|owners\s+associat|associat'
+    r'|condo|condominium'
+    r'|townhouse|towne\s+house'
+    r'|wildwood\s+park|oxford\s+village'
     r'|salvation\s+army|habitat\s+for\s+humanity'
     r'|cemetery'
     r'|railway|railroad|seaboard|norfolk\s+southern|georgia\s+power|bellsouth'
     r'|atlanta\s+neighborhood\s+development'
-    r')\M'
+    r')'
 )
 
 TABLES = [
@@ -74,6 +78,31 @@ def flag_owners(engine):
                     WHERE NOT is_institutional AND {col2} ~* :pattern
                 """), {"pattern": pattern})
                 print(f"  is_institutional via {col2}: +{result.rowcount:,}")
+
+            # Institutional via Land Use / Property Class (Common Areas / Co-ops)
+            if table == "fulton_parcels":
+                # lucode 111: Common Area - residential subdivision
+                # lucode 166: Common Area - condominiums
+                # lucode 188: Homeowner Association Common Area
+                # lucode 208: Co Ops Single Family Fee Simple
+                result = conn.execute(text("""
+                    UPDATE fulton_parcels SET is_institutional = TRUE 
+                    WHERE NOT is_institutional AND "lucode" IN ('111', '166', '188', '208')
+                """))
+                print(f"  is_institutional via Fulton lucode: +{result.rowcount:,}")
+            elif table == "dekalb_parcels":
+                # classcd R9: Common area / Association properties
+                # landuse COS: Land Use "Common Space"
+                # common_area: explicitly marked in DeKalb
+                result = conn.execute(text("""
+                    UPDATE dekalb_parcels SET is_institutional = TRUE 
+                    WHERE NOT is_institutional AND (
+                        "classcd" = 'R9' OR 
+                        "landuse" = 'COS' OR 
+                        "common_area" IS NOT NULL
+                    )
+                """))
+                print(f"  is_institutional via DeKalb codes: +{result.rowcount:,}")
 
             # Corporate flag (only on rows not already institutional)
             pattern = CORPORATE_PATTERN

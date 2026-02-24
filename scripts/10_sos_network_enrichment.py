@@ -40,7 +40,7 @@ COMMERCIAL_RA_SKIP = {
     "BEACON COMMUNITY MANAGEMENT SERVICES LLC", "BEACON COMMUNITY MANAGEMENT SERVICES, LLC",
     "BEACON MANAGEMENT SERVICES", "TOLLEY COMMUNITY MANAGEMENT", "POSOLUTIONS INC", "POSOLUTIONS, INC",
     "CANOPY SERVICES INC", "CANOPY SERVICES, INC.", "SPI AGENT SOLUTIONS INC", "SPI AGENT SOLUTIONS, INC.",
-    "PMI NORTHEAST ATLANTA", "LEE MASON", "NONE", "",
+    "PMI NORTHEAST ATLANTA", "LEE MASON", "NONE", "", "BILL WETTER", "SENTRY MANAGEMENT",
     "ZENBUSINESS INC", "REGISTERED AGENT SOLUTIONS INC", "REGISTERED AGENT SOLUTIONS, INC.",
     "CSC OF COBB COUNTY, INC.", "NORTHWEST REGISTERED AGENT SERVICE, INC.",
 }
@@ -141,6 +141,8 @@ def add_ra_edges(G, entities, base_cluster_of, parcel_count_of):
     ra_idx = {}
     for row in entities:
         eid, ra_name, match_type, ra_street = row[0], row[6], row[7], row[8]
+        inst = row[9]
+        if inst: continue
         if not ra_name or match_type not in ('exact', 'trgm_high'): continue
         name_only = _STRIP_PUNCT.sub("", ra_name.upper()).strip()
         if name_only in COMMERCIAL_RA_SKIP: continue
@@ -161,7 +163,7 @@ def add_ra_edges(G, entities, base_cluster_of, parcel_count_of):
 
 def add_officer_edges(G, engine, entities, base_cluster_of, parcel_count_of):
     print(f"Pass 2b: shared officer edges...")
-    enriched = {row[0]: row[4] for row in entities if row[4] and row[7] in ('exact', 'trgm_high')}
+    enriched = {row[0]: row[4] for row in entities if row[4] and row[7] in ('exact', 'trgm_high') and not row[9]}
     if not enriched: return 0
     cns = list({cn for cn in enriched.values()})
     with engine.begin() as conn:
@@ -196,7 +198,7 @@ def add_officer_edges(G, engine, entities, base_cluster_of, parcel_count_of):
 
 def add_sos_addr_edges(G, engine, entities, base_cluster_of, parcel_count_of):
     print(f"Pass 2c: shared SOS principal address edges...")
-    enriched = {row[0]: row[4] for row in entities if row[4] and row[7] in ('exact', 'trgm_high')}
+    enriched = {row[0]: row[4] for row in entities if row[4] and row[7] in ('exact', 'trgm_high') and not row[9]}
     if not enriched: return 0
     cns = list({cn for cn in enriched.values()})
     with engine.begin() as conn:

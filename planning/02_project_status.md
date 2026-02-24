@@ -18,7 +18,7 @@
 - [x] Ownership network/graph logic (`scripts/04_ownership_network.py`, `owner_entities` + `ownership_clusters`)
 - [x] SOS name matching — `scripts/08_match_sos.py`
 - [x] SOS enrichment of `owner_entities` — `scripts/09_enrich_owners_sos.py`
-- [x] SOS network enrichment — `scripts/10_sos_network_enrichment.py` - **REFINED FOR "HORIZONTAL HOLDINGS" ALIGNMENT**
+- [x] SOS network enrichment — `scripts/10_sos_network_enrichment.py` - **FINAL REFINEMENT: Institutional isolation + HOA/Condo land-use codes**
 - [x] Atlanta city Tax_Parcel enrichment — `scripts/11_city_enrichment.py`
 
 ## What's NOT in place yet
@@ -33,13 +33,14 @@
 
 ## Database stats (Post-Refinement)
 - **Total Unified Parcels:** 576,170 (Residential focus)
-- **Fulton County:** 370,189 total (61,555 corporate, 28,958 institutional)
-- **DeKalb County:** 245,766 total (35,555 corporate, 14,789 institutional)
-- **Ownership clusters:** ~472,428 total (Post-Institutional Isolation)
+- **Fulton County:** 370,189 total (58,548 corporate, 33,446 institutional)
+- **DeKalb County:** 245,766 total (34,092 corporate, 16,892 institutional)
+- **Ownership clusters:** ~467,658 total (Post-Institutional Isolation & HOA filtering)
 - **Top Clusters (Firm-level):**
-    - **Invitation Homes / Tricon Hub:** ~5,072 parcels
+    - **Invitation Homes / Tricon Hub:** ~5,020 parcels
     - **Amherst / Pretium (Progress) Hub:** ~3,599 parcels
     - **FirstKey Homes:** ~1,709 parcels
+    - **Developer Hub (D.R. Horton etc.):** ~1,386 parcels (Isolated from HOAs)
 
 ## Decisions made
 - **Primary data:** Fulton County + DeKalb County only. Atlanta city data is redundant (counties cover it).

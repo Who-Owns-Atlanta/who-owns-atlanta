@@ -117,7 +117,8 @@ tippecanoe \
             p.county,
             p.is_corporate::int     AS is_corporate,
             p.is_institutional::int AS is_institutional,
-            m.cluster_id
+            m.cluster_id,
+            m.cluster_size
         FROM parcels_unified p
         LEFT JOIN _tile_oe_map m
           ON m.parcel_id = p.parcel_id AND m.county = p.county
