@@ -33,6 +33,86 @@ const ATLANTA_BOUNDS = [[-84.551, 33.637], [-84.289, 33.887]];
 
 map.addControl(new maplibregl.NavigationControl(), 'top-left');
 
+// ---------------------------------------------------------------------------
+// Locate Control (GPS)
+// ---------------------------------------------------------------------------
+
+class LocateControl {
+  onAdd(map) {
+    this._map = map;
+    this._container = document.createElement('div');
+    this._container.className = 'maplibregl-ctrl maplibregl-ctrl-group';
+
+    this._button = document.createElement('button');
+    this._button.className = 'maplibregl-ctrl-locate';
+    this._button.type = 'button';
+    this._button.title = 'Zoom to your location';
+    this._button.innerHTML = `
+      <svg width="18" height="18" viewBox="0 0 24 24">
+        <path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3c-.46-4.17-3.77-7.48-7.94-7.94V1h-2v2.06C6.83 3.52 3.52 6.83 3.06 11H1v2h2.06c.46 4.17 3.77 7.48 7.94 7.94V23h2v-2.06c4.17-.46 7.48-3.77 7.94-7.94H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"/>
+      </svg>
+    `;
+
+    this._button.onclick = () => this.locate();
+
+    this._container.appendChild(this._button);
+    return this._container;
+  }
+
+  onRemove() {
+    this._container.parentNode.removeChild(this._container);
+    this._map = undefined;
+  }
+
+  locate() {
+    if (this._button.classList.contains('loading')) return;
+
+    this._button.classList.add('loading');
+
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const { longitude, latitude } = pos.coords;
+        const point = [longitude, latitude];
+
+        const inCity = await this.checkInCity(point);
+
+        if (inCity) {
+          this._map.flyTo({ center: point, zoom: 16 });
+          this._button.classList.add('active');
+        } else {
+          alert("Your location is outside the Atlanta city limits.");
+          this._button.classList.remove('active');
+        }
+        this._button.classList.remove('loading');
+      },
+      (err) => {
+        console.warn("Geolocation error:", err);
+        // Error codes: 1: Permission denied, 2: Position unavailable, 3: Timeout
+        if (err.code === 1) alert("Location access was denied.");
+        else alert("Unable to retrieve your location.");
+        this._button.classList.remove('loading');
+      },
+      { enableHighAccuracy: true, timeout: 8000 }
+    );
+  }
+
+  async checkInCity(point) {
+    if (!this._cityLimits) {
+      try {
+        const res = await fetch('/geojson/atlanta_city_limits.json');
+        const data = await res.json();
+        this._cityLimits = data.features[0].geometry;
+      } catch (e) {
+        console.error("Failed to load city limits for check", e);
+        return false;
+      }
+    }
+    return isPointInGeometry(point, this._cityLimits);
+  }
+}
+
+map.addControl(new LocateControl(), 'top-left');
+
 let selectedMarker  = null;
 let activeClusterId = null;   // cluster currently in "focus" mode
 let clusterMarkers  = [];     // teardrop pins placed for each cluster parcel (z13+ only)
@@ -902,4 +982,43 @@ function escHtml(str) {
 
 function fmtDate(iso) {
   return new Date(iso).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+// ---------------------------------------------------------------------------
+// Point-in-polygon checks for LocateControl
+// ---------------------------------------------------------------------------
+
+function isPointInPolygon(point, vs) {
+  const x = point[0], y = point[1];
+  let inside = false;
+  for (let i = 0, j = vs.length - 1; i < vs.length; j = i++) {
+    const xi = vs[i][0], yi = vs[i][1];
+    const xj = vs[j][0], yj = vs[j][1];
+    const intersect = ((yi > y) != (yj > y)) &&
+                      (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+function isPointInGeometry(point, geom) {
+  if (geom.type === 'Polygon') {
+    // Exterior ring must contain point, interior rings (holes) must NOT.
+    if (!isPointInPolygon(point, geom.coordinates[0])) return false;
+    for (let i = 1; i < geom.coordinates.length; i++) {
+      if (isPointInPolygon(point, geom.coordinates[i])) return false;
+    }
+    return true;
+  }
+  if (geom.type === 'MultiPolygon') {
+    return geom.coordinates.some(polyCoords => {
+      // Each polyCoords is an array of rings (exterior, interior...)
+      if (!isPointInPolygon(point, polyCoords[0])) return false;
+      for (let i = 1; i < polyCoords.length; i++) {
+        if (isPointInPolygon(point, polyCoords[i])) return false;
+      }
+      return true;
+    });
+  }
+  return false;
 }
