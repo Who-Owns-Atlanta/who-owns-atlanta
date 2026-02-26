@@ -215,30 +215,48 @@ def add_officer_edges(G, engine, entities, base_cluster_of, parcel_count_of):
     officer_keys = list(unique_officers.keys())
     global_counts = {}
     if officer_keys:
-        print(f"  Checking global SOS counts for {len(officer_keys):,} unique officers...")
-        with engine.begin() as conn:
-            # Single temp table + single query — avoids 19x create/drop/scan loop.
-            # Requires functional index: officers_upper_name_idx on (upper(trim(first_name)), upper(trim(last_name)))
-            conn.execute(text(
-                "CREATE TEMP TABLE _off_check (fn TEXT, ln TEXT) ON COMMIT DROP"
-            ))
-            for i in range(0, len(officer_keys), 5000):
-                conn.execute(
-                    text("INSERT INTO _off_check (fn, ln) VALUES (:fn, :ln)"),
-                    [{"fn": fn, "ln": ln} for fn, ln in officer_keys[i:i+5000]],
-                )
-            conn.execute(text("CREATE INDEX ON _off_check (fn, ln)"))
-            conn.execute(text("ANALYZE _off_check"))
-            res = conn.execute(text("""
-                SELECT oc.fn, oc.ln, COUNT(DISTINCT o.control_number)
-                FROM _off_check oc
-                JOIN sos.officers o
-                  ON upper(trim(o.first_name)) = oc.fn
-                 AND upper(trim(o.last_name))  = oc.ln
-                GROUP BY oc.fn, oc.ln
-            """)).fetchall()
-            for fn, ln, count in res:
-                global_counts[f"{fn} {ln}"] = count
+        organizer_keys = [(fn, ln) for (fn, ln), roles in unique_officers.items()
+                          if any(r in ('ORGANIZER', 'INCORPORATOR') for r in roles)]
+        print(f"  Checking global SOS counts for {len(organizer_keys):,} organizer/incorporator officers "
+              f"(of {len(officer_keys):,} total)...")
+        if organizer_keys:
+            with engine.begin() as conn:
+                # Use precomputed sos.officer_global_counts if available (instant lookup).
+                # Fall back to a single-query scan with the functional index otherwise.
+                has_cache = conn.execute(text("""
+                    SELECT EXISTS (
+                        SELECT 1 FROM information_schema.tables
+                        WHERE table_schema = 'sos' AND table_name = 'officer_global_counts'
+                    )
+                """)).scalar()
+                conn.execute(text(
+                    "CREATE TEMP TABLE _off_check (fn TEXT, ln TEXT) ON COMMIT DROP"
+                ))
+                for i in range(0, len(organizer_keys), 5000):
+                    conn.execute(
+                        text("INSERT INTO _off_check (fn, ln) VALUES (:fn, :ln)"),
+                        [{"fn": fn, "ln": ln} for fn, ln in organizer_keys[i:i+5000]],
+                    )
+                if has_cache:
+                    res = conn.execute(text("""
+                        SELECT oc.fn, oc.ln, ogc.global_count
+                        FROM _off_check oc
+                        JOIN sos.officer_global_counts ogc USING (fn, ln)
+                    """)).fetchall()
+                else:
+                    print("  (sos.officer_global_counts not found — falling back to live scan, slow)")
+                    conn.execute(text("CREATE INDEX ON _off_check (fn, ln)"))
+                    conn.execute(text("ANALYZE _off_check"))
+                    res = conn.execute(text("""
+                        SELECT oc.fn, oc.ln, COUNT(DISTINCT o.control_number)
+                        FROM _off_check oc
+                        JOIN sos.officers o
+                          ON upper(trim(o.first_name)) = oc.fn
+                         AND upper(trim(o.last_name))  = oc.ln
+                        GROUP BY oc.fn, oc.ln
+                    """)).fetchall()
+                for fn, ln, count in res:
+                    global_counts[f"{fn} {ln}"] = count
 
     valid_items = []
     for key, eids in off_idx.items():
