@@ -35,6 +35,10 @@ body > footer {
   max-width: none;
 }
 
+body > main {
+  padding: 0;
+}
+
 /* ── Header ─────────────────────────────────────────────────── */
 body > header {
   flex: 0 0 auto;
