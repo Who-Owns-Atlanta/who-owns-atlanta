@@ -985,6 +985,20 @@ def build_cluster_related(linkable_agents, agent_clusters, address_groups=None):
     return cluster_related, cluster_connection_count
 
 
+def write_if_changed(path, content):
+    """Write content to path only if it differs from current content."""
+    path = Path(path)
+    if path.exists():
+        try:
+            if path.read_text() == content:
+                return False
+        except Exception:
+            pass
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content)
+    return True
+
+
 # ---------------------------------------------------------------------------
 # Build
 # ---------------------------------------------------------------------------
@@ -1012,8 +1026,7 @@ def build_leaderboard(conn, output_dir, cluster_connection_count=None):
     html = render_leaderboard(rows)
     for dest in [output_dir / "l" / "index.html",
                  output_dir / "leaderboard" / "index.html"]:
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_text(html)
+        write_if_changed(dest, html)
     print(f"done ({len(rows)} rows)")
 
 def build_agent_pages(linkable_agents, agent_clusters, output_dir):
@@ -1037,8 +1050,7 @@ def build_agent_pages(linkable_agents, agent_clusters, output_dir):
             clusters=clusters,
         )
         out_path = output_dir / "agent" / str(ra_id) / "index.html"
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(html)
+        write_if_changed(out_path, html)
         written += 1
         index_rows.append({
             "ra_id": ra_id,
@@ -1056,8 +1068,7 @@ def build_agent_pages(linkable_agents, agent_clusters, output_dir):
     )
     for dest in [output_dir / "l" / "agents" / "index.html",
                  output_dir / "agents" / "index.html"]:
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_text(index_html)
+        write_if_changed(dest, index_html)
 
     return written
 
@@ -1094,8 +1105,7 @@ def _build_geo_section(env, area_rows, output_dir, url_base, geo_type_label, are
             area_total_parcels=area_total,
         )
         out_path = output_dir / slug / "index.html"
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(html)
+        write_if_changed(out_path, html)
         written += 1
         index_rows.append({
             "area": display,
@@ -1115,8 +1125,7 @@ def _build_geo_section(env, area_rows, output_dir, url_base, geo_type_label, are
         total=len(index_rows),
     )
     idx_path = output_dir / "index.html"
-    idx_path.parent.mkdir(parents=True, exist_ok=True)
-    idx_path.write_text(index_html)
+    write_if_changed(idx_path, index_html)
 
     return written
 
@@ -1191,8 +1200,7 @@ def build_geo_leaderboard_pages(conn, output_dir):
             area_total_parcels=county_total,
         )
         out_path = base / county / "index.html"
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(html)
+        write_if_changed(out_path, html)
     print(f"{len(county_data)} pages")
 
 
@@ -1222,8 +1230,7 @@ def worker(args):
                 neighborhoods = nbhd_map.get(cid, [])
                 html = render_owner(cid, stats, parcels, county_breakdown, sos_data, neighborhoods, linkable_agent_ids, cluster_related)
                 out_path = output_dir / "owner" / str(cid) / "index.html"
-                out_path.parent.mkdir(parents=True, exist_ok=True)
-                out_path.write_text(html)
+                write_if_changed(out_path, html)
                 written += 1
     finally:
         conn.close()
