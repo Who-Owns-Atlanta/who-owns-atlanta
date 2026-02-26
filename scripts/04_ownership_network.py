@@ -12,11 +12,20 @@ engine = create_engine(DB_URL)
 NAME_ENTROPY_LIMIT = 100
 
 # Skip addresses if shared by many entities (mailbox centers, office parks)
-# We check this at the STREET level (ignoring Suite/Unit)
-STREET_ENTITY_LIMIT = 50
+# Lowered from 50 to 30 to prevent builder-to-buyer bridges while keeping legitimate operators
+STREET_ENTITY_LIMIT = 30
+
+# Known corporate developer keywords to trigger the builder-buyer heuristic
+BUILDER_KEYWORDS = {'HORTON', 'BROCK', 'PULTE', 'LENNAR', 'CENTURY', 'BEAZER', 'ASHTON', 'MERITAGE', 'TOLL', 'KB HOME'}
 
 # Skip city/zip-only addresses (PO Box artifacts from libpostal stripping box numbers)
 CITY_ZIP_ONLY = re.compile(r'^[A-Z]+(\s+[A-Z]+)*\s+[A-Z]{2}\s+\d{5}(-\d+)?$')
+
+def is_builder(name: str) -> bool:
+    """Check if owner name contains known builder keywords."""
+    if not name: return False
+    n = name.upper()
+    return any(k in n for k in BUILDER_KEYWORDS)
 
 def normalize_street(addr: str) -> str:
     """Strip Suite/Unit/Apt from address to find the base building."""
@@ -93,10 +102,12 @@ def build_network(engine):
     addr_idx = {}
     street_counts = {}
     is_inst = {}
+    eid_to_name = {}
 
     for eid, name, addr, inst in entities:
         G.add_node(eid)
         is_inst[eid] = inst
+        eid_to_name[eid] = name
         if inst: continue # Skip indexing for institutional bridges
         
         name_idx.setdefault(name, []).append(eid)
@@ -133,12 +144,13 @@ def build_network(engine):
         for chunk in results:
             G.add_edges_from(chunk, rel="same_name")
     
-    # 2. Address Edges (with Street-Level Gating)
+    # 2. Address Edges (with Street-Level Gating and Builder-Buyer Heuristic)
     print(f"Filtering addresses by street entropy (Limit: {STREET_ENTITY_LIMIT})...")
     valid_addr_items = []
     skipped_addr_cityzip = 0
     skipped_addr_hub = 0
     skipped_addr_junk = 0
+    skipped_addr_builder = 0
 
     for addr, eids in addr_idx.items():
         if CITY_ZIP_ONLY.match(addr):
@@ -154,9 +166,15 @@ def build_network(engine):
             skipped_addr_hub += 1
             continue
             
+        # Builder-Buyer Heuristic:
+        # If an address contains a known builder and 5+ other entities, it's likely a residential development hub.
+        if any(is_builder(eid_to_name.get(eid)) for eid in eids) and len(eids) >= 5:
+            skipped_addr_builder += 1
+            continue
+
         valid_addr_items.append((addr, eids))
 
-    print(f"  Connecting by shared address (skipped {skipped_addr_cityzip:,} city/zip, {skipped_addr_hub:,} hubs, {skipped_addr_junk:,} junk)...")
+    print(f"  Connecting by shared address (skipped {skipped_addr_cityzip:,} city/zip, {skipped_addr_hub:,} hubs, {skipped_addr_junk:,} junk, {skipped_addr_builder:,} builder hubs)...")
     with Pool(cpu_count()) as pool:
         results = pool.map(_get_edges, valid_addr_items)
         for chunk in results:

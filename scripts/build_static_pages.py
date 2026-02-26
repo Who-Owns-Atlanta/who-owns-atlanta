@@ -593,6 +593,37 @@ def render_owner(cluster_id, stats, parcels, county_breakdown, sos_data, neighbo
 # DB queries
 # ---------------------------------------------------------------------------
 
+def ensure_materialized_views(conn):
+    """Check if required materialized views exist; if not, run the creation script."""
+    required_views = ["mv_leaderboard", "mv_cluster_stats"]
+    missing = []
+    with conn.cursor() as cur:
+        cur.execute("SELECT matviewname FROM pg_matviews")
+        existing = [r[0] for r in cur.fetchall()]
+        for view in required_views:
+            if view not in existing:
+                missing.append(view)
+    
+    if missing:
+        print(f"Materialized views missing ({', '.join(missing)}). Recreating all...")
+        sql_path = Path(__file__).parent / "sql" / "04_create_materialized_views.sql"
+        if not sql_path.exists():
+            print(f"Error: SQL script not found at {sql_path}")
+            sys.exit(1)
+        
+        # We use PGPASSWORD environment variable since we're calling psql via shell
+        # but we can also just execute the SQL via the current connection.
+        # Executing via connection is cleaner if we don't mind the wait.
+        with open(sql_path, "r") as f:
+            sql = f.read()
+        
+        # The SQL file has multiple statements, some might fail if they exist
+        # but create_materialized_views.sql uses DROP ... IF EXISTS.
+        with conn.cursor() as cur:
+            cur.execute(sql)
+        conn.commit()
+        print("Materialized views recreated.")
+
 def fetch_leaderboard(conn):
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         cur.execute("""
@@ -1253,6 +1284,8 @@ def main():
 
     conn = psycopg2.connect(DB_URL)
     try:
+        ensure_materialized_views(conn)
+
         # Fetch linkable agent data once — used by both agent pages and owner pages
         print("Fetching linkable registered agents...", end=" ", flush=True)
         linkable_agents = fetch_linkable_agent_ids(conn)

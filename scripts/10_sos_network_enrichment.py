@@ -16,7 +16,11 @@ MAX_SOS_ADDR_ENTITIES  = 100  # skip SOS address if this many entities share it
 MAX_MERGE_PARCELS      = 10000
 
 # Skip addresses (Pass 1 & Pass 2) if shared by many entities at the street level
-STREET_ENTITY_LIMIT    = 50
+# Lowered from 50 to 30 to prevent builder-to-buyer bridges
+STREET_ENTITY_LIMIT    = 30
+
+# Known corporate developer keywords to trigger the builder-buyer heuristic
+BUILDER_KEYWORDS = {'HORTON', 'BROCK', 'PULTE', 'LENNAR', 'CENTURY', 'BEAZER', 'ASHTON', 'MERITAGE', 'TOLL', 'KB HOME'}
 
 # Expanded Professional Blacklist
 COMMERCIAL_RA_SKIP = {
@@ -48,6 +52,12 @@ COMMERCIAL_RA_SKIP = {
 _STRIP_PUNCT = re.compile(r'[^A-Z0-9 ]')
 _CITY_ZIP_ONLY = re.compile(r'^[A-Z]+(\s+[A-Z]+)*\s+[A-Z]{2}\s+\d{5}(-\d+)?$')
 
+def is_builder(name: str) -> bool:
+    """Check if owner name contains known builder keywords."""
+    if not name: return False
+    n = name.upper()
+    return any(k in n for k in BUILDER_KEYWORDS)
+
 def normalize_street(addr: str) -> str:
     """Strip Suite/Unit/Apt from address to find the base building."""
     if not addr: return ""
@@ -78,11 +88,13 @@ def build_base_graph(entities):
     name_idx = {}
     addr_idx = {}
     street_counts = {}
+    eid_to_name = {}
 
     for row in entities:
         eid, name, addr, count = row[0], row[1], row[2], row[3]
         inst = row[9]
         G.add_node(eid)
+        eid_to_name[eid] = name
         if inst: continue
         
         name_idx.setdefault(name, []).append(eid)
@@ -97,14 +109,24 @@ def build_base_graph(entities):
                 for j in range(i + 1, len(eids)):
                     G.add_edge(eids[i], eids[j], rel="same_name")
 
+    skipped_addr_builder = 0
     for addr, eids in addr_idx.items():
         if _CITY_ZIP_ONLY.match(addr): continue
         street = normalize_street(addr)
         if street_counts.get(street, 0) > STREET_ENTITY_LIMIT: continue
+        
+        # Builder-Buyer Heuristic
+        if any(is_builder(eid_to_name.get(eid)) for eid in eids) and len(eids) >= 5:
+            skipped_addr_builder += 1
+            continue
+
         if len(eids) > 1:
             for i in range(len(eids)):
                 for j in range(i + 1, len(eids)):
                     G.add_edge(eids[i], eids[j], rel="same_addr")
+    
+    if skipped_addr_builder:
+        print(f"  Skipped {skipped_addr_builder:,} builder-buyer address hubs")
     return G
 
 def compute_base_clusters(G, entities):
@@ -171,7 +193,7 @@ def add_officer_edges(G, engine, entities, base_cluster_of, parcel_count_of):
         for i in range(0, len(cns), 5000):
             conn.execute(text("INSERT INTO _enrich_cns VALUES (:cn)"), [{"cn": cn} for cn in cns[i:i+5000]])
         rows = conn.execute(text("""
-            SELECT o.control_number, upper(trim(o.first_name)), upper(trim(o.last_name))
+            SELECT o.control_number, upper(trim(o.first_name)), upper(trim(o.last_name)), upper(trim(o.description))
             FROM sos.officers o JOIN _enrich_cns ec ON ec.control_number = o.control_number
             WHERE o.first_name IS NOT NULL AND trim(o.first_name) <> ''
               AND o.last_name IS NOT NULL AND trim(o.last_name) <> ''
@@ -179,12 +201,60 @@ def add_officer_edges(G, engine, entities, base_cluster_of, parcel_count_of):
 
     off_idx = {}
     cn_to_eids = {}
+    unique_officers = {} # (FN, LN) -> set(roles)
+    
     for eid, cn in enriched.items(): cn_to_eids.setdefault(cn, []).append(eid)
-    for cn, fn, ln in rows:
+    for cn, fn, ln, desc in rows:
+        key = f"{fn} {ln}"
         if fn and ln and len(ln) > 1:
-            off_idx.setdefault(f"{fn} {ln}", []).extend(cn_to_eids.get(cn, []))
+            off_idx.setdefault(key, []).extend(cn_to_eids.get(cn, []))
+            unique_officers.setdefault((fn, ln), set()).add(desc)
 
-    valid_items = [(k, list(set(v))) for k, v in off_idx.items() if len(set(v)) <= MAX_OFFICER_ENTITIES]
+    # Global Frequency Check for Organizers
+    # We only care about officers that are in our dataset first
+    officer_keys = list(unique_officers.keys())
+    global_counts = {}
+    if officer_keys:
+        print(f"  Checking global SOS counts for {len(officer_keys):,} unique officers...")
+        with engine.begin() as conn:
+            # Single temp table + single query — avoids 19x create/drop/scan loop.
+            # Requires functional index: officers_upper_name_idx on (upper(trim(first_name)), upper(trim(last_name)))
+            conn.execute(text(
+                "CREATE TEMP TABLE _off_check (fn TEXT, ln TEXT) ON COMMIT DROP"
+            ))
+            for i in range(0, len(officer_keys), 5000):
+                conn.execute(
+                    text("INSERT INTO _off_check (fn, ln) VALUES (:fn, :ln)"),
+                    [{"fn": fn, "ln": ln} for fn, ln in officer_keys[i:i+5000]],
+                )
+            conn.execute(text("CREATE INDEX ON _off_check (fn, ln)"))
+            conn.execute(text("ANALYZE _off_check"))
+            res = conn.execute(text("""
+                SELECT oc.fn, oc.ln, COUNT(DISTINCT o.control_number)
+                FROM _off_check oc
+                JOIN sos.officers o
+                  ON upper(trim(o.first_name)) = oc.fn
+                 AND upper(trim(o.last_name))  = oc.ln
+                GROUP BY oc.fn, oc.ln
+            """)).fetchall()
+            for fn, ln, count in res:
+                global_counts[f"{fn} {ln}"] = count
+
+    valid_items = []
+    for key, eids in off_idx.items():
+        unique_eids = list(set(eids))
+        if len(unique_eids) > MAX_OFFICER_ENTITIES: continue
+        
+        # Role + Global Frequency Filter
+        fn, ln = key.split(' ', 1)
+        roles = unique_officers.get((fn, ln), set())
+        g_count = global_counts.get(key, 0)
+        
+        # If it's a professional organizer with > 500 companies globally, skip
+        if any(r in ('ORGANIZER', 'INCORPORATOR') for r in roles) and g_count > 500:
+            continue
+            
+        valid_items.append((key, unique_eids))
     added = 0
     with Pool(cpu_count()) as pool:
         results = pool.map(_get_sos_edges, [(valid_items[i:i+500], base_cluster_of, parcel_count_of) for i in range(0, len(valid_items), 500)])
@@ -213,13 +283,56 @@ def add_sos_addr_edges(G, engine, entities, base_cluster_of, parcel_count_of):
         """)).fetchall()
 
     addr_idx = {}
+    street_counts = {}
     cn_to_eids = {}
     for eid, cn in enriched.items(): cn_to_eids.setdefault(cn, []).append(eid)
+    
     for cn, street, unit, city, state in rows:
         key = f"{street} {unit} {city} {state}".strip()
-        addr_idx.setdefault(key, []).extend(cn_to_eids.get(cn, []))
+        eids = cn_to_eids.get(cn, [])
+        addr_idx.setdefault(key, []).extend(eids)
+        
+        # Street-level normalization for building hub detection
+        norm_st = normalize_street(street)
+        if norm_st:
+            street_counts[norm_st] = street_counts.get(norm_st, 0) + len(eids)
 
-    valid_items = [(k, list(set(v))) for k, v in addr_idx.items() if len(set(v)) <= MAX_SOS_ADDR_ENTITIES]
+    valid_items = []
+    for key, eids in addr_idx.items():
+        unique_eids = list(set(eids))
+        if len(unique_eids) > MAX_SOS_ADDR_ENTITIES: continue
+        
+        # Check building-level hub
+        street_part = key.split(' ')[0:2] # Crude but normalize_street is better
+        # We already have street_counts from the 'street' variable in the loop
+        # But we need to map the 'key' back to its normalized street
+        # Let's re-extract it or store it.
+        # Actually, let's just use the 'street' from the 'rows' again.
+        
+    # Redo the loop slightly more cleanly to keep track of street -> key mapping
+    addr_idx = {}
+    key_to_street = {}
+    street_counts = {}
+    for cn, street, unit, city, state in rows:
+        key = f"{street} {unit} {city} {state}".strip()
+        eids = cn_to_eids.get(cn, [])
+        addr_idx.setdefault(key, []).extend(eids)
+        
+        norm_st = normalize_street(street)
+        key_to_street[key] = norm_st
+        if norm_st:
+            street_counts[norm_st] = street_counts.get(norm_st, 0) + len(eids)
+
+    valid_items = []
+    for key, eids in addr_idx.items():
+        unique_eids = list(set(eids))
+        if len(unique_eids) > MAX_SOS_ADDR_ENTITIES: continue
+        
+        norm_st = key_to_street.get(key)
+        if norm_st and street_counts.get(norm_st, 0) > STREET_ENTITY_LIMIT:
+            continue
+            
+        valid_items.append((key, unique_eids))
     added = 0
     with Pool(cpu_count()) as pool:
         results = pool.map(_get_sos_edges, [(valid_items[i:i+500], base_cluster_of, parcel_count_of) for i in range(0, len(valid_items), 500)])
