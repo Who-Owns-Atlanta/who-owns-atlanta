@@ -16,10 +16,18 @@ SELECT
     ap."FULLADDR"   AS fulladdr,
     ap."LAT"        AS lat,
     ap."LON"        AS lon,
-    fp.parcelid     AS parcel_id,
+    f.parcelid      AS parcel_id,
     'fulton'::text  AS county
 FROM gis."Address_Point" ap
-JOIN fulton_parcels fp ON ST_Within(ap.geometry, fp.geometry)
+CROSS JOIN LATERAL (
+    SELECT fp.parcelid
+    FROM fulton_parcels fp
+    WHERE ST_DWithin(ap.geometry, fp.geometry, 0.0001)
+    ORDER BY 
+        (CASE WHEN fp.addrunit IS NOT NULL AND fp.addrunit <> '' AND ap."FULLADDR" ILIKE '%' || fp.addrunit || '%' THEN 1 ELSE 0 END) DESC,
+        ST_Distance(ap.geometry, fp.geometry) ASC
+    LIMIT 1
+) f
 WHERE ap."FULLADDR" IS NOT NULL AND ap."FULLADDR" <> ''
 
 UNION ALL
@@ -28,10 +36,21 @@ SELECT
     ap."FULLADDR"                              AS fulladdr,
     ap."LAT"                                   AS lat,
     ap."LON"                                   AS lon,
-    COALESCE(dp.parcelid, dp.lowparcelid)      AS parcel_id,
+    d.parcel_id                                AS parcel_id,
     'dekalb'::text                             AS county
 FROM gis."Address_Point" ap
-JOIN dekalb_parcels dp ON ST_Within(ap.geometry, dp.geometry)
+CROSS JOIN LATERAL (
+    SELECT COALESCE(dp.parcelid, dp.lowparcelid) as parcel_id
+    FROM dekalb_parcels dp
+    WHERE ST_DWithin(ap.geometry, dp.geometry, 0.0001)
+    ORDER BY 
+        (CASE 
+            WHEN (dp.unit IS NOT NULL AND dp.unit <> '' AND ap."FULLADDR" ILIKE '%' || dp.unit || '%') 
+              OR (dp.unit_no IS NOT NULL AND dp.unit_no <> '' AND ap."FULLADDR" ILIKE '%' || dp.unit_no || '%') 
+            THEN 1 ELSE 0 END) DESC,
+        ST_Distance(ap.geometry, dp.geometry) ASC
+    LIMIT 1
+) d
 WHERE ap."FULLADDR" IS NOT NULL AND ap."FULLADDR" <> '';
 
 CREATE INDEX idx_mv_address_search_trgm
