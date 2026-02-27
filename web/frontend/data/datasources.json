@@ -13,6 +13,13 @@
     "last_loaded": "2026-02-13",
     "url": "https://dekalbinsights-dekalbgis.opendata.arcgis.com/datasets/731f52734f2346d6b939ff7337fcfaa2_0/"
   },
+  "atlanta_address_point": {
+    "name": "City of Atlanta GIS — Address_Point",
+    "description": "Addresses assigned to Tax Parcels",
+    "admin_date": "2025-02-05",
+    "last_loaded": "2025-02-13",
+    "url": "https://dcp-coaplangis.opendata.arcgis.com/"
+  },
   "atlanta_gis_neighborhoods": {
     "name": "City of Atlanta GIS — Neighborhoods",
     "description": "Neighborhood boundaries (spatial join to parcels)",
