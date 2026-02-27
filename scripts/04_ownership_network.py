@@ -18,6 +18,15 @@ STREET_ENTITY_LIMIT = 30
 # Known corporate developer keywords to trigger the builder-buyer heuristic
 BUILDER_KEYWORDS = {'HORTON', 'BROCK', 'PULTE', 'LENNAR', 'CENTURY', 'BEAZER', 'ASHTON', 'MERITAGE', 'TOLL', 'KB HOME'}
 
+# Addresses (matched as prefix of normalize_street output) that must never create
+# address edges — multi-firm hub offices where unrelated institutional landlords
+# happen to share a mailing address.
+# Format: use the street number + name only (no suite, city, state, zip).
+ADDRESS_STREET_BLOCKLIST = {
+    '3505 KOGER BLVD',     # Duluth GA — Pretium (FYR SFR BORROWER) + Amherst (HOME SFR BORROWER)
+    '5100 TAMARIND REEF',  # Christiansted USVI — same two firms share a USVI trust address
+}
+
 # Skip city/zip-only addresses (PO Box artifacts from libpostal stripping box numbers)
 CITY_ZIP_ONLY = re.compile(r'^[A-Z]+(\s+[A-Z]+)*\s+[A-Z]{2}\s+\d{5}(-\d+)?$')
 
@@ -162,10 +171,14 @@ def build_network(engine):
             continue
 
         street = normalize_street(addr)
+        if any(street.upper().startswith(b) for b in ADDRESS_STREET_BLOCKLIST):
+            skipped_addr_hub += 1
+            continue
+
         if street_counts.get(street, 0) > STREET_ENTITY_LIMIT:
             skipped_addr_hub += 1
             continue
-            
+
         # Builder-Buyer Heuristic:
         # If an address contains a known builder and 5+ other entities, it's likely a residential development hub.
         if any(is_builder(eid_to_name.get(eid)) for eid in eids) and len(eids) >= 5:

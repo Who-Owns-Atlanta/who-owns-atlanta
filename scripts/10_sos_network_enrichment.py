@@ -22,6 +22,13 @@ STREET_ENTITY_LIMIT    = 30
 # Known corporate developer keywords to trigger the builder-buyer heuristic
 BUILDER_KEYWORDS = {'HORTON', 'BROCK', 'PULTE', 'LENNAR', 'CENTURY', 'BEAZER', 'ASHTON', 'MERITAGE', 'TOLL', 'KB HOME'}
 
+# Addresses (prefix of normalize_street output) that must never create address edges.
+# Kept in sync with scripts/04_ownership_network.py ADDRESS_STREET_BLOCKLIST.
+ADDRESS_STREET_BLOCKLIST = {
+    '3505 KOGER BLVD',     # Duluth GA — Pretium (FYR SFR BORROWER) + Amherst (HOME SFR BORROWER)
+    '5100 TAMARIND REEF',  # Christiansted USVI — same two firms share a USVI trust address
+}
+
 # Expanded Professional Blacklist
 COMMERCIAL_RA_SKIP = {
     "CORPORATION SERVICE COMPANY", "C T CORPORATION SYSTEM", "CT CORPORATION SYSTEM",
@@ -113,8 +120,9 @@ def build_base_graph(entities):
     for addr, eids in addr_idx.items():
         if _CITY_ZIP_ONLY.match(addr): continue
         street = normalize_street(addr)
+        if any(street.upper().startswith(b) for b in ADDRESS_STREET_BLOCKLIST): continue
         if street_counts.get(street, 0) > STREET_ENTITY_LIMIT: continue
-        
+
         # Builder-Buyer Heuristic
         if any(is_builder(eid_to_name.get(eid)) for eid in eids) and len(eids) >= 5:
             skipped_addr_builder += 1

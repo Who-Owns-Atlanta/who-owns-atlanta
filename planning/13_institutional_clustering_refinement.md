@@ -52,17 +52,31 @@ Rather than modifying scripts 03/04/10, a new post-processing script was added:
 - Cluster 77: MILE HIGH BORROWER (52 parcels, Denver-based) correctly split off → new cluster 468331
 - Cluster 3 (Pretium/Amherst over-merge): **NOT split** — see Known Limitation below
 
-**Known Limitation — Cluster 3 (Amherst + Pretium false merge):**
-- Pretium's FYR SFR BORROWER and Amherst's HOME SFR BORROWER both use 3505 Koger Blvd
-  Suite 400, Duluth GA 30096 as their Georgia mailing address (same physical office)
-- This creates a genuine address edge in G_sub that can't be severed algorithmically
-- Additionally, FYR SFR BORROWER and HOME SFR BORROWER share "SFR" + "BORROWER" tokens
-  (50% Jaccard similarity), so name-based meta-graph analysis can't separate them
-- Fixing this would require either: (a) hardcoded firm knowledge, or (b) the
-  "Corporate Hub Blocklist" approach from the original plan (blocking Koger Blvd as a hub)
+**Pass B — updated results after ADDRESS_STREET_BLOCKLIST fix (2026-02-26):**
+- Cluster 77: MILE HIGH BORROWER (52 parcels) split off ✅
+- Cluster 126 (Pretium FYR SFR): split from Amherst → **540 parcels standalone** ✅
+- Amherst (BAF ASSETS, ALTO ASSET, etc.) → **cluster 3, 492 parcels** ✅
+
+**Root cause of Pretium/Amherst merge — two shared addresses:**
+1. `3505 KOGER BLVD STE 400 DULUTH GA 30096` — same Duluth GA law/servicer office
+2. `5100 TAMARIND REEF CHRISTIANSTED 00820` — same USVI trust address
+
+**Fix: `ADDRESS_STREET_BLOCKLIST` in scripts 04 and 10**
+Both scripts now carry a small explicit blocklist of address prefixes that must never
+create address edges. Added `3505 KOGER BLVD` and `5100 TAMARIND REEF`.
+
+## Final Results (2026-02-26)
+| Entity | Cluster | Parcels |
+|--------|---------|---------|
+| Invitation Homes (all series) | 8 | 3,315 |
+| Progress Residential | 77 | 718 |
+| Amherst Holdings (BAF ASSETS, ALTO ASSET, etc.) | 3 | 492 |
+| Pretium Partners (FYR SFR BORROWER) | 126 | 540 |
+| Largest cluster overall | 8 | 3,315 |
+
+All benchmarks met: no cluster > 5,000; all four major firms in their own clusters.
 
 ## Execution Steps
 1. [x] Implement `scripts/10b_cluster_refinement.py` (Pass A + Pass B)
-2. [ ] Optional: Update `scripts/04_ownership_network.py` to add Koger Blvd to BUILDER_KEYWORDS
-       or street hub list — this would prevent the Pretium/Amherst merge at source
-3. [ ] Optional: Lower base `STREET_ENTITY_LIMIT` for known corporate hub addresses
+2. [x] Add `ADDRESS_STREET_BLOCKLIST` to `scripts/04_ownership_network.py` and
+       `scripts/10_sos_network_enrichment.py` (Koger Blvd + Tamarind Reef)
