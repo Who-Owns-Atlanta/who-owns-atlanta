@@ -114,6 +114,7 @@ class LocateControl {
 map.addControl(new LocateControl(), 'top-left');
 
 let selectedMarker  = null;
+let searchMarker    = null;
 let activeClusterId = null;   // cluster currently in "focus" mode
 let clusterMarkers  = [];     // teardrop pins placed for each cluster parcel (z13+ only)
 let clusterParcels  = [];     // parcel list for the active cluster (for zoom-toggling markers)
@@ -562,17 +563,24 @@ function selectResult(result) {
   searchInput.value = result.fulladdr;
   hideResults();
   map.flyTo({ center: [result.lon, result.lat], zoom: 16, duration: 800 });
-  placeMarker(result.lon, result.lat);
+  placeSearchMarker(result.lon, result.lat);
   loadParcel(result.county, result.parcel_id);
 }
 
 // ---------------------------------------------------------------------------
-// Marker
+// Markers
 // ---------------------------------------------------------------------------
+
+function placeSearchMarker(lon, lat) {
+  if (searchMarker) searchMarker.remove();
+  searchMarker = new maplibregl.Marker({ color: '#1d4ed8' }) // Dark blue for address searches
+    .setLngLat([lon, lat])
+    .addTo(map);
+}
 
 function placeMarker(lon, lat) {
   if (selectedMarker) selectedMarker.remove();
-  selectedMarker = new maplibregl.Marker({ color: '#2563eb' })
+  selectedMarker = new maplibregl.Marker({ color: '#2563eb' }) // Brighter blue for specific parcel selection
     .setLngLat([lon, lat])
     .addTo(map);
 }
@@ -776,6 +784,11 @@ function renderParcelPanel(p) {
   } else {
     ownerProfileLink.hidden = true;
   }
+
+  // Marker & Highlight
+  placeMarker(p.lon, p.lat);
+  highlightParcel(p.parcel_id);
+  showPanel();
 }
 
 function renderParcelLinks(p) {
@@ -817,7 +830,12 @@ function renderParcelLinks(p) {
 }
 
 function showPanel()  { detailPanel.hidden = false; }
-function closePanel() { detailPanel.hidden = true; highlightParcel(null); highlightCluster(null); }
+function closePanel() {
+  detailPanel.hidden = true;
+  if (selectedMarker) { selectedMarker.remove(); selectedMarker = null; }
+  highlightParcel(null);
+  highlightCluster(null);
+}
 
 // ---------------------------------------------------------------------------
 // Area filter — neighborhood / NPU / council district

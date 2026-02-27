@@ -93,7 +93,9 @@ def parcel(county: str, parcel_id: str, response: Response):
                         NULL::numeric       AS appraised_value,
                         NULL::text          AS zoning,
                         NULL::text          AS historic_district,
-                        NULL::text          AS overlay_district
+                        NULL::text          AS overlay_district,
+                        ST_Y(ST_Centroid(geometry)) AS lat,
+                        ST_X(ST_Centroid(geometry)) AS lon
                     FROM fulton_parcels
                     WHERE parcelid = %(pid)s
                 """, {"pid": parcel_id})
@@ -124,7 +126,9 @@ def parcel(county: str, parcel_id: str, response: Response):
                         totapr1                             AS appraised_value,
                         NULLIF(TRIM(zoning), '')            AS zoning,
                         NULLIF(TRIM(histdesc), '')          AS historic_district,
-                        NULLIF(TRIM(ovldesc), '')           AS overlay_district
+                        NULLIF(TRIM(ovldesc), '')           AS overlay_district,
+                        ST_Y(ST_Centroid(geometry)) AS lat,
+                        ST_X(ST_Centroid(geometry)) AS lon
                     FROM dekalb_parcels
                     WHERE parcelid = %(pid)s OR lowparcelid = %(pid)s
                     LIMIT 1
