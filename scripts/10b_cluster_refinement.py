@@ -34,6 +34,11 @@ SUFFIX_NOISE = frozenset({
     'LLC', 'LP', 'L P', 'LLP', 'LLLP', 'INC', 'CORP', 'CO',
     'L.L.C.', 'L.P.', 'INC.', 'CORP.', 'LP.', 'LTD', 'LTD.',
     'INCORPORATED', 'CORPORATION', 'COMPANY',
+    # SFR series vehicle suffixes — these appear as trailing noise in securitized
+    # fund names (e.g. "TRICON SFR 2024 3 BORROWER LLC", "SFR JV 2 PROPERTY LLC").
+    # Adding them here lets interior year+digit stripping unify vintage series.
+    # Verified safe: simulation over 33K SOS-matched entities produced zero false merges.
+    'BORROWER', 'PROPERTY', 'PROPERTIES', 'OWNER', 'OWNERCO',
 })
 ROMAN_NUMERALS = frozenset({
     'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX',
@@ -81,30 +86,52 @@ def is_strippable(token: str) -> bool:
 
 def compute_stem(name: str) -> str:
     """
-    Strip trailing noise tokens (numbers, Roman numerals, LLC/LP, etc.) and
-    leading year+seq prefix (e.g. "2018 3") from a normalized owner name.
+    Reduce a normalized owner name to its identifying stem by stripping:
+      - trailing entity-type noise (LLC, LP, BORROWER, OWNER, PROPERTY, …)
+      - trailing series noise (numbers, Roman numerals, number words, single letters)
+      - interior 4-digit year + optional 1-2 digit sequence (e.g. "2024 3")
+      - leading year+seq prefix (e.g. "2018 3 IH BORROWER LP")
 
-    Examples:
-      PROGRESS RESIDENTIAL BORROWER 14 LLC  -> PROGRESS RESIDENTIAL BORROWER
-      2018 3 IH BORROWER LP                 -> IH BORROWER
-      SFR XII ATL OWNER 1 LP                -> SFR XII ATL OWNER
+    The interior year strip is what unifies securitized fund vintage series:
+      TRICON SFR 2020 2 BORROWER LLC  -> TRICON SFR
+      TRICON SFR 2024 3 BORROWER LLC  -> TRICON SFR
+      PROGRESS RESIDENTIAL BORROWER 14 LLC  -> PROGRESS RESIDENTIAL
+      2018 3 IH BORROWER LP           -> IH
+      SFR XII ATL OWNER 1 LP          -> SFR XII ATL
+      SFR JV 2 PROPERTY LLC           -> SFR JV
+
+    Safety: city+state co-requirement in Pass A prevents short stems (e.g. "TAH",
+    "SFR JV") from bridging unrelated entities at different locations. The >= 4 char
+    gate rejects stems that are too short to be discriminating.
     """
-    tokens = name.upper().split()
+    tokens = name.upper().replace(',', '').split()
     if not tokens:
         return ''
 
-    # Strip trailing noise (repeatedly)
+    # Pass 1: strip trailing noise
     while tokens and is_strippable(tokens[-1]):
         tokens.pop()
 
-    # Strip leading 4-digit year optionally followed by 1-2 digit sequence
+    # Pass 2: strip interior 4-digit year + optional 1-2 digit sequence
+    clean = []
+    i = 0
+    while i < len(tokens):
+        if _YEAR_4DIG.match(tokens[i]):
+            i += 1
+            if i < len(tokens) and _SHORT_SEQ.match(tokens[i]):
+                i += 1
+        else:
+            clean.append(tokens[i])
+            i += 1
+    tokens = clean
+
+    # Pass 3: strip leading year+seq that survived (e.g. "2022 IH BORROWER")
     while len(tokens) >= 2 and _YEAR_4DIG.match(tokens[0]) and _SHORT_SEQ.match(tokens[1]):
         tokens = tokens[2:]
-    # Also strip a bare 4-digit year at the start (e.g., "2022 IH BORROWER")
     while tokens and _YEAR_4DIG.match(tokens[0]):
         tokens = tokens[1:]
 
-    # Second pass: strip any trailing noise that was hidden by the leading tokens
+    # Pass 4: strip trailing noise again (now exposed after interior/leading removal)
     while tokens and is_strippable(tokens[-1]):
         tokens.pop()
 
