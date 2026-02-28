@@ -545,7 +545,7 @@ function renderResults(results) {
   selectedIndex = -1;
   if (!results.length) { hideResults(); return; }
 
-  results.forEach((r, i) => {
+  results.forEach((r) => {
     const li = document.createElement('li');
     li.setAttribute('role', 'option');
     li.setAttribute('aria-selected', 'false');
