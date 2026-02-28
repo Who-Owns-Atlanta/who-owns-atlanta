@@ -450,6 +450,54 @@ dl dd { margin: 0; color: var(--pico-color); }
 
 .sources-footnote:hover { color: var(--pico-primary); }
 
+/* ── Units table (condos) ───────────────────────────────────── */
+#parcel-units {
+  margin-bottom: 1rem;
+}
+
+#parcel-units summary {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--pico-color);
+  cursor: pointer;
+  padding: 0.25rem 0;
+}
+
+.units-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+  margin-top: 0.5rem;
+}
+
+.units-table th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--pico-muted-color);
+  border-bottom: 1px solid #e2e8f0;
+  padding: 0.3rem 0.4rem;
+  text-transform: uppercase;
+  font-size: 0.7rem;
+}
+
+.unit-row {
+  cursor: pointer;
+}
+
+.unit-row:hover td {
+  background: #f1f5f9;
+}
+
+.unit-row td {
+  padding: 0.4rem;
+  border-bottom: 1px solid #f1f5f9;
+  vertical-align: top;
+}
+
+.unit-row:last-child td {
+  border-bottom: none;
+}
+
 /* ── External links ─────────────────────────────────────────── */
 #parcel-links { margin-bottom: 0.75rem; }
 

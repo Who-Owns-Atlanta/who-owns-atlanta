@@ -238,9 +238,11 @@ map.on('load', () => {
     if (activeClusterId || pendingClusterId) return;
     const p = e.features[0].properties;
     if (!p.parcel_id) return;
+    const addr = escHtml(p.site_address || p.parcel_id);
+    const unitTag = p.is_condo ? ` <span class="unit-count">(${p.unit_count} units)</span>` : '';
     hoverPopup
       .setLngLat(e.lngLat)
-      .setHTML(`<div class="hover-tip"><div class="hover-address">${escHtml(p.site_address || p.parcel_id)}</div><div class="hover-owner">${escHtml(p.owner_name || '')}</div></div>`)
+      .setHTML(`<div class="hover-tip"><div class="hover-address">${addr}${unitTag}</div><div class="hover-owner">${escHtml(p.owner_name || '')}</div></div>`)
       .addTo(map);
   });
 
@@ -260,25 +262,38 @@ map.on('load', () => {
 //   amber — institutional owner cluster
 //   blue  — individual landlord with multiple properties
 
+function isCondo() {
+  return [
+    'any',
+    ['to-boolean', ['get', 'is_condo']],
+    ['>', ['to-number', ['coalesce', ['get', 'unit_count'], 0]], 1]
+  ];
+}
+
 function clusterColor() {
   return [
     'case',
+    isCondo(),                                          '#8b5cf6', // violet — condo building
     // cluster_size < 2 (single owner, or no cluster): gray
-    ['<', ['coalesce', ['get', 'cluster_size'], 0], 2], '#94a3b8',
-    ['get', 'is_corporate'],                            '#dc2626', // red   — corporate
-    ['get', 'is_institutional'],                        '#d97706', // amber — institutional
-                                                        '#3b82f6', // blue  — individual w/ portfolio
+    ['<', ['to-number', ['coalesce', ['get', 'cluster_size'], 0]], 2], '#94a3b8',
+    ['to-boolean', ['get', 'is_corporate']],            '#dc2626', // red    — corporate
+    ['to-boolean', ['get', 'is_institutional']],        '#d97706', // amber  — institutional
+                                                        '#3b82f6', // blue   — individual w/ portfolio
   ];
 }
 
 // Opacity for parcels-detail in normal mode: darker = larger portfolio.
 function detailOpacity() {
   return [
-    'step', ['coalesce', ['get', 'cluster_size'], 0],
-    0.40,        // default: 0–1 parcels (single owner, also gray)
-    2,   0.55,   //  2–9 parcels
-    10,  0.70,   // 10–49 parcels
-    50,  0.90,   // 50+ parcels
+    'case',
+    isCondo(), 0.85,
+    [
+      'step', ['to-number', ['coalesce', ['get', 'cluster_size'], 0]],
+      0.40,        // default: 0–1 parcels (single owner, also gray)
+      2,   0.55,   //  2–9 parcels
+      10,  0.70,   // 10–49 parcels
+      50,  0.90,   // 50+ parcels
+    ]
   ];
 }
 
@@ -286,8 +301,9 @@ function detailOpacity() {
 // exitClusterMode() can restore it without re-reading paint state).
 const OVERVIEW_COLOR = [
   'case',
-  ['get', 'is_corporate'],     'rgba(220, 38, 38, 0.6)',
-  ['get', 'is_institutional'], 'rgba(217, 119, 6, 0.6)',
+  isCondo(),                   'rgba(139, 92, 246, 0.8)',
+  ['to-boolean', ['get', 'is_corporate']],     'rgba(220, 38, 38, 0.6)',
+  ['to-boolean', ['get', 'is_institutional']], 'rgba(217, 119, 6, 0.6)',
   'rgba(148, 163, 184, 0.4)',
 ];
 
@@ -323,11 +339,13 @@ function updateLegend() {
       swatch('#dc2626', 'Corporate') +
       swatch('#d97706', 'Institutional') +
       swatch('#3b82f6', 'Individual portfolio') +
+      swatch('#8b5cf6', 'Condo building') +
       swatch('#94a3b8', 'Single owner');
   } else {
     legend.innerHTML =
       swatch('rgba(220,38,38,0.8)',  'Corporate') +
       swatch('rgba(217,119,6,0.8)',  'Institutional') +
+      swatch('rgba(139,92,246,0.8)', 'Condo building') +
       swatch('rgba(148,163,184,0.6)', 'Other');
   }
   legend.innerHTML += swatch(null, 'City limits', 'boundary');
@@ -595,6 +613,9 @@ const parcelBadges     = document.getElementById('parcel-badges');
 const parcelOwnerLine  = document.getElementById('parcel-owner-line');
 const parcelMeta       = document.getElementById('parcel-meta');
 const parcelMetaCity   = document.getElementById('parcel-meta-city');
+const parcelUnits      = document.getElementById('parcel-units');
+const parcelUnitsList  = document.getElementById('parcel-units-list');
+const parcelUnitsSumm  = document.getElementById('parcel-units-summary');
 const permitMeta       = document.getElementById('permit-meta');
 const parcelPermits    = document.getElementById('parcel-permits');
 const parcelLinks      = document.getElementById('parcel-links');
@@ -750,6 +771,9 @@ function renderParcelPanel(p) {
     parcelMetaCity.hidden = true;
   }
 
+  // Related units (condo building)
+  renderRelatedUnits(p);
+
   // Permits
   permitMeta.innerHTML = '';
   if (p.permit_count > 0) {
@@ -789,6 +813,32 @@ function renderParcelPanel(p) {
   placeMarker(p.lon, p.lat);
   highlightParcel(p.parcel_id);
   showPanel();
+}
+
+function renderRelatedUnits(p) {
+  const units = p.related_units || [];
+  if (units.length === 0) {
+    parcelUnits.hidden = true;
+    return;
+  }
+
+  parcelUnitsSumm.textContent = `Units in this building (${units.length + 1})`;
+  parcelUnitsList.innerHTML = units.map(u => `
+    <tr class="unit-row" data-county="${p.county}" data-pid="${u.parcel_id}">
+      <td>${escHtml(u.site_address || u.parcel_id)}</td>
+      <td>${escHtml(u.owner_name || '')}</td>
+    </tr>
+  `).join('');
+
+  // Add click handlers
+  parcelUnitsList.querySelectorAll('.unit-row').forEach(row => {
+    row.addEventListener('click', () => {
+      loadParcel(row.dataset.county, row.dataset.pid);
+    });
+  });
+
+  parcelUnits.hidden = false;
+  parcelUnits.open = false; // keep collapsed by default
 }
 
 function renderParcelLinks(p) {

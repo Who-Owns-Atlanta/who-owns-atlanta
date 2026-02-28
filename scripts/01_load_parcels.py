@@ -67,7 +67,8 @@ def create_unified_view(engine):
             WHERE 
                 classcode LIKE 'R%' OR 
                 classcode LIKE 'T%' OR 
-                (classcode LIKE 'C%' AND livunits::int > 0)
+                (classcode LIKE 'C%' AND livunits::int > 0) OR
+                lucode IN ('111', '166', '188')
 
             UNION ALL
 
@@ -94,7 +95,10 @@ def create_unified_view(engine):
             WHERE 
                 classdscrp LIKE 'R%' OR 
                 classdscrp LIKE 'T%' OR 
-                (classdscrp LIKE 'C%' AND 1=1) -- DeKalb living_units is NULL/sparse, keeping C for now
+                (classdscrp LIKE 'C%' AND 1=1) OR
+                classdscrp = 'R9' OR 
+                landuse = 'COS' OR 
+                common_area IS NOT NULL
         """))
     print("  Created parcels_unified view")
 

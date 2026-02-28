@@ -153,6 +153,39 @@ def parcel(county: str, parcel_id: str, response: Response):
             result["cluster_id"]      = oe["cluster_id"]      if has_profile else None
             result["sos_business_id"] = oe["sos_business_id"] if has_profile else None
 
+            # Related units (same building/location)
+            # Use ST_Equals on geometry to find stacked parcels.
+            # Limit to 500 to avoid massive responses for huge complexes.
+            if county == "fulton":
+                cur.execute("""
+                    SELECT 
+                        parcelid AS parcel_id,
+                        address  AS site_address,
+                        owner    AS owner_name,
+                        is_corporate,
+                        is_institutional
+                    FROM fulton_parcels
+                    WHERE ST_Equals(geometry, (SELECT geometry FROM fulton_parcels WHERE parcelid = %(pid)s))
+                      AND parcelid != %(pid)s
+                    ORDER BY address
+                    LIMIT 500
+                """, {"pid": parcel_id})
+            else:
+                cur.execute("""
+                    SELECT 
+                        parcelid    AS parcel_id,
+                        siteaddress AS site_address,
+                        ownernme1   AS owner_name,
+                        is_corporate,
+                        is_institutional
+                    FROM dekalb_parcels
+                    WHERE ST_Equals(geometry, (SELECT geometry FROM dekalb_parcels WHERE parcelid = %(pid)s))
+                      AND parcelid != %(pid)s
+                    ORDER BY siteaddress
+                    LIMIT 500
+                """, {"pid": parcel_id})
+            result["related_units"] = cur.fetchall()
+
             # Permit summary
             cur.execute("""
                 SELECT permit_count, open_count, last_action_date

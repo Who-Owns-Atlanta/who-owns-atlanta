@@ -103,6 +103,8 @@ tippecanoe \
   --layer=parcels \
   --attribute-type=is_corporate:bool \
   --attribute-type=is_institutional:bool \
+  --attribute-type=is_condo:bool \
+  --attribute-type=unit_count:int \
   --simplification=10 \
   --no-tile-size-limit \
   --no-feature-limit \
@@ -112,16 +114,29 @@ tippecanoe \
       "PG:host=$DB_HOST port=$DB_PORT dbname=$DB_NAME user=$DB_USER password=$DB_PASS" \
       -sql "
         SELECT
-            p.geometry,
-            p.parcel_id,
-            p.county,
-            p.is_corporate::int     AS is_corporate,
-            p.is_institutional::int AS is_institutional,
-            m.cluster_id,
-            m.cluster_size
-        FROM parcels_unified p
-        LEFT JOIN _tile_oe_map m
-          ON m.parcel_id = p.parcel_id AND m.county = p.county
+            geometry,
+            (ARRAY_AGG(parcel_id))[1] AS parcel_id,
+            (ARRAY_AGG(county))[1]    AS county,
+            (MAX(is_corporate::int) > 0)     AS is_corporate,
+            (MAX(is_institutional::int) > 0) AS is_institutional,
+            MAX(cluster_id)            AS cluster_id,
+            MAX(cluster_size)          AS cluster_size,
+            COUNT(*)                   AS unit_count,
+            (COUNT(*) > 1)             AS is_condo
+        FROM (
+            SELECT
+                p.geometry,
+                p.parcel_id,
+                p.county,
+                p.is_corporate,
+                p.is_institutional,
+                m.cluster_id,
+                m.cluster_size
+            FROM parcels_unified p
+            LEFT JOIN _tile_oe_map m
+              ON m.parcel_id = p.parcel_id AND m.county = p.county
+        ) sub
+        GROUP BY geometry
       " \
       -nln parcels \
       -lco COORDINATE_PRECISION=6)
@@ -142,6 +157,8 @@ tippecanoe \
   --layer=parcels \
   --attribute-type=is_corporate:bool \
   --attribute-type=is_institutional:bool \
+  --attribute-type=is_condo:bool \
+  --attribute-type=unit_count:int \
   --no-tile-size-limit \
   --no-feature-limit \
   --quiet \
@@ -150,18 +167,33 @@ tippecanoe \
       "PG:host=$DB_HOST port=$DB_PORT dbname=$DB_NAME user=$DB_USER password=$DB_PASS" \
       -sql "
         SELECT
-            p.geometry,
-            p.parcel_id,
-            p.county,
-            p.is_corporate::int     AS is_corporate,
-            p.is_institutional::int AS is_institutional,
-            m.cluster_id,
-            m.cluster_size,
-            p.site_address,
-            p.owner_name
-        FROM parcels_unified p
-        LEFT JOIN _tile_oe_map m
-          ON m.parcel_id = p.parcel_id AND m.county = p.county
+            geometry,
+            (ARRAY_AGG(parcel_id))[1] AS parcel_id,
+            (ARRAY_AGG(county))[1]    AS county,
+            MAX(is_corporate::int)     AS is_corporate,
+            MAX(is_institutional::int) AS is_institutional,
+            MAX(cluster_id)            AS cluster_id,
+            MAX(cluster_size)          AS cluster_size,
+            (ARRAY_AGG(site_address))[1] AS site_address,
+            (ARRAY_AGG(owner_name))[1]   AS owner_name,
+            COUNT(*)                   AS unit_count,
+            (COUNT(*) > 1)             AS is_condo
+        FROM (
+            SELECT
+                p.geometry,
+                p.parcel_id,
+                p.county,
+                p.is_corporate,
+                p.is_institutional,
+                m.cluster_id,
+                m.cluster_size,
+                p.site_address,
+                p.owner_name
+            FROM parcels_unified p
+            LEFT JOIN _tile_oe_map m
+              ON m.parcel_id = p.parcel_id AND m.county = p.county
+        ) sub
+        GROUP BY geometry
       " \
       -nln parcels \
       -lco COORDINATE_PRECISION=6)
@@ -185,7 +217,59 @@ TILE_SIZE=$(du -sh "$TILE_TMP" | cut -f1)
 echo "    Merged: $TILE_COUNT tiles ($TILE_SIZE)"
 
 # ---------------------------------------------------------------------------
-# Step 3: Swap into place atomically
+# Step 3: Validate tile attributes before swapping into place
+# ---------------------------------------------------------------------------
+# Decode a sample PBF and assert boolean fields are stored as bools, not 0/1
+# integers. Integers cause MapLibre `to-boolean` / `case` expressions to
+# silently misfire (parcels render gray instead of red/amber/violet).
+
+echo "==> Validating tile attributes..."
+SAMPLE_PBF=$(find "$TILE_TMP" -name "*.pbf" | sort | tail -1)
+python3 - "$SAMPLE_PBF" <<'PYEOF'
+import sys, gzip, importlib
+pbf_path = sys.argv[1]
+try:
+    mvt = importlib.import_module("mapbox_vector_tile")
+except ModuleNotFoundError:
+    print("    SKIP: mapbox_vector_tile not installed — skipping attribute check")
+    sys.exit(0)
+
+data = open(pbf_path, "rb").read()
+try:
+    data = gzip.decompress(data)
+except OSError:
+    pass
+
+tile   = mvt.decode(data)
+layer  = tile.get("parcels", {})
+feats  = layer.get("features", [])
+if not feats:
+    print("    SKIP: sample tile has no features")
+    sys.exit(0)
+
+BOOL_FIELDS = ("is_corporate", "is_institutional", "is_condo")
+errors = []
+for f in feats[:50]:
+    props = f.get("properties", {})
+    for field in BOOL_FIELDS:
+        val = props.get(field)
+        if val is None:
+            continue
+        if not isinstance(val, bool):
+            errors.append(f"{field}={val!r} ({type(val).__name__}) in {props.get('parcel_id','?')}")
+
+if errors:
+    print("ERROR: boolean fields stored as non-bool — MapLibre expressions will misfire:", file=sys.stderr)
+    for e in errors[:5]:
+        print(f"  {e}", file=sys.stderr)
+    print("  Fix: SQL projections must use (expr > 0) AS field, not MAX(field::int)", file=sys.stderr)
+    sys.exit(1)
+
+print(f"    OK: boolean attributes verified across {min(len(feats),50)} features")
+PYEOF
+
+# ---------------------------------------------------------------------------
+# Step 4: Swap into place atomically
 # ---------------------------------------------------------------------------
 # Move old tiles aside, swap new ones in, remove old.
 
@@ -196,6 +280,7 @@ rm -rf "$OLD_DIR"
 [ -d "$OUTPUT_DIR" ] && mv "$OUTPUT_DIR" "$OLD_DIR"
 mv "$TILE_TMP" "$OUTPUT_DIR"
 rm -rf "$OLD_DIR"
+chmod -R o+rX "$OUTPUT_DIR"
 
 echo "==> Done. Tiles at $OUTPUT_DIR"
 echo ""
