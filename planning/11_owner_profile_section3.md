@@ -1,7 +1,7 @@
 # Plan: Owner Profile Page — Section 3 Enhancements
 
 **Created:** 2026-02-22
-**Status:** Complete — 2026-02-22
+**Status:** Complete — 2026-02-22 (checkboxes updated 2026-02-28)
 **Ref:** `planning/09_interface_enhancements.md` §3
 
 ---
@@ -22,7 +22,7 @@ No related-owners section (section 5). No connection badges (section 6).
 
 ---
 
-## 0. Dev workflow — `--cluster-ids` flag ☐
+## 0. Dev workflow — `--cluster-ids` flag ✅
 
 Add `--cluster-ids 1954,120,30,2` CLI arg to `build_static_pages.py`. When provided,
 bypasses `fetch_cluster_ids()` DB scan and uses the supplied list directly.
@@ -43,7 +43,7 @@ uv run scripts/build_static_pages.py --owner-only --cluster-ids 1954,120,30,2
 
 ---
 
-## 1. New DB queries — all batch, keyed by cluster_id ☐
+## 1. New DB queries — all batch, keyed by cluster_id ✅
 
 Add three new functions to `build_static_pages.py` alongside existing batch queries.
 Also augment the existing `fetch_cluster_stats_batch()` to pull `owner_addresses`.
@@ -97,7 +97,7 @@ Add `oc.owner_addresses` column to the existing stats query
 
 ---
 
-## 2. Updated `OWNER_TMPL` structure ☐
+## 2. Updated `OWNER_TMPL` structure ✅
 
 ```
 [header: name, alt-names, badges]  ← unchanged
@@ -143,7 +143,7 @@ Statuses in `{'Dissolved', 'Admin. Dissolved', 'Owes Annual Registration'}` → 
 
 ---
 
-## 3. CSS additions — `web/frontend/css/content.css` ☐
+## 3. CSS additions — `web/frontend/css/content.css` ✅
 
 ```css
 /* Profile section label (County Tax Parcel *, Georgia SOS *, etc.) */
@@ -168,7 +168,7 @@ Statuses in `{'Dissolved', 'Admin. Dissolved', 'Owes Annual Registration'}` → 
 
 ---
 
-## 4. `render_owner()` updates ☐
+## 4. `render_owner()` updates ✅
 
 Pass all new data to the template:
 - `county_breakdown` — dict `{fulton: N, dekalb: N}`
@@ -179,7 +179,7 @@ Pass all new data to the template:
 
 ---
 
-## 5. `worker()` / `build_owner_pages()` updates ☐
+## 5. `worker()` / `build_owner_pages()` updates ✅
 
 Incorporate the 3 new batch queries into the worker loop (alongside existing
 `fetch_cluster_stats_batch` and `fetch_parcels_batch`). Pattern is identical —
@@ -205,7 +205,7 @@ query by `cluster_id = ANY(batch)`, key result by cluster_id.
 | RA page links | Section 4 | `<span class="ra-name">` wraps agent name text |
 | Related owners | Section 5 | Nothing — purely additive new section |
 | Connection count | Section 6 | Nothing — purely additive stat |
-| Officers table | When sos.officers has data | Template gated on `officers\|length > 0` |
+| Officers table | When sos.officers has data | **Not implemented** — `sos.officers` has data (e.g. 227 rows for cluster 120, 259 for cluster 30) but `build_static_pages.py` has no query or template block for officers. The API (`main.py`) does fetch officers. This is a real gap to fill. |
 
 ---
 
