@@ -503,6 +503,27 @@ td.flags-cell .badge-state {
   color: var(--pico-muted-color);
 }
 
+/* ── Geo title row (area name + map link) ────────────────────── */
+.geo-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.25rem;
+}
+
+.geo-title-row h1 { margin-bottom: 0; }
+
+.geo-map-link {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--pico-primary);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.geo-map-link:hover { text-decoration: underline; }
+
 /* ── Small map link (parcel table) ───────────────────────────── */
 .map-link-small {
   font-size: 0.78rem;

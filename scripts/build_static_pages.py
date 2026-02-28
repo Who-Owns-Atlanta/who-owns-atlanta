@@ -499,6 +499,7 @@ GEO_INDEX_TMPL = _BASE_HEAD + """\
           <th>{{ area_label }}</th>
           <th class="num">Parcels</th>
           <th>Top owner</th>
+          {% if rows and rows[0].map_url %}<th></th>{% endif %}
         </tr>
       </thead>
       <tbody>
@@ -507,6 +508,7 @@ GEO_INDEX_TMPL = _BASE_HEAD + """\
           <td><a href="{{ r.url }}">{{ r.area | e }}</a></td>
           <td class="num">{{ r.total_parcels }}</td>
           <td class="muted">{{ r.top_owner | e }}</td>
+          {% if r.map_url %}<td class="map-link-cell"><a href="{{ r.map_url }}" title="View on map" class="map-link-small">map →</a></td>{% endif %}
         </tr>
         {% endfor %}
       </tbody>
@@ -518,7 +520,10 @@ GEO_INDEX_TMPL = _BASE_HEAD + """\
 
 GEO_LEADERBOARD_TMPL = _BASE_HEAD + """\
     <p class="breadcrumb"><a href="{{ index_url }}">← {{ index_label }}</a></p>
-    <h1>{{ area_name | e }}</h1>
+    <div class="geo-title-row">
+      <h1>{{ area_name | e }}</h1>
+      {% if area_map_url %}<a href="{{ area_map_url }}" class="geo-map-link">view on map →</a>{% endif %}
+    </div>
     <p class="lead">Top property owners within this {{ geo_type_label }}.
       <span class="muted">{{ total }} owners shown, {{ area_total_parcels }} total parcels.</span></p>
 
@@ -1399,7 +1404,12 @@ def _build_geo_section(env, area_rows, output_dir, url_base, geo_type_label, are
         slug = slugify(str(area))
         display = area_display_fn(area) if area_display_fn else str(area)
         area_total = sum(r["local_parcel_count"] for r in rows)
-        top100 = rows[:100]
+        area_raw_enc = quote_plus(str(area)) if geo_key else ""
+        area_map_url = f"/?geo={geo_key}&area={area_raw_enc}" if geo_key else ""
+
+        # Filter out single-parcel owners (homeowners, not portfolios)
+        filtered = [r for r in rows if r["total_parcel_count"] > 1]
+        top100 = filtered[:100]
         # Inject connection counts
         for r in top100:
             r["connection_count"] = counts.get(r["cluster_id"], 0)
@@ -1412,7 +1422,8 @@ def _build_geo_section(env, area_rows, output_dir, url_base, geo_type_label, are
             index_url=index_url,
             index_label=index_title,
             geo_key=geo_key,
-            area_raw_enc=quote_plus(str(area)) if geo_key else "",
+            area_raw_enc=area_raw_enc,
+            area_map_url=area_map_url,
             rows=top100,
             total=len(top100),
             area_total_parcels=area_total,
@@ -1424,7 +1435,8 @@ def _build_geo_section(env, area_rows, output_dir, url_base, geo_type_label, are
             "area": display,
             "url": f"/{url_base}/{slug}/",
             "total_parcels": area_total,
-            "top_owner": rows[0]["primary_name"] if rows else "",
+            "top_owner": filtered[0]["primary_name"] if filtered else "",
+            "map_url": area_map_url,
         })
 
     index_rows.sort(key=lambda r: r["area"])
@@ -1505,7 +1517,8 @@ def build_geo_leaderboard_pages(conn, output_dir, cluster_connection_count=None)
     counts = cluster_connection_count or {}
     for county, rows in county_data.items():
         county_total = sum(r["local_parcel_count"] for r in rows)
-        top500 = rows[:500]
+        filtered = [r for r in rows if r["total_parcel_count"] > 1]
+        top500 = filtered[:500]
         for r in top500:
             r["connection_count"] = counts.get(r["cluster_id"], 0)
         html = geo_tmpl.render(
@@ -1515,8 +1528,9 @@ def build_geo_leaderboard_pages(conn, output_dir, cluster_connection_count=None)
             geo_type_label="county",
             index_url="/l/",
             index_label="Leaderboards",
+            area_map_url="",
             rows=top500,
-            total=min(len(rows), 500),
+            total=len(top500),
             area_total_parcels=county_total,
         )
         out_path = base / county / "index.html"
