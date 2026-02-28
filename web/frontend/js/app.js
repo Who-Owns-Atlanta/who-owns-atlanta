@@ -240,9 +240,10 @@ map.on('load', () => {
     if (!p.parcel_id) return;
     const addr = escHtml(p.site_address || p.parcel_id);
     const unitTag = p.is_condo ? ` <span class="unit-count">(${p.unit_count} units)</span>` : '';
+    const ownerLine = p.is_condo ? '' : `<div class="hover-owner">${escHtml(p.owner_name || '')}</div>`;
     hoverPopup
       .setLngLat(e.lngLat)
-      .setHTML(`<div class="hover-tip"><div class="hover-address">${addr}${unitTag}</div><div class="hover-owner">${escHtml(p.owner_name || '')}</div></div>`)
+      .setHTML(`<div class="hover-tip"><div class="hover-address">${addr}${unitTag}</div>${ownerLine}</div>`)
       .addTo(map);
   });
 
