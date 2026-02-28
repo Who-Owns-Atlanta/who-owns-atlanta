@@ -822,15 +822,29 @@ function renderRelatedUnits(p) {
     return;
   }
 
-  parcelUnitsSumm.textContent = `Units in this building (${units.length + 1})`;
-  parcelUnitsList.innerHTML = units.map(u => `
-    <tr class="unit-row" data-county="${p.county}" data-pid="${u.parcel_id}">
-      <td>${escHtml(u.site_address || u.parcel_id)}</td>
-      <td>${escHtml(u.owner_name || '')}</td>
-    </tr>
-  `).join('');
+  parcelUnitsSumm.textContent = `${units.length + 1} units in this building`;
 
-  // Add click handlers
+  const unitRowClass = (props, current) => {
+    if (current)               return 'unit-row unit-current';
+    if (props.is_corporate)    return 'unit-row unit-corporate';
+    if (props.is_institutional) return 'unit-row unit-institutional';
+    return 'unit-row';
+  };
+
+  parcelUnitsList.innerHTML = [
+    `<tr class="${unitRowClass(p, true)}" data-county="${p.county}" data-pid="${p.parcel_id}">
+      <td>${escHtml(p.site_address || p.parcel_id)}</td>
+      <td>${escHtml(p.owner_name || '')}</td>
+    </tr>`,
+    ...units.map(u => `
+      <tr class="${unitRowClass(u, false)}" data-county="${p.county}" data-pid="${u.parcel_id}">
+        <td>${escHtml(u.site_address || u.parcel_id)}</td>
+        <td>${escHtml(u.owner_name || '')}</td>
+      </tr>
+    `)
+  ].join('');
+
+  // Scroll current unit into view and add click handlers
   parcelUnitsList.querySelectorAll('.unit-row').forEach(row => {
     row.addEventListener('click', () => {
       loadParcel(row.dataset.county, row.dataset.pid);
@@ -838,7 +852,6 @@ function renderRelatedUnits(p) {
   });
 
   parcelUnits.hidden = false;
-  parcelUnits.open = false; // keep collapsed by default
 }
 
 function renderParcelLinks(p) {
