@@ -2,6 +2,7 @@
 
 import geopandas as gpd
 from sqlalchemy import create_engine, text
+import argparse
 
 DB_URL = "postgresql://woa:woa@localhost:5434/who_owns_atl"
 DATA_DIR = "data/json/geojson/latest"
@@ -18,6 +19,9 @@ def load_fulton(engine):
     gdf.columns = [c.lower() for c in gdf.columns]
     gdf = gdf.to_crs(epsg=4326)
 
+    with engine.begin() as conn:
+        conn.execute(text("DROP TABLE IF EXISTS fulton_parcels CASCADE;"))
+
     gdf.to_postgis("fulton_parcels", engine, if_exists="replace", index=False)
     print(f"  Loaded into fulton_parcels")
 
@@ -29,6 +33,9 @@ def load_dekalb(engine):
 
     gdf.columns = [c.lower() for c in gdf.columns]
     gdf = gdf.to_crs(epsg=4326)
+
+    with engine.begin() as conn:
+        conn.execute(text("DROP TABLE IF EXISTS dekalb_parcels CASCADE;"))
 
     gdf.to_postgis("dekalb_parcels", engine, if_exists="replace", index=False)
     print(f"  Loaded into dekalb_parcels")
@@ -62,12 +69,16 @@ def create_unified_view(engine):
                 subdiv AS subdivision,
                 is_corporate,
                 is_institutional,
+                (lucode IN ('106', '110', '166', '188', '208') OR (livunits::int = 0 AND (subdiv ILIKE '%%CONDO%%' OR subdiv ILIKE '%%CONDOMINIUM%%')))::int AS is_condo_potential,
+                city_neighborhood,
+                city_npu,
+                city_council,
                 geometry
             FROM fulton_parcels
             WHERE 
-                classcode LIKE 'R%' OR 
-                classcode LIKE 'T%' OR 
-                (classcode LIKE 'C%' AND livunits::int > 0) OR
+                classcode LIKE 'R%%' OR 
+                classcode LIKE 'T%%' OR 
+                (classcode LIKE 'C%%' AND livunits::int > 0) OR
                 lucode IN ('111', '166', '188')
 
             UNION ALL
@@ -90,12 +101,16 @@ def create_unified_view(engine):
                 cnvyname AS subdivision,
                 is_corporate,
                 is_institutional,
+                (classdscrp = 'R9' OR landuse = 'COS' OR common_area IS NOT NULL)::int AS is_condo_potential,
+                city_neighborhood,
+                city_npu,
+                city_council,
                 geometry
             FROM dekalb_parcels
             WHERE 
-                classdscrp LIKE 'R%' OR 
-                classdscrp LIKE 'T%' OR 
-                (classdscrp LIKE 'C%' AND 1=1) OR
+                classdscrp LIKE 'R%%' OR 
+                classdscrp LIKE 'T%%' OR 
+                (classdscrp LIKE 'C%%' AND 1=1) OR
                 classdscrp = 'R9' OR 
                 landuse = 'COS' OR 
                 common_area IS NOT NULL
@@ -116,16 +131,31 @@ def create_indexes(engine):
 
 
 if __name__ == "__main__":
-    load_fulton(engine)
-    load_dekalb(engine)
-    create_unified_view(engine)
-    create_indexes(engine)
-    print("\nNOTE: DROP VIEW parcels_unified CASCADE was run above.")
-    print("      mv_parcel_permits and mv_cluster_stats have been dropped.")
-    print("      After the full pipeline, recreate with:")
-    print("        psql ... -f scripts/sql/04_create_materialized_views.sql")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--create-view", action="store_true", help="ONLY create unified view (requires flags exist)")
+    parser.add_argument("--load-only", action="store_true", help="ONLY load raw data and index (skips view)")
+    args = parser.parse_args()
+
+    if args.create_view:
+        create_unified_view(engine)
+    elif args.load_only:
+        load_fulton(engine)
+        load_dekalb(engine)
+        create_indexes(engine)
+    else:
+        # Default behavior: load and index (no view)
+        load_fulton(engine)
+        load_dekalb(engine)
+        create_indexes(engine)
+    
     print("\nAll done. Verifying counts:")
     with engine.connect() as conn:
-        for tbl in ["fulton_parcels", "dekalb_parcels", "parcels_unified"]:
-            n = conn.execute(text(f"SELECT COUNT(*) FROM {tbl}")).scalar()
-            print(f"  {tbl}: {n:,}")
+        tables = ["fulton_parcels", "dekalb_parcels"]
+        if args.create_view:
+            tables.append("parcels_unified")
+        for tbl in tables:
+            try:
+                n = conn.execute(text(f"SELECT COUNT(*) FROM {tbl}")).scalar()
+                print(f"  {tbl}: {n:,}")
+            except Exception:
+                print(f"  {tbl}: (could not count)")

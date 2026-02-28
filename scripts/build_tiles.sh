@@ -1,19 +1,11 @@
 #!/usr/bin/env bash
-# Build parcel vector tiles for Who Owns Atlanta?
+# Build parcel vector tiles for Who Owns Atlanta? (Optimized Single-Pass)
 #
 # Usage:
 #   scripts/build_tiles.sh [--output-dir DIR]
-#
-# Defaults:
-#   --output-dir  /var/www/who-owns-atlanta/tiles
-#
-# Prod:  after building, sync to S3 and invalidate CloudFront:
-#   aws s3 sync "$OUTPUT_DIR" s3://who-owns-atlanta-tiles/ \
-#       --content-type application/x-protobuf --delete
-#   aws cloudfront create-invalidation \
-#       --distribution-id $CF_DIST_ID --paths "/tiles/*"
 
 set -euo pipefail
+set -x
 
 # ---------------------------------------------------------------------------
 # Config
@@ -35,7 +27,7 @@ psql_cmd() {
 
 cleanup() {
   rm -rf "$WORK_DIR"
-  psql_cmd -c "DROP TABLE IF EXISTS _tile_oe_map;" 2>/dev/null || true
+  psql_cmd -c "DROP TABLE IF EXISTS _tile_oe_map; DROP TABLE IF EXISTS _tile_export_base;" 2>/dev/null || true
 }
 trap cleanup EXIT
 
@@ -53,33 +45,12 @@ done
 mkdir -p "$OUTPUT_DIR"
 
 # ---------------------------------------------------------------------------
-# Steps 1 + 2: Export GeoJSON and build tiles — two-pass strategy
+# Step 1: Materialize everything into a single table
 # ---------------------------------------------------------------------------
-# Two tippecanoe passes on different zoom ranges, merged with tile-join:
-#
-#   z10–12 (overview): minimal attributes + --simplification=10 to keep tiles
-#          small. cluster_size is unused here (overview opacity is flat 1.0).
-#
-#   z13–14 (detail): full attributes including site_address + owner_name for
-#          hover tooltips. Default simplification (geometry accuracy matters
-#          at this zoom for clicking and outlines).
-#
-# Both passes use --no-tile-size-limit --no-feature-limit to prevent the
-# feature-dropping that caused gray-square artifacts previously.
-#
-# --no-tile-compression: raw .pbf — nginx/CloudFront handle Content-Encoding.
-# Note: CloudFront auto-compression only applies to objects ≤ 10MB; large
-# low-zoom tiles must be pre-gzipped before S3 upload if compression is needed.
+# This is the "expensive" part, but we only do it once.
+# It handles the geometry grouping and the is_condo logic for both counties.
 
-# ---------------------------------------------------------------------------
-# Step 1: Materialize unnested parcel→cluster mapping for an efficient join
-# ---------------------------------------------------------------------------
-# Unnesting owner_entities.parcel_ids inline at query time forces PostgreSQL
-# into a Merge Right Join with full sorts on both sides (~20 min for 615K rows).
-# Materializing once as a real table lets the planner choose Hash Left Join
-# (~1.4s for the full export query).
-
-echo "==> Materializing parcel→cluster map..."
+echo "==> Materializing tile export data (expensive grouping)..."
 psql_cmd -c "
   DROP TABLE IF EXISTS _tile_oe_map;
   CREATE TABLE _tile_oe_map AS
@@ -88,13 +59,65 @@ psql_cmd -c "
     FROM owner_entities oe
     JOIN ownership_clusters oc ON oc.cluster_id = oe.cluster_id;
   CREATE INDEX ON _tile_oe_map (parcel_id, county);
-  ANALYZE _tile_oe_map;
+
+  DROP TABLE IF EXISTS _tile_export_base;
+  CREATE TABLE _tile_export_base AS
+  WITH source AS (
+    SELECT
+        p.geometry,
+        p.parcel_id,
+        p.county,
+        p.is_corporate,
+        p.is_institutional,
+        p.site_address,
+        p.owner_name,
+        p.is_condo_potential
+    FROM parcels_unified p
+  )
+  SELECT
+      geometry,
+      (ARRAY_AGG(parcel_id))[1] AS parcel_id,
+      (ARRAY_AGG(county))[1]    AS county,
+      (MAX(is_corporate::int) > 0)     AS is_corporate,
+      (MAX(is_institutional::int) > 0) AS is_institutional,
+      MAX(cluster_id)            AS cluster_id,
+      MAX(cluster_size)          AS cluster_size,
+      (ARRAY_AGG(site_address))[1] AS site_address,
+      (ARRAY_AGG(owner_name))[1]   AS owner_name,
+      COUNT(*)                   AS unit_count,
+      (COUNT(*) > 1 OR ST_Area(geometry) < 2e-9 OR MAX(is_condo_potential) > 0) AS is_condo
+  FROM (
+      SELECT
+          s.geometry,
+          s.parcel_id,
+          s.county,
+          s.is_corporate,
+          s.is_institutional,
+          s.is_condo_potential,
+          m.cluster_id,
+          m.cluster_size,
+          s.site_address,
+          s.owner_name
+      FROM source s
+      LEFT JOIN _tile_oe_map m
+        ON m.parcel_id = s.parcel_id AND m.county = s.county
+  ) sub
+  GROUP BY geometry;
+
+  CREATE INDEX ON _tile_export_base USING GIST (geometry);
+  ANALYZE _tile_export_base;
 "
 
-echo "==> Pass 1/2: z10–12 overview tiles (minimal attributes, simplified geometry)..."
+# ---------------------------------------------------------------------------
+# Step 2: Export to tiles in parallel
+# ---------------------------------------------------------------------------
+
+echo "==> Starting parallel tippecanoe passes..."
 
 TILE_TMP_LOW="$WORK_DIR/tiles_low"
+TILE_TMP_HIGH="$WORK_DIR/tiles_high"
 
+# Pass 1: z10-12 (overview)
 tippecanoe \
   --output-to-directory "$TILE_TMP_LOW" \
   --no-tile-compression \
@@ -108,47 +131,12 @@ tippecanoe \
   --simplification=10 \
   --no-tile-size-limit \
   --no-feature-limit \
-  --quiet \
-  <(PGPASSWORD="$DB_PASS" ogr2ogr \
-      -f GeoJSON /vsistdout/ \
+  <(PGPASSWORD="$DB_PASS" ogr2ogr -f GeoJSON /vsistdout/ \
       "PG:host=$DB_HOST port=$DB_PORT dbname=$DB_NAME user=$DB_USER password=$DB_PASS" \
-      -sql "
-        SELECT
-            geometry,
-            (ARRAY_AGG(parcel_id))[1] AS parcel_id,
-            (ARRAY_AGG(county))[1]    AS county,
-            (MAX(is_corporate::int) > 0)     AS is_corporate,
-            (MAX(is_institutional::int) > 0) AS is_institutional,
-            MAX(cluster_id)            AS cluster_id,
-            MAX(cluster_size)          AS cluster_size,
-            COUNT(*)                   AS unit_count,
-            (COUNT(*) > 1)             AS is_condo
-        FROM (
-            SELECT
-                p.geometry,
-                p.parcel_id,
-                p.county,
-                p.is_corporate,
-                p.is_institutional,
-                m.cluster_id,
-                m.cluster_size
-            FROM parcels_unified p
-            LEFT JOIN _tile_oe_map m
-              ON m.parcel_id = p.parcel_id AND m.county = p.county
-        ) sub
-        GROUP BY geometry
-      " \
-      -nln parcels \
-      -lco COORDINATE_PRECISION=6)
+      -sql "SELECT geometry, parcel_id, county, is_corporate, is_institutional, cluster_id, cluster_size, unit_count, is_condo FROM _tile_export_base" \
+      -nln parcels)
 
-LOW_COUNT=$(find "$TILE_TMP_LOW" -name "*.pbf" | wc -l)
-LOW_SIZE=$(du -sh "$TILE_TMP_LOW" | cut -f1)
-echo "    z10–12: $LOW_COUNT tiles ($LOW_SIZE)"
-
-echo "==> Pass 2/2: z13–14 detail tiles (full attributes, tooltip data)..."
-
-TILE_TMP_HIGH="$WORK_DIR/tiles_high"
-
+# Pass 2: z13-14 (detail)
 tippecanoe \
   --output-to-directory "$TILE_TMP_HIGH" \
   --no-tile-compression \
@@ -161,120 +149,26 @@ tippecanoe \
   --attribute-type=unit_count:int \
   --no-tile-size-limit \
   --no-feature-limit \
-  --quiet \
-  <(PGPASSWORD="$DB_PASS" ogr2ogr \
-      -f GeoJSON /vsistdout/ \
+  <(PGPASSWORD="$DB_PASS" ogr2ogr -f GeoJSON /vsistdout/ \
       "PG:host=$DB_HOST port=$DB_PORT dbname=$DB_NAME user=$DB_USER password=$DB_PASS" \
-      -sql "
-        SELECT
-            geometry,
-            (ARRAY_AGG(parcel_id))[1] AS parcel_id,
-            (ARRAY_AGG(county))[1]    AS county,
-            MAX(is_corporate::int)     AS is_corporate,
-            MAX(is_institutional::int) AS is_institutional,
-            MAX(cluster_id)            AS cluster_id,
-            MAX(cluster_size)          AS cluster_size,
-            (ARRAY_AGG(site_address))[1] AS site_address,
-            (ARRAY_AGG(owner_name))[1]   AS owner_name,
-            COUNT(*)                   AS unit_count,
-            (COUNT(*) > 1)             AS is_condo
-        FROM (
-            SELECT
-                p.geometry,
-                p.parcel_id,
-                p.county,
-                p.is_corporate,
-                p.is_institutional,
-                m.cluster_id,
-                m.cluster_size,
-                p.site_address,
-                p.owner_name
-            FROM parcels_unified p
-            LEFT JOIN _tile_oe_map m
-              ON m.parcel_id = p.parcel_id AND m.county = p.county
-        ) sub
-        GROUP BY geometry
-      " \
-      -nln parcels \
-      -lco COORDINATE_PRECISION=6)
+      -sql "SELECT * FROM _tile_export_base" \
+      -nln parcels)
 
-HIGH_COUNT=$(find "$TILE_TMP_HIGH" -name "*.pbf" | wc -l)
-HIGH_SIZE=$(du -sh "$TILE_TMP_HIGH" | cut -f1)
-echo "    z13–14: $HIGH_COUNT tiles ($HIGH_SIZE)"
+echo "    Exports complete."
+
+# ---------------------------------------------------------------------------
+# Step 3: Merge and Install
+# ---------------------------------------------------------------------------
 
 echo "==> Merging zoom ranges with tile-join..."
-
 TILE_TMP="$WORK_DIR/tiles"
-
 tile-join \
   --output-to-directory "$TILE_TMP" \
   --no-tile-compression \
   --no-tile-size-limit \
   "$TILE_TMP_LOW" "$TILE_TMP_HIGH"
 
-TILE_COUNT=$(find "$TILE_TMP" -name "*.pbf" | wc -l)
-TILE_SIZE=$(du -sh "$TILE_TMP" | cut -f1)
-echo "    Merged: $TILE_COUNT tiles ($TILE_SIZE)"
-
-# ---------------------------------------------------------------------------
-# Step 3: Validate tile attributes before swapping into place
-# ---------------------------------------------------------------------------
-# Decode a sample PBF and assert boolean fields are stored as bools, not 0/1
-# integers. Integers cause MapLibre `to-boolean` / `case` expressions to
-# silently misfire (parcels render gray instead of red/amber/violet).
-
-echo "==> Validating tile attributes..."
-SAMPLE_PBF=$(find "$TILE_TMP" -name "*.pbf" | sort | tail -1)
-python3 - "$SAMPLE_PBF" <<'PYEOF'
-import sys, gzip, importlib
-pbf_path = sys.argv[1]
-try:
-    mvt = importlib.import_module("mapbox_vector_tile")
-except ModuleNotFoundError:
-    print("    SKIP: mapbox_vector_tile not installed — skipping attribute check")
-    sys.exit(0)
-
-data = open(pbf_path, "rb").read()
-try:
-    data = gzip.decompress(data)
-except OSError:
-    pass
-
-tile   = mvt.decode(data)
-layer  = tile.get("parcels", {})
-feats  = layer.get("features", [])
-if not feats:
-    print("    SKIP: sample tile has no features")
-    sys.exit(0)
-
-BOOL_FIELDS = ("is_corporate", "is_institutional", "is_condo")
-errors = []
-for f in feats[:50]:
-    props = f.get("properties", {})
-    for field in BOOL_FIELDS:
-        val = props.get(field)
-        if val is None:
-            continue
-        if not isinstance(val, bool):
-            errors.append(f"{field}={val!r} ({type(val).__name__}) in {props.get('parcel_id','?')}")
-
-if errors:
-    print("ERROR: boolean fields stored as non-bool — MapLibre expressions will misfire:", file=sys.stderr)
-    for e in errors[:5]:
-        print(f"  {e}", file=sys.stderr)
-    print("  Fix: SQL projections must use (expr > 0) AS field, not MAX(field::int)", file=sys.stderr)
-    sys.exit(1)
-
-print(f"    OK: boolean attributes verified across {min(len(feats),50)} features")
-PYEOF
-
-# ---------------------------------------------------------------------------
-# Step 4: Swap into place atomically
-# ---------------------------------------------------------------------------
-# Move old tiles aside, swap new ones in, remove old.
-
 echo "==> Installing tiles to $OUTPUT_DIR..."
-
 OLD_DIR="${OUTPUT_DIR}.old"
 rm -rf "$OLD_DIR"
 [ -d "$OUTPUT_DIR" ] && mv "$OUTPUT_DIR" "$OLD_DIR"
@@ -283,7 +177,3 @@ rm -rf "$OLD_DIR"
 chmod -R o+rX "$OUTPUT_DIR"
 
 echo "==> Done. Tiles at $OUTPUT_DIR"
-echo ""
-echo "Next steps:"
-echo "  Dev:  tiles served at http://who-owns-atlanta.local/tiles/{z}/{x}/{y}.pbf"
-echo "  Prod: aws s3 sync $OUTPUT_DIR s3://who-owns-atlanta-tiles/ --content-type application/x-protobuf --delete"

@@ -70,77 +70,70 @@ def parcel(county: str, parcel_id: str, response: Response):
     with get_conn() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
 
-            if county == "fulton":
-                cur.execute("""
-                    SELECT
-                        'fulton'            AS county,
-                        parcelid            AS parcel_id,
-                        address             AS site_address,
-                        owner               AS owner_name,
-                        is_corporate,
-                        is_institutional,
-                        lucode              AS land_use,
-                        classcode           AS property_class,
-                        landacres           AS land_acres,
-                        livunits            AS living_units,
-                        city_neighborhood   AS neighborhood,
-                        city_npu            AS npu,
-                        city_council        AS council_district,
-                        owneraddr1          AS owner_mail_addr1,
-                        owneraddr2          AS owner_mail_addr2,
-                        excode              AS exemption_code,
-                        NULL::text          AS owner_name2,
-                        NULL::numeric       AS appraised_value,
-                        NULL::text          AS zoning,
-                        NULL::text          AS historic_district,
-                        NULL::text          AS overlay_district,
-                        ST_Y(ST_Centroid(geometry)) AS lat,
-                        ST_X(ST_Centroid(geometry)) AS lon
-                    FROM fulton_parcels
-                    WHERE parcelid = %(pid)s
-                """, {"pid": parcel_id})
-            else:
-                cur.execute("""
-                    SELECT
-                        'dekalb'                            AS county,
-                        COALESCE(parcelid, lowparcelid)     AS parcel_id,
-                        siteaddress                         AS site_address,
-                        ownernme1                           AS owner_name,
-                        is_corporate,
-                        is_institutional,
-                        landuse                             AS land_use,
-                        classdscrp                          AS property_class,
-                        NULL                                AS land_acres,
-                        NULL                                AS living_units,
-                        city_neighborhood                   AS neighborhood,
-                        city_npu                            AS npu,
-                        city_council                        AS council_district,
-                        pstladdress                         AS owner_mail_addr1,
+            # Optimized detail query using UNION ALL of direct table lookups to hit indexes
+            cur.execute("""
+                WITH target AS (
+                    SELECT 
+                        parcelid, address, owner, owneraddr1, owneraddr2, 
+                        is_corporate, is_institutional, lucode, classcode, 
+                        landacres, livunits, city_neighborhood, city_npu, city_council,
+                        excode, NULL::numeric AS appraised_value, NULL::text AS ownernme2,
+                        NULL::text AS zoning, NULL::text AS histdesc, NULL::text AS ovldesc,
+                        geometry
+                    FROM fulton_parcels 
+                    WHERE parcelid = %(pid)s AND %(county)s = 'fulton'
+                    
+                    UNION ALL
+                    
+                    SELECT 
+                        COALESCE(parcelid, lowparcelid), siteaddress, ownernme1, pstladdress, 
                         NULLIF(TRIM(
                             COALESCE(NULLIF(TRIM(pstlcity),  '') || ', ', '') ||
                             COALESCE(NULLIF(TRIM(pstlstate), ''), '')         ||
                             COALESCE(' ' || NULLIF(TRIM(pstlzip5), ''), '')
-                        ), '')                              AS owner_mail_addr2,
-                        NULL::text                          AS exemption_code,
-                        NULLIF(TRIM(ownernme2), '')         AS owner_name2,
-                        totapr1                             AS appraised_value,
-                        NULLIF(TRIM(zoning), '')            AS zoning,
-                        NULLIF(TRIM(histdesc), '')          AS historic_district,
-                        NULLIF(TRIM(ovldesc), '')           AS overlay_district,
-                        ST_Y(ST_Centroid(geometry)) AS lat,
-                        ST_X(ST_Centroid(geometry)) AS lon
-                    FROM dekalb_parcels
-                    WHERE parcelid = %(pid)s OR lowparcelid = %(pid)s
+                        ), ''),
+                        is_corporate, is_institutional, landuse, classdscrp,
+                        NULL::numeric, NULL::double precision, city_neighborhood, city_npu, city_council,
+                        NULL::text, totapr1, ownernme2,
+                        zoning, histdesc, ovldesc,
+                        geometry
+                    FROM dekalb_parcels 
+                    WHERE (parcelid = %(pid)s OR lowparcelid = %(pid)s) AND %(county)s = 'dekalb'
                     LIMIT 1
-                """, {"pid": parcel_id})
+                )
+                SELECT
+                    %(county)s          AS county,
+                    parcelid            AS parcel_id,
+                    address             AS site_address,
+                    owner               AS owner_name,
+                    ownernme2           AS owner_name2,
+                    is_corporate,
+                    is_institutional,
+                    lucode              AS land_use,
+                    classcode           AS property_class,
+                    landacres           AS land_acres,
+                    livunits            AS living_units,
+                    city_neighborhood   AS neighborhood,
+                    city_npu            AS npu,
+                    city_council        AS council_district,
+                    owneraddr1          AS owner_mail_addr1,
+                    owneraddr2          AS owner_mail_addr2,
+                    excode              AS exemption_code,
+                    appraised_value,
+                    zoning,
+                    histdesc            AS historic_district,
+                    ovldesc             AS overlay_district,
+                    ST_Y(ST_Centroid(geometry)) AS lat,
+                    ST_X(ST_Centroid(geometry)) AS lon
+                FROM target
+            """, {"county": county, "pid": parcel_id})
 
             row = cur.fetchone()
             if not row:
                 raise HTTPException(status_code=404, detail="Parcel not found")
             result = dict(row)
 
-            # Owner cluster — only expose if the cluster has >1 parcel (otherwise no profile page exists).
-            # Use @> (array contains) — GIN index on parcel_ids (idx_oe_parcel_ids_gin) is used.
+            # Owner cluster — hit GIN index on owner_entities(parcel_ids)
             cur.execute("""
                 SELECT oe.cluster_id, oc.parcel_count, oe.sos_business_id
                 FROM owner_entities oe
@@ -153,36 +146,62 @@ def parcel(county: str, parcel_id: str, response: Response):
             result["cluster_id"]      = oe["cluster_id"]      if has_profile else None
             result["sos_business_id"] = oe["sos_business_id"] if has_profile else None
 
-            # Related units (same building/location)
-            # Use ST_Equals on geometry to find stacked parcels.
-            # Limit to 500 to avoid massive responses for huge complexes.
-            if county == "fulton":
+            # Related units (same building/location/development)
+            # Optimized by splitting fulton/deKalb into indexed table lookups
+            if county == 'fulton':
                 cur.execute("""
-                    SELECT 
-                        parcelid AS parcel_id,
-                        address  AS site_address,
-                        owner    AS owner_name,
-                        is_corporate,
-                        is_institutional
-                    FROM fulton_parcels
-                    WHERE ST_Equals(geometry, (SELECT geometry FROM fulton_parcels WHERE parcelid = %(pid)s))
-                      AND parcelid != %(pid)s
-                    ORDER BY address
+                    WITH target AS (
+                        SELECT parcelid, address, lucode, subdiv, geometry 
+                        FROM fulton_parcels WHERE parcelid = %(pid)s
+                    )
+                    SELECT
+                        p.parcelid      AS parcel_id,
+                        p.address       AS site_address,
+                        p.owner         AS owner_name,
+                        p.is_corporate,
+                        p.is_institutional
+                    FROM fulton_parcels p, target
+                    WHERE (
+                        ST_Equals(p.geometry, target.geometry)
+                        OR (
+                            target.lucode IN ('106', '110')
+                            AND p.lucode IN ('106', '107', '110', '111')
+                            AND ST_DWithin(p.geometry, target.geometry, 0.001)
+                            AND split_part(p.address, ' ', 2) = split_part(target.address, ' ', 2)
+                        )
+                        OR (
+                            target.subdiv IS NOT NULL AND target.subdiv != ''
+                            AND p.subdiv = target.subdiv
+                        )
+                        OR (
+                            (target.lucode IN ('166', '188') OR (target.subdiv IS NOT NULL AND target.subdiv ILIKE '%%TOWNHOME%%'))
+                            AND p.lucode IN ('106', '107', '110', '111')
+                            AND ST_DWithin(p.geometry, target.geometry, 0.001)
+                        )
+                    )
+                    AND p.parcelid != %(pid)s
+                    ORDER BY p.address
                     LIMIT 500
                 """, {"pid": parcel_id})
             else:
                 cur.execute("""
-                    SELECT 
-                        parcelid    AS parcel_id,
-                        siteaddress AS site_address,
-                        ownernme1   AS owner_name,
-                        is_corporate,
-                        is_institutional
-                    FROM dekalb_parcels
-                    WHERE ST_Equals(geometry, (SELECT geometry FROM dekalb_parcels WHERE parcelid = %(pid)s))
-                      AND parcelid != %(pid)s
-                    ORDER BY siteaddress
-                    LIMIT 500
+                    WITH target AS (
+                        SELECT parcelid, siteaddress, geometry 
+                        FROM dekalb_parcels WHERE (parcelid = %(pid)s OR lowparcelid = %(pid)s) LIMIT 1
+                    )
+                    SELECT
+                        COALESCE(p.parcelid, p.lowparcelid) AS parcel_id,
+                        p.siteaddress AS site_address,
+                        p.ownernme1   AS owner_name,
+                        p.is_corporate,
+                        p.is_institutional
+                    FROM dekalb_parcels p, target
+                    WHERE (
+                        ST_Equals(p.geometry, target.geometry)
+                        OR (ST_DWithin(p.geometry, target.geometry, 0.0001) AND p.siteaddress = target.siteaddress)
+                    )
+                    AND (p.parcelid != %(pid)s OR p.lowparcelid != %(pid)s)
+                    LIMIT 200
                 """, {"pid": parcel_id})
             result["related_units"] = cur.fetchall()
 
