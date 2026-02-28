@@ -45,30 +45,30 @@ COMMERCIAL_RA_PATTERNS = [
     "%business filings%", "%capitol corporate%",
     "%republic registered%", "%registered agent solutions%",
     "%georgiagent%", "%anderson registered%",
-    "%legalinc%", "%united agent group%",
-    "%community management associates%",
-    "%atlanta executive property management%",
+    "%legalzoom%", "%registered agent group%",
+    "%harbor compliance%", "%wolters kluwer%",
+    "%agent solutions%",
 ]
 
 def is_commercial_ra(name):
-    if not name or name.strip().upper() in ("", "NONE"):
-        return True
-    n = name.lower()
-    return any(
-        _wildcard_match(pat, n)
-        for pat in COMMERCIAL_RA_PATTERNS
-    )
+    if not name:
+        return False
+    name_lower = name.lower()
+    for pat in COMMERCIAL_RA_PATTERNS:
+        core = pat.strip('%')
+        if core in name_lower:
+            return True
+    return False
 
-def _wildcard_match(pattern, text):
-    """Simple ILIKE-style match: leading/trailing % are wildcards."""
-    pat = pattern.lower()
-    if pat.startswith("%") and pat.endswith("%"):
-        return pat[1:-1] in text
-    elif pat.startswith("%"):
-        return text.endswith(pat[1:])
-    elif pat.endswith("%"):
-        return text.startswith(pat[:-1])
-    return pat == text
+# ---------------------------------------------------------------------------
+# Jinja2 environment factory
+# ---------------------------------------------------------------------------
+
+def _make_env():
+    """Create a Jinja2 Environment with our custom filters."""
+    env = Environment(loader=BaseLoader())
+    env.filters['urlencode'] = lambda s: quote_plus(str(s)) if s else ''
+    return env
 
 # ---------------------------------------------------------------------------
 # Templates
@@ -100,6 +100,7 @@ _BASE_FOOT = """\
   </main>
   <footer>
     <nav>
+      <a href="/">Map</a>
       <a href="/l/">Leaderboards</a>
       <a href="/about/">About</a>
       <a href="/methodology/">Methodology</a>
@@ -117,6 +118,7 @@ LEADERBOARD_TMPL = _BASE_HEAD + """\
         <span class="subnav-label">Overall</span>
         <span class="subnav-current">Global</span>
         <a href="/l/agents/">Registered Agents</a>
+        <a href="/l/addresses/">Shared Addresses</a>
       </div>
       <div class="subnav-group">
         <span class="subnav-label">County</span>
@@ -227,55 +229,88 @@ OWNER_TMPL = _BASE_HEAD + """\
       <dt>Complaints</dt><dd>{{ permit_count }} total{% if open_count > 0 %}, {{ open_count }} open{% endif %}</dd>
       {% endif %}
       {% if owner_addresses %}
-      <dt>Mailing address{{ 'es' if owner_addresses|length > 1 else '' }}{% if owner_addresses|length == 8 %} <span class="cap-note">(first 8)</span>{% endif %}</dt>
+      <dt>Mailing address{{ 'es' if owner_addresses|length > 1 else '' }} ({{ owner_addresses|length }})</dt>
       <dd>
+        <div class="scroll-box">
         <ul class="address-list">
           {% for addr in owner_addresses %}<li>{{ addr | e }}</li>{% endfor %}
         </ul>
+        </div>
       </dd>
       {% endif %}
     </dl>
 
-    {# ── Georgia SOS section ── #}
+    {# ── Georgia SOS section (flat — no expand/hide) ── #}
     {% if sos_rows %}
-    <details class="sos-details" open>
-      <summary>Georgia SOS <span class="src-ref"><a href="/faq/#data-sources">*</a></span></summary>
-      <dl>
-        {% if sos_statuses %}
-        <dt>Status</dt>
-        <dd>
-          {% for st in sos_statuses %}
-          <span class="{{ 'sos-status-warn' if st in sos_warn_statuses else '' }}">{{ st | e }}</span>{% if not loop.last %}, {% endif %}
+    <p class="profile-section-label">GEORGIA SOS <span class="src-ref"><a href="/faq/#data-sources">*</a></span></p>
+    <dl class="profile-dl">
+      {% if sos_statuses %}
+      <dt>Status</dt>
+      <dd>
+        {% for st in sos_statuses %}
+        <span class="{{ 'sos-status-warn' if st in sos_warn_statuses else '' }}">{{ st | e }}</span>{% if not loop.last %}, {% endif %}
+        {% endfor %}
+      </dd>
+      {% endif %}
+      {% if sos_states %}
+      <dt>Formed in</dt>
+      <dd>{{ sos_states | join(', ') | e }}</dd>
+      {% endif %}
+      {% if sos_business_types %}
+      <dt>Type</dt>
+      <dd>{{ sos_business_types | join('; ') | e }}</dd>
+      {% endif %}
+      {% if principal_offices %}
+      <dt>Principal office</dt>
+      <dd>
+        {% for po in principal_offices %}
+        {% if loop.index > 1 %} · {% endif %}
+        {% if po.out_of_state %}
+        <span class="badge-state">{{ po.display | e }}</span>
+        {% else %}
+        {{ po.display | e }}
+        {% endif %}
+        {% endfor %}
+      </dd>
+      {% endif %}
+      {% if sos_agents %}
+      <dt>Registered agent{{ 's' if sos_agents|length > 1 else '' }} ({{ sos_agents|length }})</dt>
+      <dd>
+        <div class="scroll-box">
+        <ul class="ra-list">
+          {% for agent in sos_agents %}
+          <li>
+            {% if agent.ra_id and agent.ra_id in linkable_agent_ids %}
+            <a href="/agent/{{ agent.ra_id }}/" class="ra-name">{{ agent.name | e }}</a>
+            {% else %}
+            <span class="ra-name">{{ agent.name | e }}</span>
+            {% endif %}
+            {% if agent.address %} — {{ agent.address | e }}{% endif %}
+          </li>
           {% endfor %}
-        </dd>
+        </ul>
+        </div>
+      </dd>
+      {% endif %}
+    </dl>
+    {% endif %}
+
+    {# ── Officers / Principals section ── #}
+    {% if officers %}
+    <p class="profile-section-label">OFFICERS / PRINCIPALS <span class="src-ref"><a href="/faq/#data-sources">*</a></span></p>
+    <div class="scroll-box officer-box">
+    <ul class="officer-list">
+      {% for o in officers %}
+      <li>
+        {% if o.role %}<span class="officer-role">{{ o.role | e }}</span>{% endif %}
+        <span class="officer-name">{{ o.name | e }}</span>
+        {% if o.city or o.state %}
+        <span class="officer-loc">— {{ o.city | e }}{% if o.city and o.state %}, {% endif %}{{ o.state | e }}</span>
         {% endif %}
-        {% if sos_states %}
-        <dt>Formed in</dt>
-        <dd>{{ sos_states | join(', ') | e }}</dd>
-        {% endif %}
-        {% if sos_business_types %}
-        <dt>Type</dt>
-        <dd>{{ sos_business_types | join('; ') | e }}</dd>
-        {% endif %}
-        {% if sos_agents %}
-        <dt>Registered agent{{ 's' if sos_agents|length > 1 else '' }}{% if sos_agents|length == 10 %} <span class="cap-note">(first 10)</span>{% endif %}</dt>
-        <dd>
-          <ul class="ra-list">
-            {% for agent in sos_agents %}
-            <li>
-              {% if agent.ra_id and agent.ra_id in linkable_agent_ids %}
-              <a href="/agent/{{ agent.ra_id }}/" class="ra-name">{{ agent.name | e }}</a>
-              {% else %}
-              <span class="ra-name">{{ agent.name | e }}</span>
-              {% endif %}
-              {% if agent.address %} — {{ agent.address | e }}{% endif %}
-            </li>
-            {% endfor %}
-          </ul>
-        </dd>
-        {% endif %}
-      </dl>
-    </details>
+      </li>
+      {% endfor %}
+    </ul>
+    </div>
     {% endif %}
 
     {# ── Neighborhood breakdown ── #}
@@ -310,8 +345,19 @@ OWNER_TMPL = _BASE_HEAD + """\
       <tbody>
         {% for r in related_owners %}
         <tr>
-          <td><a href="/owner/{{ r.cluster_id }}/">{{ r.primary_name | e }}</a></td>
-          <td class="connection-via">{{ r.via | e }}</td>
+          <td>
+            {% if r.parcel_count >= 2 %}
+            <a href="/owner/{{ r.cluster_id }}/">{{ r.primary_name | e }}</a>
+            {% else %}
+            {{ r.primary_name | e }}
+            {% endif %}
+          </td>
+          <td class="connection-via">
+            {% for item in r.via_items %}
+            {% if item.url %}<a href="{{ item.url }}">{{ item.text | e }}</a>{% else %}{{ item.text | e }}{% endif %}
+            {% if not loop.last %}, {% endif %}
+            {% endfor %}
+          </td>
           <td class="num">{{ r.parcel_count }}</td>
         </tr>
         {% endfor %}
@@ -321,16 +367,25 @@ OWNER_TMPL = _BASE_HEAD + """\
     {% if related_owners|length == 15 %}<p class="cap-note">Showing top 15 related owners.</p>{% endif %}
     {% endif %}
 
+    {# ── Owner Names on record ── #}
     {% if alt_names %}
-    <h2 id="aka">Names on record</h2>
+    <h2 id="aka">Owner Names on record</h2>
     <ul class="alt-name-list aka-list">
-      {% for name in alt_names %}<li>{{ name | e }}</li>{% endfor %}
+      {% for item in alt_names %}
+      <li>
+        {% if item.sos_business_id %}
+        <a href="https://ecorp.sos.ga.gov/BusinessSearch/BusinessInformation?businessId={{ item.sos_business_id | e }}" target="_blank" rel="noopener">{{ item.name | e }}</a>
+        {% else %}
+        {{ item.name | e }}
+        {% endif %}
+      </li>
+      {% endfor %}
     </ul>
     {% endif %}
 
     <h2 id="parcels">Parcels ({{ parcel_count_raw }}){% if parcel_table_capped %} <span class="table-cap-note">— showing first 200</span>{% endif %}</h2>
     {% if parcel_table_capped %}
-    <p class="table-cap-msg">Showing 200 of {{ parcel_count_raw }} parcels. Use the map for the full list.</p>
+    <p class="table-cap-msg">Showing 200 of {{ parcel_count_raw }} parcels. <a href="/?cluster={{ cluster_id }}">View all on map →</a></p>
     {% endif %}
     <div class="table-scroll">
     <table class="parcel-table">
@@ -340,6 +395,7 @@ OWNER_TMPL = _BASE_HEAD + """\
           <th>County</th>
           <th>Owner on record</th>
           <th>Flags</th>
+          <th></th>
         </tr>
       </thead>
       <tbody>
@@ -352,6 +408,7 @@ OWNER_TMPL = _BASE_HEAD + """\
             {% if p.is_corporate %}<span class="badge-corporate">CORPORATE</span>{% endif %}
             {% if p.is_institutional %}<span class="badge-institutional">INSTITUTIONAL</span>{% endif %}
           </td>
+          <td class="map-link-cell"><a href="/?parcel={{ p.county }}/{{ p.parcel_id | urlencode }}" title="View on map" class="map-link-small">map →</a></td>
         </tr>
         {% endfor %}
       </tbody>
@@ -408,6 +465,7 @@ AGENT_TMPL = _BASE_HEAD + """\
         <tr>
           <th>Owner</th>
           <th class="num">Parcels</th>
+          <th>Flags</th>
         </tr>
       </thead>
       <tbody>
@@ -415,6 +473,10 @@ AGENT_TMPL = _BASE_HEAD + """\
         <tr>
           <td><a href="/owner/{{ row.cluster_id }}/">{{ row.primary_name | e }}</a></td>
           <td class="num">{{ row.parcel_count }}</td>
+          <td class="flags-cell">
+            {% if row.is_corporate %}<span class="badge-corporate">CORPORATE</span>{% endif %}
+            {% if row.is_institutional %}<span class="badge-institutional">INSTITUTIONAL</span>{% endif %}
+          </td>
         </tr>
         {% endfor %}
       </tbody>
@@ -469,6 +531,7 @@ GEO_LEADERBOARD_TMPL = _BASE_HEAD + """\
           <th class="num">In area</th>
           <th class="num">Total</th>
           <th>Flags</th>
+          <th class="num">Connected</th>
           {% if geo_key %}<th></th>{% endif %}
         </tr>
       </thead>
@@ -478,6 +541,9 @@ GEO_LEADERBOARD_TMPL = _BASE_HEAD + """\
           <td class="rank">{{ loop.index }}</td>
           <td class="owner-cell">
             <a href="/owner/{{ r.cluster_id }}/">{{ r.primary_name | e }}</a>
+            {% if r.alt_names %}
+            <div class="alt-names">{{ r.alt_names | e }}</div>
+            {% endif %}
           </td>
           <td class="num">{{ r.local_parcel_count }}</td>
           <td class="num muted">{{ r.total_parcel_count }}</td>
@@ -488,9 +554,79 @@ GEO_LEADERBOARD_TMPL = _BASE_HEAD + """\
             <span class="badge-state">{{ r.foreign_state | e }}</span>
             {% endif %}
           </td>
+          <td class="num">{% if r.connection_count > 0 %}<a href="/owner/{{ r.cluster_id }}/#related" class="connection-count">{{ r.connection_count }}</a>{% endif %}</td>
           {% if geo_key %}
           <td class="map-link-cell"><a href="/?cluster={{ r.cluster_id }}&geo={{ geo_key }}&area={{ area_raw_enc }}" title="View on map" class="map-link">map →</a></td>
           {% endif %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+
+    <p class="sources-footnote"><a href="/faq/#data-sources">ⓘ Data sources</a></p>
+""" + _BASE_FOOT
+
+ADDRESS_INDEX_TMPL = _BASE_HEAD + """\
+    <p class="breadcrumb"><a href="/l/">← Leaderboards</a></p>
+    <h1>Shared Mailing Addresses</h1>
+    <p class="lead">Street addresses shared by multiple distinct owner clusters — a key signal
+      for identifying networked ownership. <span class="muted">{{ total }} addresses shown.</span></p>
+
+    <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Address</th>
+          <th class="num">Clusters</th>
+          <th class="num">Parcels</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td><a href="/l/addresses/{{ r.slug }}/">{{ r.address | e }}</a></td>
+          <td class="num">{{ r.cluster_count }}</td>
+          <td class="num">{{ r.total_parcels }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+
+    <p class="sources-footnote"><a href="/faq/#data-sources">ⓘ Data sources</a></p>
+""" + _BASE_FOOT
+
+ADDRESS_TMPL = _BASE_HEAD + """\
+    <p class="breadcrumb"><a href="/l/">← Leaderboards</a> / <a href="/l/addresses/">Shared Addresses</a></p>
+    <h1>{{ address | e }}</h1>
+    <p class="lead">{{ cluster_count }} owner cluster{{ 's' if cluster_count != 1 else '' }}
+      share this mailing address ({{ total_parcels }} total parcel{{ 's' if total_parcels != 1 else '' }}).</p>
+
+    <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Owner</th>
+          <th class="num">Parcels</th>
+          <th>Flags</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in clusters %}
+        <tr>
+          <td>
+            {% if row.parcel_count >= 2 %}
+            <a href="/owner/{{ row.cluster_id }}/">{{ row.primary_name | e }}</a>
+            {% else %}
+            {{ row.primary_name | e }}
+            {% endif %}
+          </td>
+          <td class="num">{{ row.parcel_count }}</td>
+          <td class="flags-cell">
+            {% if row.is_corporate %}<span class="badge-corporate">CORPORATE</span>{% endif %}
+            {% if row.is_institutional %}<span class="badge-institutional">INSTITUTIONAL</span>{% endif %}
+          </td>
         </tr>
         {% endfor %}
       </tbody>
@@ -520,7 +656,7 @@ def fmt_int(val):
     return int(val)
 
 def render_leaderboard(rows):
-    env = Environment(loader=BaseLoader())
+    env = _make_env()
     tmpl = env.from_string(LEADERBOARD_TMPL)
     return tmpl.render(
         page_title="Top Landlords",
@@ -529,14 +665,23 @@ def render_leaderboard(rows):
         total=len(rows),
     )
 
-def render_owner(cluster_id, stats, parcels, county_breakdown, sos_data, neighborhoods, linkable_agent_ids=frozenset(), cluster_related=None):
+def render_owner(cluster_id, stats, parcels, county_breakdown, sos_data, neighborhoods,
+                 linkable_agent_ids=frozenset(), cluster_related=None,
+                 entity_sos_ids=None, officers=None):
     names = stats["owner_names"] or []
     primary_name = names[0] if names else f"Cluster {cluster_id}"
-    alt_names = sorted(names[1:]) if len(names) > 1 else []
 
-    # Owner addresses — cap at 8, skip empty
+    # alt_names as [{name, sos_business_id}] — SOS IDs from entity_sos_ids lookup
+    sos_id_map = {item["name"]: item["sos_business_id"]
+                  for item in (entity_sos_ids or [])}
+    alt_names = [
+        {"name": n, "sos_business_id": sos_id_map.get(n)}
+        for n in sorted(names[1:])
+    ] if len(names) > 1 else []
+
+    # Owner addresses — cap at 20, skip empty
     raw_addrs = stats.get("owner_addresses") or []
-    owner_addresses = [a for a in raw_addrs if a and a.strip()][:8]
+    owner_addresses = [a for a in raw_addrs if a and a.strip()][:20]
 
     # County breakdown
     county_fulton = county_breakdown.get("fulton", 0)
@@ -547,17 +692,21 @@ def render_owner(cluster_id, stats, parcels, county_breakdown, sos_data, neighbo
     sos_statuses = sos_data.get("statuses", [])
     sos_states = sos_data.get("states", [])
     sos_business_types = sos_data.get("business_types", [])
-    sos_agents = sos_data.get("agents", [])
+    sos_agents = sos_data.get("agents", [])          # cap handled in fetch
+    principal_offices = sos_data.get("principal_offices", [])
 
     # Related owners
     related_owners = (cluster_related or {}).get(cluster_id, [])
+
+    # Officers (capped in fetch function)
+    officers_list = officers or []
 
     # Parcel table cap
     parcel_count_raw = fmt_int(stats["parcel_count"])
     parcel_table_capped = len(parcels) > 200
     parcels_display = parcels[:200]
 
-    env = Environment(loader=BaseLoader())
+    env = _make_env()
     tmpl = env.from_string(OWNER_TMPL)
     return tmpl.render(
         page_title=primary_name,
@@ -582,9 +731,11 @@ def render_owner(cluster_id, stats, parcels, county_breakdown, sos_data, neighbo
         sos_business_types=sos_business_types,
         sos_agents=sos_agents,
         sos_warn_statuses=SOS_WARN_STATUSES,
+        principal_offices=principal_offices,
         linkable_agent_ids=linkable_agent_ids,
         related_owners=related_owners,
         neighborhoods=neighborhoods,
+        officers=officers_list,
         parcels=parcels_display,
         parcel_table_capped=parcel_table_capped,
     )
@@ -603,22 +754,17 @@ def ensure_materialized_views(conn):
         for view in required_views:
             if view not in existing:
                 missing.append(view)
-    
+
     if missing:
         print(f"Materialized views missing ({', '.join(missing)}). Recreating all...")
         sql_path = Path(__file__).parent / "sql" / "04_create_materialized_views.sql"
         if not sql_path.exists():
             print(f"Error: SQL script not found at {sql_path}")
             sys.exit(1)
-        
-        # We use PGPASSWORD environment variable since we're calling psql via shell
-        # but we can also just execute the SQL via the current connection.
-        # Executing via connection is cleaner if we don't mind the wait.
+
         with open(sql_path, "r") as f:
             sql = f.read()
-        
-        # The SQL file has multiple statements, some might fail if they exist
-        # but create_materialized_views.sql uses DROP ... IF EXISTS.
+
         with conn.cursor() as cur:
             cur.execute(sql)
         conn.commit()
@@ -692,19 +838,21 @@ def fetch_county_breakdown_batch(conn, cluster_ids):
         return result
 
 def fetch_sos_details_batch(conn, cluster_ids):
-    """Returns {cluster_id: {rows, statuses, states, business_types, agents}}"""
+    """Returns {cluster_id: {rows, statuses, states, business_types, agents, principal_offices}}"""
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         cur.execute("""
             SELECT cluster_id,
                    sos_status, sos_foreign_state, sos_business_type,
                    sos_registered_agent, sos_registered_agent_address,
                    sos_registered_agent_id,
+                   sos_principal_city, sos_principal_state,
                    COUNT(*) AS entity_count
             FROM owner_entities
             WHERE cluster_id = ANY(%s) AND sos_status IS NOT NULL
             GROUP BY cluster_id, sos_status, sos_foreign_state, sos_business_type,
                      sos_registered_agent, sos_registered_agent_address,
-                     sos_registered_agent_id
+                     sos_registered_agent_id,
+                     sos_principal_city, sos_principal_state
             ORDER BY cluster_id, entity_count DESC
         """, (cluster_ids,))
         rows_by_cluster = defaultdict(list)
@@ -713,11 +861,11 @@ def fetch_sos_details_batch(conn, cluster_ids):
 
     result = {}
     for cid, rows in rows_by_cluster.items():
-        # Aggregate unique values, preserving count-order for statuses
         seen_statuses = {}
         seen_states = set()
         seen_types = set()
-        seen_agents = {}  # (name_lower, addr_lower) -> {name, address}
+        seen_agents = {}  # (name_lower, addr_lower) -> {name, address, ra_id}
+        seen_principal_offices = {}  # (city_lower, state_lower) -> {display, out_of_state}
 
         for r in rows:
             st = r["sos_status"]
@@ -740,8 +888,27 @@ def fetch_sos_details_batch(conn, cluster_ids):
                 if key not in seen_agents:
                     seen_agents[key] = {"name": ra_name, "address": ra_addr, "ra_id": ra_id}
 
+            pcity = (r["sos_principal_city"] or "").strip()
+            pstate = (r["sos_principal_state"] or "").strip()
+            if pcity or pstate:
+                po_key = (pcity.lower(), pstate.lower())
+                if po_key not in seen_principal_offices:
+                    parts = [x for x in [pcity, pstate] if x]
+                    display = ", ".join(parts)
+                    out_of_state = bool(pstate and pstate not in ("Georgia", "GA"))
+                    seen_principal_offices[po_key] = {
+                        "city": pcity, "state": pstate,
+                        "display": display,
+                        "out_of_state": out_of_state,
+                    }
+
         statuses = [s for s, _ in sorted(seen_statuses.items(), key=lambda x: -x[1])]
-        agents = list(seen_agents.values())[:10]
+        agents = list(seen_agents.values())[:20]
+        # Sort principal offices: out-of-state first, then alphabetical
+        principal_offices = sorted(
+            seen_principal_offices.values(),
+            key=lambda po: (not po["out_of_state"], po["display"])
+        )
 
         result[cid] = {
             "rows": rows,
@@ -749,8 +916,74 @@ def fetch_sos_details_batch(conn, cluster_ids):
             "states": sorted(seen_states),
             "business_types": sorted(seen_types),
             "agents": agents,
+            "principal_offices": principal_offices,
         }
     return result
+
+
+def fetch_entity_sos_ids_batch(conn, cluster_ids):
+    """Returns {cluster_id: [{name, sos_business_id}]} for entities with SOS matches.
+    Used to link owner names directly to their GA SOS filings."""
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT cluster_id, owner_name_norm, sos_business_id
+            FROM owner_entities
+            WHERE cluster_id = ANY(%s) AND sos_business_id IS NOT NULL
+            ORDER BY cluster_id, owner_name_norm
+        """, (cluster_ids,))
+        by_cluster = defaultdict(list)
+        seen_ids = defaultdict(set)
+        for row in cur.fetchall():
+            cid, name, bid = row
+            if bid not in seen_ids[cid]:
+                by_cluster[cid].append({"name": name, "sos_business_id": bid})
+                seen_ids[cid].add(bid)
+    return dict(by_cluster)
+
+
+def fetch_officers_batch(conn, cluster_ids):
+    """Returns {cluster_id: [{role, name, city, state}]}, deduped, capped at 20."""
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT DISTINCT
+                oe.cluster_id,
+                o.description AS role,
+                o.first_name,
+                o.middle_name,
+                o.last_name,
+                o.company_name,
+                o.city,
+                o.state
+            FROM owner_entities oe
+            JOIN sos.officers o ON o.control_number = oe.sos_control_number
+            WHERE oe.cluster_id = ANY(%s)
+              AND (o.first_name IS NOT NULL OR o.company_name IS NOT NULL)
+            ORDER BY oe.cluster_id, o.description, o.last_name, o.first_name
+        """, (cluster_ids,))
+        by_cluster = defaultdict(list)
+        seen = defaultdict(set)
+        for row in cur.fetchall():
+            cid, role, first, middle, last, company, city, state = row
+            # Build display name
+            if company and company.strip():
+                name = company.strip()
+            else:
+                parts = [x.strip() for x in [first, middle, last] if x and x.strip()]
+                name = " ".join(parts)
+            if not name:
+                continue
+            key = (role, name.lower())
+            if key not in seen[cid]:
+                seen[cid].add(key)
+                by_cluster[cid].append({
+                    "role": (role or "").strip(),
+                    "name": name,
+                    "city": (city or "").strip(),
+                    "state": (state or "").strip(),
+                })
+        # Cap at 20 per cluster
+        return {cid: entries[:20] for cid, entries in by_cluster.items()}
+
 
 def fetch_neighborhood_concentration_batch(conn, cluster_ids):
     """Returns {cluster_id: [{name, count}, ...]} top 5 per cluster."""
@@ -803,37 +1036,47 @@ def fetch_linkable_agent_ids(conn):
 
 
 def fetch_agent_clusters(conn, ra_ids):
-    """Returns {ra_id: [{cluster_id, primary_name, parcel_count}, ...]}."""
+    """Returns {ra_id: [{cluster_id, primary_name, parcel_count, is_corporate, is_institutional}, ...]}."""
     if not ra_ids:
         return {}
     with conn.cursor() as cur:
         cur.execute("""
             SELECT oe.sos_registered_agent_id AS ra_id,
-                   oc.cluster_id, oc.owner_names[1] AS primary_name, oc.parcel_count
+                   oc.cluster_id, oc.owner_names[1] AS primary_name, oc.parcel_count,
+                   (mc.corporate_parcel_count > 0) AS is_corporate,
+                   (mc.institutional_parcel_count > 0) AS is_institutional
             FROM owner_entities oe
             JOIN ownership_clusters oc ON oc.cluster_id = oe.cluster_id
+            JOIN mv_cluster_stats mc ON mc.cluster_id = oe.cluster_id
             WHERE oe.sos_registered_agent_id = ANY(%s)
-            GROUP BY oe.sos_registered_agent_id, oc.cluster_id, oc.owner_names[1], oc.parcel_count
+            GROUP BY oe.sos_registered_agent_id, oc.cluster_id, oc.owner_names[1], oc.parcel_count,
+                     mc.corporate_parcel_count, mc.institutional_parcel_count
             ORDER BY oe.sos_registered_agent_id, oc.parcel_count DESC
         """, (list(ra_ids),))
         result = defaultdict(list)
         for row in cur.fetchall():
-            ra_id, cluster_id, primary_name, parcel_count = row
+            ra_id, cluster_id, primary_name, parcel_count, is_corp, is_inst = row
             result[ra_id].append({
                 "cluster_id": cluster_id,
                 "primary_name": primary_name or f"Cluster {cluster_id}",
                 "parcel_count": int(parcel_count),
+                "is_corporate": bool(is_corp),
+                "is_institutional": bool(is_inst),
             })
         return result
 
 
 def fetch_address_linkage(conn):
-    """Returns {addr: [{cluster_id, primary_name, parcel_count}, ...]} for addresses
-    shared by 2–10 clusters (real street addresses only — must start with a digit)."""
+    """Returns {addr: [{cluster_id, primary_name, parcel_count, is_corporate, is_institutional}, ...]}
+    for addresses shared by 2–10 clusters (real street addresses — must start with a digit)."""
     with conn.cursor() as cur:
         cur.execute("""
-            SELECT addr, oc.cluster_id, oc.owner_names[1] AS primary_name, oc.parcel_count
-            FROM ownership_clusters oc, unnest(oc.owner_addresses) AS addr
+            SELECT addr, oc.cluster_id, oc.owner_names[1] AS primary_name, oc.parcel_count,
+                   (mc.corporate_parcel_count > 0) AS is_corporate,
+                   (mc.institutional_parcel_count > 0) AS is_institutional
+            FROM ownership_clusters oc
+            JOIN mv_cluster_stats mc ON mc.cluster_id = oc.cluster_id,
+            unnest(oc.owner_addresses) AS addr
             WHERE oc.owner_addresses IS NOT NULL
               AND addr ~ '^[0-9]'
               AND addr IN (
@@ -847,11 +1090,13 @@ def fetch_address_linkage(conn):
         """)
         result = defaultdict(list)
         for row in cur.fetchall():
-            addr, cluster_id, primary_name, parcel_count = row
+            addr, cluster_id, primary_name, parcel_count, is_corp, is_inst = row
             result[addr].append({
                 "cluster_id": cluster_id,
                 "primary_name": primary_name or f"Cluster {cluster_id}",
                 "parcel_count": int(parcel_count),
+                "is_corporate": bool(is_corp),
+                "is_institutional": bool(is_inst),
             })
         return result
 
@@ -871,6 +1116,7 @@ def fetch_geo_data(conn, col_name):
             SELECT am.area,
                    oe.cluster_id,
                    mc.owner_names[1] AS primary_name,
+                   mc.owner_names[2:4] AS alt_names_arr,
                    mc.corporate_parcel_count > 0 AS is_corporate,
                    mc.institutional_parcel_count > 0 AS is_institutional,
                    mc.primary_foreign_state,
@@ -880,20 +1126,23 @@ def fetch_geo_data(conn, col_name):
             CROSS JOIN LATERAL unnest(oe.parcel_ids) AS u(pid)
             JOIN area_map am ON am.parcelid = u.pid
             JOIN mv_cluster_stats mc ON mc.cluster_id = oe.cluster_id
-            GROUP BY 1, 2, 3, 4, 5, 6, 7
+            GROUP BY 1, 2, 3, 4, 5, 6, 7, 8
             ORDER BY area, local_parcel_count DESC
         """)
         by_area = defaultdict(list)
         for row in cur.fetchall():
-            area, cid, name, is_corp, is_inst, fstate, total_count, local_count = row
+            area, cid, name, alt_arr, is_corp, is_inst, fstate, total_count, local_count = row
+            alts = [n for n in (alt_arr or []) if n]
             by_area[area].append({
                 "cluster_id": cid,
                 "primary_name": name or f"Cluster {cid}",
+                "alt_names": ", ".join(alts) if alts else "",
                 "is_corporate": bool(is_corp),
                 "is_institutional": bool(is_inst),
                 "foreign_state": fstate,
                 "total_parcel_count": int(total_count),
                 "local_parcel_count": int(local_count),
+                "connection_count": 0,  # filled in below if cluster_connection_count passed
             })
         return dict(by_area)
 
@@ -905,6 +1154,7 @@ def fetch_county_geo_data(conn):
             SELECT oe.county,
                    oe.cluster_id,
                    mc.owner_names[1] AS primary_name,
+                   mc.owner_names[2:4] AS alt_names_arr,
                    mc.corporate_parcel_count > 0 AS is_corporate,
                    mc.institutional_parcel_count > 0 AS is_institutional,
                    mc.primary_foreign_state,
@@ -912,20 +1162,23 @@ def fetch_county_geo_data(conn):
                    SUM(oe.count) AS local_parcel_count
             FROM owner_entities oe
             JOIN mv_cluster_stats mc ON mc.cluster_id = oe.cluster_id
-            GROUP BY 1, 2, 3, 4, 5, 6, 7
+            GROUP BY 1, 2, 3, 4, 5, 6, 7, 8
             ORDER BY county, local_parcel_count DESC
         """)
         by_county = defaultdict(list)
         for row in cur.fetchall():
-            county, cid, name, is_corp, is_inst, fstate, total_count, local_count = row
+            county, cid, name, alt_arr, is_corp, is_inst, fstate, total_count, local_count = row
+            alts = [n for n in (alt_arr or []) if n]
             by_county[county].append({
                 "cluster_id": cid,
                 "primary_name": name or f"Cluster {cid}",
+                "alt_names": ", ".join(alts) if alts else "",
                 "is_corporate": bool(is_corp),
                 "is_institutional": bool(is_inst),
                 "foreign_state": fstate,
                 "total_parcel_count": int(total_count),
                 "local_parcel_count": int(local_count),
+                "connection_count": 0,
             })
         return dict(by_county)
 
@@ -934,50 +1187,60 @@ def build_cluster_related(linkable_agents, agent_clusters, address_groups=None):
     """Compute related-cluster lists from RA co-membership and shared mailing addresses.
 
     Returns:
-        cluster_related: {cluster_id: [{cluster_id, primary_name, parcel_count, via}, ...]}
+        cluster_related: {cluster_id: [{cluster_id, primary_name, parcel_count, via_items}, ...]}
             sorted by parcel_count desc, capped at 15.
+            via_items: [{text, url}] — each connection reason with optional internal link.
         cluster_connection_count: {cluster_id: N} (pre-cap total, for leaderboard badge)
     """
-    # staging[cid][ocid] = {primary_name, parcel_count, via_reasons: set of strings}
+    # staging[cid][ocid] = {primary_name, parcel_count, via_reasons: {text: url_or_None}}
     staging = defaultdict(dict)
 
-    def _link(cid, other_c, reason):
+    def _link(cid, other_c, reason_text, reason_url=None):
         ocid = other_c["cluster_id"]
         if ocid not in staging[cid]:
             staging[cid][ocid] = {
                 "cluster_id": ocid,
                 "primary_name": other_c["primary_name"],
                 "parcel_count": other_c["parcel_count"],
-                "via_reasons": set(),
+                "via_reasons": {},
             }
-        staging[cid][ocid]["via_reasons"].add(reason)
+        # Keep first URL seen for a given reason text
+        if reason_text not in staging[cid][ocid]["via_reasons"]:
+            staging[cid][ocid]["via_reasons"][reason_text] = reason_url
 
     for ra_id, clusters in agent_clusters.items():
         agent_name = linkable_agents[ra_id]["name"]
+        agent_url = f"/agent/{ra_id}/"
+        reason = f"Shared RA: {agent_name}"
         for this_c in clusters:
             for other_c in clusters:
                 if this_c["cluster_id"] != other_c["cluster_id"]:
-                    _link(this_c["cluster_id"], other_c, f"Shared RA: {agent_name}")
+                    _link(this_c["cluster_id"], other_c, reason, agent_url)
 
     for addr, clusters in (address_groups or {}).items():
-        reason = "Shared address"
+        addr_slug = slugify(addr)
+        addr_url = f"/l/addresses/{addr_slug}/"
+        reason = f"Shared address: {addr}"
         for this_c in clusters:
             for other_c in clusters:
                 if this_c["cluster_id"] != other_c["cluster_id"]:
-                    _link(this_c["cluster_id"], other_c, reason)
+                    _link(this_c["cluster_id"], other_c, reason, addr_url)
 
     cluster_related = {}
     cluster_connection_count = {}
     for cid, others in staging.items():
-        rows = [
-            {
+        rows = []
+        for ocid, info in others.items():
+            via_items = [
+                {"text": text, "url": url}
+                for text, url in sorted(info["via_reasons"].items())
+            ]
+            rows.append({
                 "cluster_id": ocid,
                 "primary_name": info["primary_name"],
                 "parcel_count": info["parcel_count"],
-                "via": ", ".join(sorted(info["via_reasons"])),
-            }
-            for ocid, info in others.items()
-        ]
+                "via_items": via_items,
+            })
         rows.sort(key=lambda r: -r["parcel_count"])
         cluster_connection_count[cid] = len(rows)
         cluster_related[cid] = rows[:15]
@@ -1032,7 +1295,7 @@ def build_leaderboard(conn, output_dir, cluster_connection_count=None):
 def build_agent_pages(linkable_agents, agent_clusters, output_dir):
     """Generate /agent/{ra_id}/index.html for each linkable registered agent,
     plus /agents/index.html listing all of them."""
-    env = Environment(loader=BaseLoader())
+    env = _make_env()
     tmpl = env.from_string(AGENT_TMPL)
     index_tmpl = env.from_string(AGENTS_INDEX_TMPL)
     written = 0
@@ -1073,8 +1336,54 @@ def build_agent_pages(linkable_agents, agent_clusters, output_dir):
     return written
 
 
+def build_address_pages(address_groups, output_dir):
+    """Generate /l/addresses/{slug}/index.html for each shared mailing address,
+    plus /l/addresses/index.html listing all of them."""
+    env = _make_env()
+    tmpl = env.from_string(ADDRESS_TMPL)
+    index_tmpl = env.from_string(ADDRESS_INDEX_TMPL)
+    written = 0
+    index_rows = []
+
+    for addr, clusters in address_groups.items():
+        slug = slugify(addr)
+        total_parcels = sum(c["parcel_count"] for c in clusters)
+        html = tmpl.render(
+            page_title=f"{addr} — Shared Address",
+            meta_description=f"{len(clusters)} owner clusters share the mailing address {addr}.",
+            address=addr,
+            cluster_count=len(clusters),
+            total_parcels=total_parcels,
+            clusters=clusters,
+        )
+        out_path = output_dir / "l" / "addresses" / slug / "index.html"
+        write_if_changed(out_path, html)
+        written += 1
+        index_rows.append({
+            "address": addr,
+            "slug": slug,
+            "cluster_count": len(clusters),
+            "total_parcels": total_parcels,
+        })
+
+    index_rows.sort(key=lambda r: (-r["cluster_count"], r["address"]))
+    index_html = index_tmpl.render(
+        page_title="Shared Mailing Addresses",
+        meta_description="Street addresses shared by multiple distinct property owner clusters in Atlanta.",
+        rows=index_rows,
+        total=len(index_rows),
+    )
+    for dest in [output_dir / "l" / "addresses" / "index.html",
+                 output_dir / "addresses" / "index.html"]:
+        write_if_changed(dest, index_html)
+
+    print(f"  address pages: {written} pages + index")
+    return written
+
+
 def _build_geo_section(env, area_rows, output_dir, url_base, geo_type_label, area_label,
-                       index_title, index_lead, area_display_fn=None, geo_key=None):
+                       index_title, index_lead, area_display_fn=None, geo_key=None,
+                       cluster_connection_count=None):
     """Build individual area pages + index page for one geo dimension.
     area_display_fn: optional callable(raw_area) -> display string (e.g. 'District 5')
     Returns number of area pages written.
@@ -1082,6 +1391,7 @@ def _build_geo_section(env, area_rows, output_dir, url_base, geo_type_label, are
     geo_tmpl = env.from_string(GEO_LEADERBOARD_TMPL)
     idx_tmpl = env.from_string(GEO_INDEX_TMPL)
     index_url = f"/{url_base}/"
+    counts = cluster_connection_count or {}
     written = 0
     index_rows = []
 
@@ -1090,6 +1400,9 @@ def _build_geo_section(env, area_rows, output_dir, url_base, geo_type_label, are
         display = area_display_fn(area) if area_display_fn else str(area)
         area_total = sum(r["local_parcel_count"] for r in rows)
         top100 = rows[:100]
+        # Inject connection counts
+        for r in top100:
+            r["connection_count"] = counts.get(r["cluster_id"], 0)
 
         html = geo_tmpl.render(
             page_title=f"{display} — Top Property Owners",
@@ -1130,9 +1443,9 @@ def _build_geo_section(env, area_rows, output_dir, url_base, geo_type_label, are
     return written
 
 
-def build_geo_leaderboard_pages(conn, output_dir):
+def build_geo_leaderboard_pages(conn, output_dir, cluster_connection_count=None):
     """Generate all geo leaderboard pages under /l/."""
-    env = Environment(loader=BaseLoader())
+    env = _make_env()
     base = output_dir / "l"
 
     print("Building geo leaderboards...")
@@ -1148,6 +1461,7 @@ def build_geo_leaderboard_pages(conn, output_dir):
         index_title="Atlanta Neighborhoods",
         index_lead="Top property owners by Atlanta neighborhood.",
         geo_key="neighborhood",
+        cluster_connection_count=cluster_connection_count,
     )
     print(f"{n} pages")
 
@@ -1163,6 +1477,7 @@ def build_geo_leaderboard_pages(conn, output_dir):
         index_lead="Top property owners by Atlanta City Council district.",
         area_display_fn=lambda v: f"District {v}",
         geo_key="council",
+        cluster_connection_count=cluster_connection_count,
     )
     print(f"{n} pages")
 
@@ -1178,16 +1493,21 @@ def build_geo_leaderboard_pages(conn, output_dir):
         index_lead="Top property owners by Atlanta Neighborhood Planning Unit (NPU).",
         area_display_fn=lambda v: f"NPU {v}",
         geo_key="npu",
+        cluster_connection_count=cluster_connection_count,
     )
     print(f"{n} pages")
 
     # County leaderboards
     print("  county...", end=" ", flush=True)
     county_data = fetch_county_geo_data(conn)
-    env2 = Environment(loader=BaseLoader())
+    env2 = _make_env()
     geo_tmpl = env2.from_string(GEO_LEADERBOARD_TMPL)
+    counts = cluster_connection_count or {}
     for county, rows in county_data.items():
         county_total = sum(r["local_parcel_count"] for r in rows)
+        top500 = rows[:500]
+        for r in top500:
+            r["connection_count"] = counts.get(r["cluster_id"], 0)
         html = geo_tmpl.render(
             page_title=f"{county.title()} County — Top Property Owners",
             meta_description=f"Top property owners in {county.title()} County by parcel count.",
@@ -1195,7 +1515,7 @@ def build_geo_leaderboard_pages(conn, output_dir):
             geo_type_label="county",
             index_url="/l/",
             index_label="Leaderboards",
-            rows=rows[:500],
+            rows=top500,
             total=min(len(rows), 500),
             area_total_parcels=county_total,
         )
@@ -1214,21 +1534,30 @@ def worker(args):
     try:
         for i in range(0, len(cluster_ids), BATCH_SIZE):
             batch = cluster_ids[i:i + BATCH_SIZE]
-            stats_map = fetch_cluster_stats_batch(conn, batch)
-            parcels_map = fetch_parcels_batch(conn, batch)
-            county_map = fetch_county_breakdown_batch(conn, batch)
-            sos_map = fetch_sos_details_batch(conn, batch)
-            nbhd_map = fetch_neighborhood_concentration_batch(conn, batch)
+            stats_map      = fetch_cluster_stats_batch(conn, batch)
+            parcels_map    = fetch_parcels_batch(conn, batch)
+            county_map     = fetch_county_breakdown_batch(conn, batch)
+            sos_map        = fetch_sos_details_batch(conn, batch)
+            nbhd_map       = fetch_neighborhood_concentration_batch(conn, batch)
+            sos_ids_map    = fetch_entity_sos_ids_batch(conn, batch)
+            officers_map   = fetch_officers_batch(conn, batch)
 
             for cid in batch:
                 stats = stats_map.get(cid)
                 if not stats:
                     continue
-                parcels = parcels_map.get(cid, [])
+                parcels        = parcels_map.get(cid, [])
                 county_breakdown = county_map.get(cid, {})
-                sos_data = sos_map.get(cid, {})
-                neighborhoods = nbhd_map.get(cid, [])
-                html = render_owner(cid, stats, parcels, county_breakdown, sos_data, neighborhoods, linkable_agent_ids, cluster_related)
+                sos_data       = sos_map.get(cid, {})
+                neighborhoods  = nbhd_map.get(cid, [])
+                entity_sos_ids = sos_ids_map.get(cid, [])
+                officers       = officers_map.get(cid, [])
+                html = render_owner(
+                    cid, stats, parcels, county_breakdown, sos_data, neighborhoods,
+                    linkable_agent_ids, cluster_related,
+                    entity_sos_ids=entity_sos_ids,
+                    officers=officers,
+                )
                 out_path = output_dir / "owner" / str(cid) / "index.html"
                 write_if_changed(out_path, html)
                 written += 1
@@ -1310,13 +1639,17 @@ def main():
 
         if not args.owner_only:
             build_leaderboard(conn, output_dir, cluster_connection_count)
-            build_geo_leaderboard_pages(conn, output_dir)
+            build_geo_leaderboard_pages(conn, output_dir,
+                                        cluster_connection_count=cluster_connection_count)
             # Agent pages are fast; always build unless owner-only
             print("Building agent pages...", end=" ", flush=True)
             n_agents = build_agent_pages(linkable_agents, agent_clusters, output_dir)
             print(f"done ({n_agents} pages)")
-        if not args.leaderboard_only:
+            # Shared address pages
+            print("Building shared address pages...", end=" ", flush=True)
+            build_address_pages(address_groups, output_dir)
 
+        if not args.leaderboard_only:
             build_owner_pages(conn, output_dir, args.min_parcels, args.workers,
                               cluster_ids_override=cluster_ids_override,
                               linkable_agent_ids=linkable_agent_ids,

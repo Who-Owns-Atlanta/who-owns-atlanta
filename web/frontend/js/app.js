@@ -21,6 +21,7 @@ const _initParams     = new URLSearchParams(window.location.search);
 let pendingClusterId  = parseInt(_initParams.get('cluster')) || null;
 const pendingGeoType  = _initParams.get('geo')  || null;  // 'neighborhood' | 'npu' | 'council'
 const pendingGeoArea  = _initParams.get('area') || null;  // raw GeoJSON NAME value
+const pendingParcel   = _initParams.get('parcel') || null; // 'county/parcel_id'
 
 const map = new maplibregl.Map({
   container: 'map',
@@ -488,6 +489,31 @@ map.on('load', async () => {
   // Always fly to the geo area — geo handler owns the viewport.
   // Cluster handler skips its own fitBounds when pendingGeoType is set.
   setAreaFilter(label, feat.geometry);
+});
+
+// ---------------------------------------------------------------------------
+// ?parcel={county}/{parcel_id} deep link — open a specific parcel on page load
+// ---------------------------------------------------------------------------
+
+map.on('load', async () => {
+  if (!pendingParcel) return;
+  const slash = pendingParcel.indexOf('/');
+  if (slash === -1) return;
+  const county   = pendingParcel.slice(0, slash);
+  const parcelId = pendingParcel.slice(slash + 1);
+
+  // Fetch parcel to get lat/lon for fly-to, then render the panel.
+  try {
+    const res = await fetch(`/api/parcel/${county}/${encodeURIComponent(parcelId)}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.lat && data.lon) {
+      map.flyTo({ center: [data.lon, data.lat], zoom: 16, duration: 800 });
+    }
+    renderParcelPanel(data);
+    highlightParcel(parcelId);
+    showPanel();
+  } catch { /* silently ignore */ }
 });
 
 // ---------------------------------------------------------------------------
