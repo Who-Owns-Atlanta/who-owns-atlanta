@@ -13,33 +13,40 @@
     "last_loaded": "2026-02-13",
     "url": "https://dekalbinsights-dekalbgis.opendata.arcgis.com/datasets/731f52734f2346d6b939ff7337fcfaa2_0/"
   },
+  "atlanta_tax_parcel": {
+    "name": "City of Atlanta GIS — Tax_Parcel",
+    "description": "Tax Parcels",
+    "admin_date": "2025-02-05",
+    "last_loaded": "2025-02-13",
+    "url": "https://dpcd-coaplangis.opendata.arcgis.com/datasets/ee82525ee33b49778055622c3a3cf534_0/explore"
+  },
   "atlanta_address_point": {
     "name": "City of Atlanta GIS — Address_Point",
     "description": "Addresses assigned to Tax Parcels",
     "admin_date": "2025-02-05",
     "last_loaded": "2025-02-13",
-    "url": "https://dcp-coaplangis.opendata.arcgis.com/"
+    "url": "https://dpcd-coaplangis.opendata.arcgis.com/maps/0a5785b3466a46c7a256f7fa9d628afd/explore"
   },
   "atlanta_gis_neighborhoods": {
     "name": "City of Atlanta GIS — Neighborhoods",
     "description": "Neighborhood boundaries (spatial join to parcels)",
     "admin_date": "2025-02-05",
-    "last_loaded": "2025-02-13",
+    "last_loaded": "2026-02-28",
     "url": "https://dcp-coaplangis.opendata.arcgis.com/"
   },
   "atlanta_gis_npu": {
     "name": "City of Atlanta GIS — NPU",
     "description": "Neighborhood Planning Unit boundaries",
     "admin_date": "2025-02-05",
-    "last_loaded": "2025-02-13",
-    "url": "https://dcp-coaplangis.opendata.arcgis.com/"
+    "last_loaded": "2026-02-28",
+    "url": "https://dpcd-coaplangis.opendata.arcgis.com/datasets/db52ab3981434142870a0d5300aa5c07_4/explore"
   },
   "atlanta_gis_council": {
     "name": "City of Atlanta GIS — Council Districts",
     "description": "City Council district boundaries",
     "admin_date": "2026-02-09",
-    "last_loaded": "2025-02-13",
-    "url": "https://dcp-coaplangis.opendata.arcgis.com/"
+    "last_loaded": "2026-02-28",
+    "url": "https://dpcd-coaplangis.opendata.arcgis.com/datasets/7c3899849bb04fa99365d9ec1179a491_4/explore"
   },
   "accela": {
     "name": "City of Atlanta — Accela",

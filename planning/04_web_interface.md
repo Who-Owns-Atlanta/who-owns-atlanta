@@ -20,7 +20,7 @@ A public-facing web interface for exploring Atlanta-area property ownership. Cor
 - **Parcel data:** Fulton (370K) + DeKalb (246K) — fully loaded, flagged, normalized, clustered
 - **Permit records:** Accela Building Complaints loaded via `application.records` — full backfill complete
 - **SOS data:** Not yet integrated. When it arrives, it enriches existing owner/cluster records — no new UI elements required, existing panels just get more data
-- **Static GIS overlays:** neighborhoods, NPU, council districts, address points — all in DB
+- **Static GIS overlays:** neighborhoods, NPU, council districts, address points — all in DB!
 
 ---
 

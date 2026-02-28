@@ -228,7 +228,7 @@ and replace files in `data/json/geojson/latest/`:
 - `Tax_Parcel.json`
 - `Neighborhood.json`
 - `NPU.json`
-- `Official_City_Council.json`
+- `Official_City_Council_Districts.geojson`
 
 
 

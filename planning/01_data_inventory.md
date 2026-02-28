@@ -71,5 +71,5 @@ is NOT used directly — both counties fully cover Atlanta's city limits, and ci
 | `Atlanta_City_Limits.json` | 192KB | City boundary polygon — for filtering parcels within Atlanta |
 | `Neighborhood.json` | 765KB | Neighborhood boundaries + names + NPU mapping |
 | `NPU.json` | 502KB | NPU (Neighborhood Planning Unit) boundaries |
-| `Official_City_Council.json` | 503KB | Council district boundaries |
+| `Official_City_Council_Districts.geojson` | 503KB | Council district boundaries |
 | `Zoning_District.json` | 6MB | Zoning district boundaries |

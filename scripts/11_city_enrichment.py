@@ -5,18 +5,16 @@ Adds three columns to fulton_parcels and dekalb_parcels:
   city_npu           TEXT  -- Neighborhood Planning Unit (A-Z)
   city_council       TEXT  -- City council district number
 
-Source: gis.Tax_Parcel (171K city parcels with pre-coded NEIGHBORHOOD/NPU/COUNCIL).
-
-Strategy: centroid-based lateral join picking the smallest matching city parcel
-(most specific — handles condo-unit level city data that produces 100s of matches
-for a single county parcel, all with identical neighborhood/NPU/council values).
+Sources: gis.neighborhoods, gis.npu, gis.council_districts.
+(Small authoritative layers loaded via scripts/06b_load_city_gis.py)
 
 Parcels outside Atlanta city limits get NULLs — expected for most of Fulton/DeKalb.
 """
 
 from sqlalchemy import create_engine, text
+import os
 
-DB_URL = "postgresql://woa:woa@localhost:5434/who_owns_atl"
+DB_URL = os.environ.get("DATABASE_URL", "postgresql://woa:woa@localhost:5434/who_owns_atl")
 engine = create_engine(DB_URL)
 
 ADD_COLUMNS_SQL = """
@@ -31,53 +29,36 @@ ALTER TABLE dekalb_parcels
     ADD COLUMN IF NOT EXISTS city_council      TEXT;
 """
 
-# DISTINCT ON picks the smallest city Tax_Parcel polygon (most specific match).
-# Uses ctid as a stable row identifier for the UPDATE join.
-# Condo-unit level city data produces 100s of matches per county parcel,
-# but they all agree on NEIGHBORHOOD/NPU/COUNCIL — smallest is cleanest.
-UPDATE_FULTON_SQL = """
-UPDATE fulton_parcels f
-SET
-    city_neighborhood = src.neighborhood,
-    city_npu          = src.npu,
-    city_council      = src.council
-FROM (
-    SELECT DISTINCT ON (f.ctid)
-        f.ctid,
-        tp."NEIGHBORHOOD" AS neighborhood,
-        tp."NPU"          AS npu,
-        tp."COUNCIL"      AS council
-    FROM fulton_parcels f
-    JOIN gis."Tax_Parcel" tp
-      ON ST_Intersects(ST_Centroid(f.geometry), tp.geometry)
-    ORDER BY f.ctid, ST_Area(tp.geometry)
-) src
-WHERE f.ctid = src.ctid;
-"""
+# Separate updates for each attribute to ensure robustness.
+# Centroid-based join is used for speed and to avoid sliver overlaps.
 
-UPDATE_DEKALB_SQL = """
-UPDATE dekalb_parcels d
-SET
-    city_neighborhood = src.neighborhood,
-    city_npu          = src.npu,
-    city_council      = src.council
-FROM (
-    SELECT DISTINCT ON (d.ctid)
-        d.ctid,
-        tp."NEIGHBORHOOD" AS neighborhood,
-        tp."NPU"          AS npu,
-        tp."COUNCIL"      AS council
-    FROM dekalb_parcels d
-    JOIN gis."Tax_Parcel" tp
-      ON ST_Intersects(ST_Centroid(d.geometry), tp.geometry)
-    ORDER BY d.ctid, ST_Area(tp.geometry)
-) src
-WHERE d.ctid = src.ctid;
-"""
+def get_update_sql(table_name):
+    return [
+        f"""
+        UPDATE {table_name} f
+        SET city_neighborhood = n."NAME"
+        FROM gis.neighborhoods n
+        WHERE ST_Intersects(ST_Centroid(f.geometry), n.geometry);
+        """,
+        f"""
+        UPDATE {table_name} f
+        SET city_npu = n."NAME"
+        FROM gis.npu n
+        WHERE ST_Intersects(ST_Centroid(f.geometry), n.geometry);
+        """,
+        f"""
+        UPDATE {table_name} f
+        SET city_council = c."NAME"
+        FROM gis.council_districts c
+        WHERE ST_Intersects(ST_Centroid(f.geometry), c.geometry);
+        """
+    ]
 
 INDEX_SQL = """
 CREATE INDEX IF NOT EXISTS idx_fulton_city_npu  ON fulton_parcels (city_npu);
 CREATE INDEX IF NOT EXISTS idx_dekalb_city_npu  ON dekalb_parcels (city_npu);
+CREATE INDEX IF NOT EXISTS idx_fulton_city_council ON fulton_parcels (city_council);
+CREATE INDEX IF NOT EXISTS idx_dekalb_city_council ON dekalb_parcels (city_council);
 """
 
 STATS_SQL = """
@@ -131,7 +112,7 @@ FROM (
     SELECT city_council FROM dekalb_parcels WHERE city_council IS NOT NULL AND city_council <> ''
 ) combined
 GROUP BY city_council
-ORDER BY city_council::int;
+ORDER BY CASE WHEN city_council ~ '^[0-9]+$' THEN city_council::int ELSE 999 END;
 """
 
 
@@ -141,13 +122,12 @@ def main():
         conn.execute(text(ADD_COLUMNS_SQL))
         print("  Done")
 
-        print("\nUpdating Fulton parcels via spatial join (may take a few minutes)...")
-        result = conn.execute(text(UPDATE_FULTON_SQL))
-        print(f"  {result.rowcount:,} Fulton parcels enriched")
-
-        print("\nUpdating DeKalb parcels via spatial join...")
-        result = conn.execute(text(UPDATE_DEKALB_SQL))
-        print(f"  {result.rowcount:,} DeKalb parcels enriched")
+        for table in ["fulton_parcels", "dekalb_parcels"]:
+            print(f"\nUpdating {table} via spatial joins...")
+            sqls = get_update_sql(table)
+            for sql in sqls:
+                result = conn.execute(text(sql))
+                print(f"  {result.rowcount:,} rows updated")
 
         print("\nCreating indexes...")
         conn.execute(text(INDEX_SQL))
