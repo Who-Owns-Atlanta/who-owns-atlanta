@@ -806,6 +806,38 @@ td.map-link-cell a:hover { color: var(--pico-primary); }
   filter: grayscale(0) opacity(1);
 }
 
+/* Racial composition stacked bar */
+.race-bar {
+  display: flex;
+  height: 10px;
+  border-radius: 5px;
+  overflow: hidden;
+  margin: 0.75rem 0;
+  gap: 1px;
+}
+.race-segment { height: 100%; }
+
+.race-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  font-size: 0.75rem;
+  color: #475569;
+}
+.race-legend-item { display: flex; align-items: center; gap: 0.3rem; }
+.race-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+/* Vulnerability stats row */
+.vuln-stats {
+  display: flex;
+  gap: 1rem;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #e2e8f0;
+}
+.vuln-stat { font-size: 0.8rem; color: #475569; }
+.vuln-stat strong { display: block; font-size: 1rem; color: #1e293b; }
+
 @media (max-width: 768px) {
   .demographics-grid,
   .portfolio-maps {

@@ -354,7 +354,7 @@ OWNER_TMPL = _BASE_HEAD + """\
       <div class="demo-card">
         <h3>Tenure & Concentration</h3>
         <p>On average, their Atlanta portfolio is located in neighborhoods where <strong>{{ demographics.avg_neighborhood_renter_pct | round(1) }}%</strong> of households are renters.</p>
-        
+
         {% set top_ms = demographics.market_share_json.items() | sort(attribute='1.rental_share', reverse=true) | selectattr('1.rental_share', 'gt', 0.5) | list %}
         {% if top_ms %}
         <div class="market-share-box">
@@ -366,6 +366,55 @@ OWNER_TMPL = _BASE_HEAD + """\
           </ul>
         </div>
         {% endif %}
+      </div>
+      <div class="demo-card">
+        <h3>Racial Composition</h3>
+        {% set black_pct  = demographics.avg_neighborhood_black_pct %}
+        {% set white_pct  = demographics.avg_neighborhood_white_pct %}
+        {% set hisp_pct   = demographics.avg_neighborhood_hispanic_pct %}
+        {% set asian_pct  = demographics.avg_neighborhood_asian_pct %}
+        {% set other_pct  = [0, 100 - black_pct - white_pct - hisp_pct - asian_pct] | max %}
+        <p>Their portfolio's neighborhoods average <strong>{{ black_pct | round(1) }}%</strong> Black, <strong>{{ white_pct | round(1) }}%</strong> White, <strong>{{ hisp_pct | round(1) }}%</strong> Hispanic, <strong>{{ asian_pct | round(1) }}%</strong> Asian.</p>
+        <div class="race-bar">
+          {% if black_pct > 0  %}<div class="race-segment" style="width:{{ black_pct | round(1) }}%; background:#6366f1;" title="Black {{ black_pct | round(1) }}%"></div>{% endif %}
+          {% if white_pct > 0  %}<div class="race-segment" style="width:{{ white_pct | round(1) }}%; background:#94a3b8;" title="White {{ white_pct | round(1) }}%"></div>{% endif %}
+          {% if hisp_pct > 0   %}<div class="race-segment" style="width:{{ hisp_pct | round(1) }}%; background:#f59e0b;" title="Hispanic {{ hisp_pct | round(1) }}%"></div>{% endif %}
+          {% if asian_pct > 0  %}<div class="race-segment" style="width:{{ asian_pct | round(1) }}%; background:#10b981;" title="Asian {{ asian_pct | round(1) }}%"></div>{% endif %}
+          {% if other_pct > 0  %}<div class="race-segment" style="width:{{ other_pct | round(1) }}%; background:#e2e8f0;" title="Other {{ other_pct | round(1) }}%"></div>{% endif %}
+        </div>
+        <div class="race-legend">
+          {% if black_pct > 0  %}<span class="race-legend-item"><span class="race-dot" style="background:#6366f1"></span>Black</span>{% endif %}
+          {% if white_pct > 0  %}<span class="race-legend-item"><span class="race-dot" style="background:#94a3b8"></span>White</span>{% endif %}
+          {% if hisp_pct > 0   %}<span class="race-legend-item"><span class="race-dot" style="background:#f59e0b"></span>Hispanic</span>{% endif %}
+          {% if asian_pct > 0  %}<span class="race-legend-item"><span class="race-dot" style="background:#10b981"></span>Asian</span>{% endif %}
+          {% if other_pct > 0  %}<span class="race-legend-item"><span class="race-dot" style="background:#e2e8f0"></span>Other</span>{% endif %}
+        </div>
+      </div>
+      <div class="demo-card">
+        <h3>Home Values &amp; Vulnerability</h3>
+        <p>Avg neighborhood median home value is <strong>${{ "{:,.0f}".format(demographics.avg_neighborhood_home_value) }}</strong>.</p>
+        <div class="income-buckets">
+          {% set hv_total = demographics.home_value_buckets | sum(attribute='count') %}
+          {% for bucket in demographics.home_value_buckets %}
+          <div class="bucket-row">
+            <span class="bucket-label">{{ bucket.label }}</span>
+            <div class="bucket-bar-bg">
+              <div class="bucket-bar" style="width: {{ (bucket.count / hv_total * 100) | round if hv_total > 0 else 0 }}%"></div>
+            </div>
+            <span class="bucket-count">{{ bucket.count }}</span>
+          </div>
+          {% endfor %}
+        </div>
+        <div class="vuln-stats">
+          <div class="vuln-stat">
+            <strong>{{ demographics.avg_neighborhood_poverty_pct | round(1) }}%</strong>
+            households below poverty
+          </div>
+          <div class="vuln-stat">
+            <strong>{{ demographics.avg_neighborhood_vacant_pct | round(1) }}%</strong>
+            housing units vacant
+          </div>
+        </div>
       </div>
     </div>
 
@@ -830,9 +879,13 @@ def render_owner(cluster_id, stats, parcels, county_breakdown, sos_data, neighbo
     # Demographics
     if demographics:
         # Convert numeric types for template
-        demographics["avg_neighborhood_income"] = float(demographics["avg_neighborhood_income"]) if demographics["avg_neighborhood_income"] else 0
-        demographics["avg_neighborhood_renter_pct"] = float(demographics["avg_neighborhood_renter_pct"]) if demographics["avg_neighborhood_renter_pct"] else 0
-        
+        for key in ("avg_neighborhood_income", "avg_neighborhood_renter_pct",
+                    "avg_neighborhood_white_pct", "avg_neighborhood_black_pct",
+                    "avg_neighborhood_hispanic_pct", "avg_neighborhood_asian_pct",
+                    "avg_neighborhood_poverty_pct", "avg_neighborhood_home_value",
+                    "avg_neighborhood_vacant_pct"):
+            demographics[key] = float(demographics.get(key) or 0)
+
         # Sort income buckets for display
         buckets_order = ['Low', 'Low-Mid', 'Mid', 'Mid-High', 'High']
         raw_buckets = demographics.get("income_bucket_counts") or {}
@@ -841,6 +894,15 @@ def render_owner(cluster_id, stats, parcels, county_breakdown, sos_data, neighbo
             if b in raw_buckets:
                 sorted_buckets.append({"label": b, "count": raw_buckets[b]})
         demographics["income_buckets"] = sorted_buckets
+
+        # Sort home value buckets for display
+        hv_order = ['<$150k', '$150-300k', '$300-500k', '$500k+']
+        raw_hv = demographics.get("home_value_bucket_counts") or {}
+        sorted_hv = []
+        for b in hv_order:
+            if b in raw_hv:
+                sorted_hv.append({"label": b, "count": raw_hv[b]})
+        demographics["home_value_buckets"] = sorted_hv
 
     env = _make_env()
     tmpl = env.from_string(OWNER_TMPL)
@@ -1683,12 +1745,15 @@ def build_geo_leaderboard_pages(conn, output_dir, cluster_connection_count=None)
 
 
 def fetch_portfolio_demographics_batch(conn, cluster_ids):
-    """Returns {cluster_id: {atlanta_parcel_count, avg_income, avg_renter, avg_white, avg_black, income_buckets, market_share}}"""
+    """Returns {cluster_id: {atlanta_parcel_count, avg_income, avg_renter, avg_white, avg_black, income_buckets, market_share, ...}}"""
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         cur.execute("""
             SELECT cluster_id, atlanta_parcel_count, avg_neighborhood_income, avg_neighborhood_renter_pct,
                    avg_neighborhood_white_pct, avg_neighborhood_black_pct,
-                   income_bucket_counts, market_share_json
+                   income_bucket_counts, market_share_json,
+                   avg_neighborhood_hispanic_pct, avg_neighborhood_asian_pct,
+                   avg_neighborhood_poverty_pct, avg_neighborhood_home_value,
+                   avg_neighborhood_vacant_pct, home_value_bucket_counts
             FROM portfolio_demographics
             WHERE cluster_id = ANY(%s)
         """, (cluster_ids,))
