@@ -8,9 +8,8 @@ const PROD_TILES_URL = null; // e.g. "https://tiles.who-owns-atlanta.org/tiles/{
 const DEV_TILES_URL  = `${window.location.origin}/tiles/{z}/{x}/{y}.pbf`;
 
 const DEV_HOSTNAMES = ["who-owns-atlanta.local", "who-owns-atlanta.lan", "localhost"];
-const PARCEL_TILES_URL = (DEV_HOSTNAMES.includes(window.location.hostname))
-  ? DEV_TILES_URL
-  : PROD_TILES_URL;
+const PARCEL_TILES_URL = PROD_TILES_URL
+  || DEV_TILES_URL;
 
 // ---------------------------------------------------------------------------
 // Map init
