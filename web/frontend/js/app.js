@@ -117,8 +117,11 @@ map.addControl(new LocateControl(), 'top-left');
 let selectedMarker  = null;
 let searchMarker    = null;
 let activeClusterId = null;   // cluster currently in "focus" mode
-let clusterMarkers  = [];     // teardrop pins placed for each cluster parcel (z13+ only)
-let clusterParcels  = [];     // parcel list for the active cluster (for zoom-toggling markers)
+let clusterMarkers  = [];     // teardrop DOM pins (small clusters only, < CLUSTER_PIN_THRESHOLD)
+let clusterParcels  = [];     // parcel list for the active cluster
+let _clusterSourceHandlers = [];  // event handlers registered for the GeoJSON cluster source
+
+const CLUSTER_PIN_THRESHOLD = 50; // use GeoJSON cluster source above this count
 let activeAreaFilter = null;  // { label, geometry } when an area filter is active
 const hoverPopup    = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 12 });
 
@@ -223,6 +226,59 @@ map.on('load', () => {
     filter: ['==', 'parcel_id', ''],
   });
 
+  // Pre-initialize cluster source and layers (empty, hidden).
+  // Adding the cluster: true GeoJSON source here — during map load — ensures
+  // the tile pipeline is warmed up before cluster mode is entered.  When
+  // enterClusterMode runs, it just calls setData + toggles visibility.
+  map.addSource('cluster-source', {
+    type: 'geojson',
+    data: { type: 'FeatureCollection', features: [] },
+    cluster: true,
+    clusterMaxZoom: 13,
+    clusterRadius: 50,
+  });
+  map.addLayer({
+    id: 'cluster-circles',
+    type: 'circle',
+    source: 'cluster-source',
+    filter: ['has', 'point_count'],
+    layout: { visibility: 'none' },
+    paint: {
+      'circle-color': '#16a34a',
+      'circle-radius': ['step', ['coalesce', ['to-number', ['get', 'point_count']], 0], 18, 10, 26, 50, 34, 200, 44],
+      'circle-opacity': 0.85,
+      'circle-stroke-width': 2,
+      'circle-stroke-color': '#fff',
+    },
+  });
+  map.addLayer({
+    id: 'cluster-count',
+    type: 'symbol',
+    source: 'cluster-source',
+    filter: ['has', 'point_count'],
+    layout: {
+      visibility: 'none',
+      'text-field': '{point_count_abbreviated}',
+      'text-font': ['Noto Sans Bold'],
+      'text-size': 13,
+    },
+    paint: { 'text-color': '#fff' },
+  });
+  map.addLayer({
+    id: 'cluster-unclustered',
+    type: 'circle',
+    source: 'cluster-source',
+    filter: ['!', ['has', 'point_count']],
+    layout: { visibility: 'none' },
+    paint: {
+      'circle-color': '#16a34a',
+      'circle-radius': 7,
+      'circle-stroke-width': 2,
+      'circle-stroke-color': '#fff',
+      'circle-opacity': 0.9,
+    },
+  });
+
   // Click handler
   map.on('click', ['parcels-overview', 'parcels-detail'], (e) => {
     const feat = e.features[0].properties;
@@ -322,6 +378,13 @@ function swatch(color, label, shape) {
       `<polygon points="5.5,15 2,8 9,8" fill="${color}"/>` +
       `</svg>${label}</div>`;
   }
+  if (shape === 'dot') {
+    // Filled circle, matching the GeoJSON cluster unclustered points
+    return `<div class="legend-item">` +
+      `<svg width="13" height="13" viewBox="0 0 13 13" style="flex-shrink:0">` +
+      `<circle cx="6.5" cy="6.5" r="5" fill="${color}" stroke="#fff" stroke-width="1.5"/>` +
+      `</svg>${label}</div>`;
+  }
   if (shape === 'boundary') {
     // Dashed white line with dark casing, matching the city limits layer
     return `<div class="legend-item">` +
@@ -352,7 +415,10 @@ function updateLegend() {
   }
   legend.innerHTML += swatch(null, 'City limits', 'boundary');
   if (activeClusterId) {
-    legend.innerHTML += swatch('#16a34a', 'In cluster', 'pin');
+    const isLarge = clusterParcels.filter(p => p.lon && p.lat).length >= CLUSTER_PIN_THRESHOLD;
+    legend.innerHTML += isLarge
+      ? swatch('#16a34a', 'In cluster', 'dot')
+      : swatch('#16a34a', 'In cluster', 'pin');
   }
 }
 
@@ -385,18 +451,22 @@ function enterClusterMode(clusterId, parcels) {
   clusterParcels  = parcels || [];
   hoverPopup.remove();
 
-  // Keep normal parcel coloring in cluster mode — pins provide the visual indicator.
   if (map.getLayer('parcels-detail'))   map.setPaintProperty('parcels-detail',   'fill-opacity', detailOpacity());
   if (map.getLayer('parcels-overview')) map.setPaintProperty('parcels-overview', 'fill-opacity', 1.0);
 
-  updateLegend();
-
-  // Remove any previous cluster markers.
+  // Clear any previous cluster visualization.
+  removeClusterSource();
   for (const m of clusterMarkers) m.remove();
   clusterMarkers = [];
 
-  // Place a teardrop pin on every cluster parcel.
-  placeClusterMarkers(clusterParcels);
+  const withCoords = clusterParcels.filter(p => p.lon && p.lat);
+  if (withCoords.length >= CLUSTER_PIN_THRESHOLD) {
+    addClusterSource(withCoords);
+  } else {
+    placeClusterMarkers(clusterParcels);
+  }
+
+  updateLegend();
 }
 
 function placeClusterMarkers(parcels) {
@@ -419,10 +489,84 @@ function exitClusterMode() {
   clusterParcels  = [];
   for (const m of clusterMarkers) m.remove();
   clusterMarkers = [];
+  removeClusterSource();
   if (selectedMarker) { selectedMarker.remove(); selectedMarker = null; }
   if (map.getLayer('parcels-detail'))   map.setPaintProperty('parcels-detail',   'fill-opacity', detailOpacity());
   if (map.getLayer('parcels-overview')) map.setPaintProperty('parcels-overview', 'fill-opacity', 1.0);
   updateLegend();
+}
+
+// ---------------------------------------------------------------------------
+// GeoJSON cluster source — used for large clusters (≥ CLUSTER_PIN_THRESHOLD)
+// ---------------------------------------------------------------------------
+
+function addClusterSource(parcels) {
+  const features = parcels.map(p => ({
+    type: 'Feature',
+    geometry: { type: 'Point', coordinates: [p.lon, p.lat] },
+    properties: { county: p.county, parcel_id: p.parcel_id },
+  }));
+
+  // Source and layers are pre-initialized (hidden, empty) during map load.
+  // Set the data, make layers visible, then repaint once the source tiles
+  // are ready to ensure the circles render on the first frame.
+  map.getSource('cluster-source').setData({ type: 'FeatureCollection', features });
+  map.setLayoutProperty('cluster-circles',     'visibility', 'visible');
+  map.setLayoutProperty('cluster-count',       'visibility', 'visible');
+  map.setLayoutProperty('cluster-unclustered', 'visibility', 'visible');
+  map.once('sourcedata', (e) => {
+    if (e.sourceId === 'cluster-source' && e.isSourceLoaded) map.triggerRepaint();
+  });
+
+  // Click cluster circle → zoom in to expand it.
+  const onCircleClick = async (e) => {
+    const feats = map.queryRenderedFeatures(e.point, { layers: ['cluster-circles'] });
+    if (!feats.length) return;
+    const srcClusterId = feats[0].properties.cluster_id;
+    try {
+      const zoom = await map.getSource('cluster-source').getClusterExpansionZoom(srcClusterId);
+      map.easeTo({ center: feats[0].geometry.coordinates, zoom });
+    } catch { /* source cleared */ }
+  };
+
+  // Click individual point → load parcel.
+  const onPointClick = (e) => {
+    const props = e.features[0].properties;
+    loadParcel(props.county, props.parcel_id);
+  };
+
+  const onCircleEnter = () => { map.getCanvas().style.cursor = 'pointer'; };
+  const onCircleLeave = () => { map.getCanvas().style.cursor = ''; };
+  const onPointEnter  = () => { map.getCanvas().style.cursor = 'pointer'; };
+  const onPointLeave  = () => { map.getCanvas().style.cursor = ''; };
+
+  map.on('click',      'cluster-circles',     onCircleClick);
+  map.on('click',      'cluster-unclustered', onPointClick);
+  map.on('mouseenter', 'cluster-circles',     onCircleEnter);
+  map.on('mouseleave', 'cluster-circles',     onCircleLeave);
+  map.on('mouseenter', 'cluster-unclustered', onPointEnter);
+  map.on('mouseleave', 'cluster-unclustered', onPointLeave);
+
+  _clusterSourceHandlers = [
+    { event: 'click',      layer: 'cluster-circles',     fn: onCircleClick },
+    { event: 'click',      layer: 'cluster-unclustered', fn: onPointClick  },
+    { event: 'mouseenter', layer: 'cluster-circles',     fn: onCircleEnter },
+    { event: 'mouseleave', layer: 'cluster-circles',     fn: onCircleLeave },
+    { event: 'mouseenter', layer: 'cluster-unclustered', fn: onPointEnter  },
+    { event: 'mouseleave', layer: 'cluster-unclustered', fn: onPointLeave  },
+  ];
+}
+
+function removeClusterSource() {
+  for (const { event, layer, fn } of _clusterSourceHandlers) {
+    map.off(event, layer, fn);
+  }
+  _clusterSourceHandlers = [];
+  if (!map.getSource('cluster-source')) return;
+  map.setLayoutProperty('cluster-circles',     'visibility', 'none');
+  map.setLayoutProperty('cluster-count',       'visibility', 'none');
+  map.setLayoutProperty('cluster-unclustered', 'visibility', 'none');
+  map.getSource('cluster-source').setData({ type: 'FeatureCollection', features: [] });
 }
 
 // ---------------------------------------------------------------------------
