@@ -106,6 +106,9 @@ _BASE_FOOT = """\
       <a href="/methodology/">Methodology</a>
       <a href="/faq/">FAQ</a>
     </nav>
+    <div class="last-updated">
+      Last updated: {{ last_updated_str }}
+    </div>
   </footer>
 </body>
 </html>
@@ -815,7 +818,17 @@ def fmt_int(val):
         return 0
     return int(val)
 
-def render_leaderboard(rows):
+def fetch_last_update(conn):
+    """Returns the latest last_updated timestamp as a formatted string."""
+    with conn.cursor() as cur:
+        # Check portfolio_demographics first as it's the latest in the pipeline
+        cur.execute("SELECT MAX(last_updated) FROM portfolio_demographics")
+        dt = cur.fetchone()[0]
+        if dt:
+            return dt.strftime("%Y-%m-%d %H:%M")
+        return time.strftime("%Y-%m-%d %H:%M")
+
+def render_leaderboard(rows, last_updated_str):
     env = _make_env()
     tmpl = env.from_string(LEADERBOARD_TMPL)
     return tmpl.render(
@@ -823,11 +836,13 @@ def render_leaderboard(rows):
         meta_description="The top corporate and institutional property owners in Atlanta, ranked by parcel count across Fulton and DeKalb counties.",
         rows=rows,
         total=len(rows),
+        last_updated_str=last_updated_str,
     )
 
 def render_owner(cluster_id, stats, parcels, county_breakdown, sos_data, neighborhoods,
                  linkable_agent_ids=frozenset(), cluster_related=None,
-                 entity_sos_ids=None, officers=None, demographics=None):
+                 entity_sos_ids=None, officers=None, demographics=None, 
+                 last_updated_str=None):
     names = stats["owner_names"] or []
     primary_name = names[0] if names else f"Cluster {cluster_id}"
 
@@ -938,6 +953,7 @@ def render_owner(cluster_id, stats, parcels, county_breakdown, sos_data, neighbo
         parcel_table_capped=parcel_table_capped,
         demographics=demographics,
         badges=badges,
+        last_updated_str=last_updated_str,
     )
 
 # ---------------------------------------------------------------------------
@@ -1474,7 +1490,7 @@ def write_if_changed(path, content):
 # Build
 # ---------------------------------------------------------------------------
 
-def build_leaderboard(conn, output_dir, cluster_connection_count=None):
+def build_leaderboard(conn, output_dir, cluster_connection_count=None, last_updated_str=None):
     print("Building leaderboard...", end=" ", flush=True)
     rows_raw = fetch_leaderboard(conn)
     counts = cluster_connection_count or {}
@@ -1497,13 +1513,13 @@ def build_leaderboard(conn, output_dir, cluster_connection_count=None):
             "has_demographics": r["has_demographics"],
         })
 
-    html = render_leaderboard(rows)
+    html = render_leaderboard(rows, last_updated_str)
     for dest in [output_dir / "l" / "index.html",
                  output_dir / "leaderboard" / "index.html"]:
         write_if_changed(dest, html)
     print(f"done ({len(rows)} rows)")
 
-def build_agent_pages(linkable_agents, agent_clusters, output_dir):
+def build_agent_pages(linkable_agents, agent_clusters, output_dir, last_updated_str=None):
     """Generate /agent/{ra_id}/index.html for each linkable registered agent,
     plus /agents/index.html listing all of them."""
     env = _make_env()
@@ -1522,6 +1538,7 @@ def build_agent_pages(linkable_agents, agent_clusters, output_dir):
             cluster_count=len(clusters),
             total_parcels=total_parcels,
             clusters=clusters,
+            last_updated_str=last_updated_str,
         )
         out_path = output_dir / "agent" / str(ra_id) / "index.html"
         write_if_changed(out_path, html)
@@ -1539,6 +1556,7 @@ def build_agent_pages(linkable_agents, agent_clusters, output_dir):
         meta_description="Individual registered agents appearing across multiple owner clusters in Atlanta.",
         rows=index_rows,
         total=len(index_rows),
+        last_updated_str=last_updated_str,
     )
     for dest in [output_dir / "l" / "agents" / "index.html",
                  output_dir / "agents" / "index.html"]:
@@ -1547,7 +1565,7 @@ def build_agent_pages(linkable_agents, agent_clusters, output_dir):
     return written
 
 
-def build_address_pages(address_groups, output_dir):
+def build_address_pages(address_groups, output_dir, last_updated_str=None):
     """Generate /l/addresses/{slug}/index.html for each shared mailing address,
     plus /l/addresses/index.html listing all of them."""
     env = _make_env()
@@ -1566,6 +1584,7 @@ def build_address_pages(address_groups, output_dir):
             cluster_count=len(clusters),
             total_parcels=total_parcels,
             clusters=clusters,
+            last_updated_str=last_updated_str,
         )
         out_path = output_dir / "l" / "addresses" / slug / "index.html"
         write_if_changed(out_path, html)
@@ -1583,6 +1602,7 @@ def build_address_pages(address_groups, output_dir):
         meta_description="Street addresses shared by multiple distinct property owner clusters in Atlanta.",
         rows=index_rows,
         total=len(index_rows),
+        last_updated_str=last_updated_str,
     )
     for dest in [output_dir / "l" / "addresses" / "index.html",
                  output_dir / "addresses" / "index.html"]:
@@ -1594,7 +1614,7 @@ def build_address_pages(address_groups, output_dir):
 
 def _build_geo_section(env, area_rows, output_dir, url_base, geo_type_label, area_label,
                        index_title, index_lead, area_display_fn=None, geo_key=None,
-                       cluster_connection_count=None):
+                       cluster_connection_count=None, last_updated_str=None):
     """Build individual area pages + index page for one geo dimension.
     area_display_fn: optional callable(raw_area) -> display string (e.g. 'District 5')
     Returns number of area pages written.
@@ -1633,6 +1653,7 @@ def _build_geo_section(env, area_rows, output_dir, url_base, geo_type_label, are
             rows=top100,
             total=len(top100),
             area_total_parcels=area_total,
+            last_updated_str=last_updated_str,
         )
         out_path = output_dir / slug / "index.html"
         write_if_changed(out_path, html)
@@ -1654,6 +1675,7 @@ def _build_geo_section(env, area_rows, output_dir, url_base, geo_type_label, are
         area_label=area_label,
         rows=index_rows,
         total=len(index_rows),
+        last_updated_str=last_updated_str,
     )
     idx_path = output_dir / "index.html"
     write_if_changed(idx_path, index_html)
@@ -1661,10 +1683,13 @@ def _build_geo_section(env, area_rows, output_dir, url_base, geo_type_label, are
     return written
 
 
-def build_geo_leaderboard_pages(conn, output_dir, cluster_connection_count=None):
+def build_geo_leaderboard_pages(conn, output_dir, cluster_connection_count=None, last_updated_str=None):
     """Generate all geo leaderboard pages under /l/."""
     env = _make_env()
     base = output_dir / "l"
+
+    if last_updated_str is None:
+        last_updated_str = fetch_last_update(conn)
 
     print("Building geo leaderboards...")
 
@@ -1680,6 +1705,7 @@ def build_geo_leaderboard_pages(conn, output_dir, cluster_connection_count=None)
         index_lead="Top property owners by Atlanta neighborhood.",
         geo_key="neighborhood",
         cluster_connection_count=cluster_connection_count,
+        last_updated_str=last_updated_str
     )
     print(f"{n} pages")
 
@@ -1696,6 +1722,7 @@ def build_geo_leaderboard_pages(conn, output_dir, cluster_connection_count=None)
         area_display_fn=lambda v: f"District {v}",
         geo_key="council",
         cluster_connection_count=cluster_connection_count,
+        last_updated_str=last_updated_str
     )
     print(f"{n} pages")
 
@@ -1712,6 +1739,7 @@ def build_geo_leaderboard_pages(conn, output_dir, cluster_connection_count=None)
         area_display_fn=lambda v: f"NPU {v}",
         geo_key="npu",
         cluster_connection_count=cluster_connection_count,
+        last_updated_str=last_updated_str
     )
     print(f"{n} pages")
 
@@ -1738,6 +1766,7 @@ def build_geo_leaderboard_pages(conn, output_dir, cluster_connection_count=None)
             rows=top500,
             total=len(top500),
             area_total_parcels=county_total,
+            last_updated_str=last_updated_str,
         )
         out_path = base / county / "index.html"
         write_if_changed(out_path, html)
@@ -1761,7 +1790,7 @@ def fetch_portfolio_demographics_batch(conn, cluster_ids):
 
 def worker(args):
     """Worker function run in a subprocess. Processes a slice of cluster_ids."""
-    cluster_ids, output_dir, db_url, worker_id, linkable_agent_ids, cluster_related = args
+    cluster_ids, output_dir, db_url, worker_id, linkable_agent_ids, cluster_related, last_updated_str = args
     output_dir = Path(output_dir)
     written = 0
 
@@ -1794,7 +1823,8 @@ def worker(args):
                     linkable_agent_ids, cluster_related,
                     entity_sos_ids=entity_sos_ids,
                     officers=officers,
-                    demographics=demographics
+                    demographics=demographics,
+                    last_updated_str=last_updated_str
                 )
                 out_path = output_dir / "owner" / str(cid) / "index.html"
                 write_if_changed(out_path, html)
@@ -1816,9 +1846,12 @@ def build_owner_pages(conn, output_dir, min_parcels, num_workers, cluster_ids_ov
         print(f"Building {total} owner pages (parcel_count >= {min_parcels}) "
               f"across {num_workers} workers...")
 
+    last_updated_str = fetch_last_update(conn)
+
     # Split cluster_ids evenly across workers
     chunks = [cluster_ids[i::num_workers] for i in range(num_workers)]
-    work_args = [(chunk, str(output_dir), DB_URL, i, linkable_agent_ids, cluster_related or {}) for i, chunk in enumerate(chunks)]
+    work_args = [(chunk, str(output_dir), DB_URL, i, linkable_agent_ids, cluster_related or {}, last_updated_str) 
+                 for i, chunk in enumerate(chunks)]
 
     t0 = time.time()
     with multiprocessing.Pool(processes=num_workers) as pool:
@@ -1876,17 +1909,18 @@ def main():
             linkable_agents, agent_clusters, address_groups)
 
         if not args.owner_only:
-            build_leaderboard(conn, output_dir, cluster_connection_count)
+            last_updated_str = fetch_last_update(conn)
+            build_leaderboard(conn, output_dir, cluster_connection_count, last_updated_str)
             build_geo_leaderboard_pages(conn, output_dir,
-                                        cluster_connection_count=cluster_connection_count)
+                                         cluster_connection_count=cluster_connection_count,
+                                         last_updated_str=last_updated_str)
             # Agent pages are fast; always build unless owner-only
             print("Building agent pages...", end=" ", flush=True)
-            n_agents = build_agent_pages(linkable_agents, agent_clusters, output_dir)
+            n_agents = build_agent_pages(linkable_agents, agent_clusters, output_dir, last_updated_str)
             print(f"done ({n_agents} pages)")
             # Shared address pages
             print("Building shared address pages...", end=" ", flush=True)
-            build_address_pages(address_groups, output_dir)
-
+            build_address_pages(address_groups, output_dir, last_updated_str)
         if not args.leaderboard_only:
             build_owner_pages(conn, output_dir, args.min_parcels, args.workers,
                               cluster_ids_override=cluster_ids_override,
