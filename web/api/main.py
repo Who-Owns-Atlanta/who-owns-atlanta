@@ -177,6 +177,7 @@ def parcel(county: str, parcel_id: str, response: Response):
                             (target.lucode IN ('166', '188') OR (target.subdiv IS NOT NULL AND target.subdiv ILIKE '%%TOWNHOME%%'))
                             AND p.lucode IN ('106', '107', '110', '111')
                             AND ST_DWithin(p.geometry, target.geometry, 0.001)
+                            AND (target.subdiv IS NULL OR target.subdiv = '' OR p.subdiv = target.subdiv)
                         )
                     )
                     AND p.parcelid != %(pid)s
