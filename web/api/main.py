@@ -280,6 +280,7 @@ def owner(cluster_id: int, response: Response):
                     fp.owner              AS owner,
                     fp.is_corporate,
                     fp.is_institutional,
+                    fp.city_neighborhood  AS neighborhood,
                     ST_Y(ST_Centroid(fp.geometry)) AS lat,
                     ST_X(ST_Centroid(fp.geometry)) AS lon
                 FROM owner_entities oe
@@ -296,6 +297,7 @@ def owner(cluster_id: int, response: Response):
                     dp.ownernme1          AS owner,
                     dp.is_corporate,
                     dp.is_institutional,
+                    dp.city_neighborhood  AS neighborhood,
                     ST_Y(ST_Centroid(dp.geometry)) AS lat,
                     ST_X(ST_Centroid(dp.geometry)) AS lon
                 FROM owner_entities oe

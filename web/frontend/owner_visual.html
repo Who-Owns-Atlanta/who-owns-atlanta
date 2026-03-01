@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Owner Portfolio Visual</title>
+    <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
+    <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet" />
+    <style>
+        body { margin: 0; padding: 0; }
+        #map { position: absolute; top: 0; bottom: 0; width: 100%; height: 100%; }
+        #legend {
+            position: absolute; bottom: 30px; right: 30px;
+            background: white; padding: 10px; border-radius: 4px;
+            font-family: sans-serif; font-size: 12px; box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        .legend-item { display: flex; align-items: center; margin-bottom: 4px; }
+        .color-box { width: 15px; height: 15px; margin-right: 8px; border: 1px solid #ccc; }
+    </style>
+</head>
+<body>
+<div id="map"></div>
+<div id="legend">
+    <strong id="legend-title">Median Income</strong>
+    <div id="legend-content"></div>
+</div>
+
+<script>
+    const params = new URLSearchParams(window.location.search);
+    const clusterId = params.get('cluster_id') || 8;
+    const demoMode = params.get('mode') || 'income'; // income, renter, race
+
+    const map = new maplibregl.Map({
+        container: 'map',
+        style: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
+        center: [-84.3880, 33.7490],
+        zoom: 10.5,
+        interactive: false
+    });
+
+    const COLOR_STEPS = {
+        income: [
+            [0, '#edf8fb'],
+            [40000, '#b2e2e2'],
+            [57000, '#66c2a4'],
+            [84000, '#2ca25f'],
+            [136000, '#006d2c']
+        ],
+        renter: [
+            [0, '#f2f0f7'],
+            [20, '#cbc9e2'],
+            [40, '#9e9ac8'],
+            [60, '#756bb1'],
+            [80, '#54278f']
+        ]
+    };
+
+    map.on('load', async () => {
+        // 1. Add neighborhoods
+        map.addSource('neighborhoods', {
+            type: 'geojson',
+            data: './geojson/neighborhood_demographics.json'
+        });
+
+        let fillExpression;
+        if (demoMode === 'income') {
+            fillExpression = [
+                'interpolate', ['linear'], ['get', 'median_household_income'],
+                0, '#edf8fb',
+                40000, '#b2e2e2',
+                57000, '#66c2a4',
+                84000, '#2ca25f',
+                136000, '#006d2c'
+            ];
+            document.getElementById('legend-title').innerText = 'Median HH Income';
+            renderLegend(COLOR_STEPS.income, '$');
+        } else {
+            fillExpression = [
+                'interpolate', ['linear'], ['get', 'renter_occupied_pct'],
+                0, '#f2f0f7',
+                20, '#cbc9e2',
+                40, '#9e9ac8',
+                60, '#756bb1',
+                80, '#54278f'
+            ];
+            document.getElementById('legend-title').innerText = 'Renter Occupied %';
+            renderLegend(COLOR_STEPS.renter, '', '%');
+        }
+
+        map.addLayer({
+            id: 'neighborhood-fills',
+            type: 'fill',
+            source: 'neighborhoods',
+            paint: {
+                'fill-color': fillExpression,
+                'fill-opacity': 0.7
+            }
+        });
+
+        map.addLayer({
+            id: 'neighborhood-borders',
+            type: 'line',
+            source: 'neighborhoods',
+            paint: {
+                'line-color': '#fff',
+                'line-width': 0.5
+            }
+        });
+
+        // 2. Add Cluster Parcels
+        const apiHost = window.location.port === '8001' ? 'http://localhost:8080' : '';
+        const response = await fetch(`${apiHost}/api/owner/${clusterId}`);
+        const data = await response.json();
+        
+        // Filter parcels to only show those in the city (where they have a neighborhood)
+        const inCityParcels = data.parcels.filter(p => p.neighborhood && p.neighborhood.trim() !== '');
+        
+        if (inCityParcels.length === 0) {
+            console.log("No in-city parcels found for this cluster.");
+            window.rendered = true;
+            return;
+        }
+
+        const parcelFeatures = inCityParcels.map(p => ({
+            type: 'Feature',
+            geometry: { type: 'Point', coordinates: [p.lon, p.lat] },
+            properties: p
+        }));
+
+        map.addSource('parcels', {
+            type: 'geojson',
+            data: { type: 'FeatureCollection', features: parcelFeatures }
+        });
+
+        map.addLayer({
+            id: 'parcel-dots',
+            type: 'circle',
+            source: 'parcels',
+            paint: {
+                'circle-radius': 3,
+                'circle-color': '#ff0000',
+                'circle-stroke-width': 1,
+                'circle-stroke-color': '#fff'
+            }
+        });
+
+        // Use a fixed City of Atlanta bounding box to show context across the whole city
+        const atlantaBounds = [
+            [-84.551, 33.647], // Southwest
+            [-84.289, 33.887]  // Northeast
+        ];
+        map.fitBounds(atlantaBounds, { padding: 20, animate: false });
+
+        // Signal to shot-scraper that we are ready
+        window.rendered = true;
+    });
+
+    function renderLegend(steps, prefix, suffix = '') {
+        const content = document.getElementById('legend-content');
+        steps.forEach((step, i) => {
+            const label = i === steps.length - 1 ? `${prefix}${step[0]}+${suffix}` : `${prefix}${step[0]}-${steps[i+1][0]}${suffix}`;
+            content.innerHTML += `
+                <div class="legend-item">
+                    <div class="color-box" style="background: ${step[1]}"></div>
+                    <span>${label}</span>
+                </div>
+            `;
+        });
+    }
+</script>
+</body>
+</html>

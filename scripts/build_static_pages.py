@@ -313,6 +313,55 @@ OWNER_TMPL = _BASE_HEAD + """\
     </div>
     {% endif %}
 
+    {# ── Atlanta Portfolio Analysis section ── #}
+    {% if demographics and demographics.atlanta_parcel_count > 0 %}
+    <p class="profile-section-label">ATLANTA PORTFOLIO ANALYSIS <span class="src-ref"><a href="/faq/#demographics">*</a></span></p>
+    <div class="demographics-grid">
+      <div class="demo-card">
+        <h3>Neighborhood Income</h3>
+        <p>Across their <strong>{{ demographics.atlanta_parcel_count }}</strong> city parcels, the average neighborhood median income is <strong>${{ "{:,.0f}".format(demographics.avg_neighborhood_income) }}</strong>.</p>
+        <div class="income-buckets">
+          {% for bucket in demographics.income_buckets %}
+          <div class="bucket-row">
+            <span class="bucket-label">{{ bucket.label }}</span>
+            <div class="bucket-bar-bg">
+              <div class="bucket-bar" style="width: {{ (bucket.count / demographics.atlanta_parcel_count * 100) | round }}%"></div>
+            </div>
+            <span class="bucket-count">{{ bucket.count }}</span>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="demo-card">
+        <h3>Tenure & Concentration</h3>
+        <p>On average, their Atlanta portfolio is located in neighborhoods where <strong>{{ demographics.avg_neighborhood_renter_pct | round(1) }}%</strong> of households are renters.</p>
+        
+        {% set top_ms = demographics.market_share_json.items() | sort(attribute='1.rental_share', reverse=true) | selectattr('1.rental_share', 'gt', 0.5) | list %}
+        {% if top_ms %}
+        <div class="market-share-box">
+          <p class="small">Highest rental market share by neighborhood:</p>
+          <ul class="market-share-list">
+            {% for nbhd, stats in top_ms[:3] %}
+            <li><strong>{{ nbhd }}</strong>: {{ stats.rental_share }}% of all rentals</li>
+            {% endfor %}
+          </ul>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="portfolio-maps">
+      <div class="map-container">
+        <h4>Portfolio vs. Neighborhood Income</h4>
+        <img src="/img/owners/cluster_{{ cluster_id }}_income.png" alt="Map showing portfolio on income choropleth" loading="lazy" onerror="this.style.display='none'">
+      </div>
+      <div class="map-container">
+        <h4>Portfolio vs. Renter Concentration</h4>
+        <img src="/img/owners/cluster_{{ cluster_id }}_renter.png" alt="Map showing portfolio on renter choropleth" loading="lazy" onerror="this.style.display='none'">
+      </div>
+    </div>
+    {% endif %}
+
     {# ── Neighborhood breakdown ── #}
     {% if neighborhoods %}
     <p class="profile-section-label">NEIGHBORHOOD BREAKDOWN <span class="src-ref"><a href="/faq/#data-sources">*</a></span></p>
@@ -672,7 +721,7 @@ def render_leaderboard(rows):
 
 def render_owner(cluster_id, stats, parcels, county_breakdown, sos_data, neighborhoods,
                  linkable_agent_ids=frozenset(), cluster_related=None,
-                 entity_sos_ids=None, officers=None):
+                 entity_sos_ids=None, officers=None, demographics=None):
     names = stats["owner_names"] or []
     primary_name = names[0] if names else f"Cluster {cluster_id}"
 
@@ -711,6 +760,21 @@ def render_owner(cluster_id, stats, parcels, county_breakdown, sos_data, neighbo
     parcel_table_capped = len(parcels) > 200
     parcels_display = parcels[:200]
 
+    # Demographics
+    if demographics:
+        # Convert numeric types for template
+        demographics["avg_neighborhood_income"] = float(demographics["avg_neighborhood_income"]) if demographics["avg_neighborhood_income"] else 0
+        demographics["avg_neighborhood_renter_pct"] = float(demographics["avg_neighborhood_renter_pct"]) if demographics["avg_neighborhood_renter_pct"] else 0
+        
+        # Sort income buckets for display
+        buckets_order = ['Low', 'Low-Mid', 'Mid', 'Mid-High', 'High']
+        raw_buckets = demographics.get("income_bucket_counts") or {}
+        sorted_buckets = []
+        for b in buckets_order:
+            if b in raw_buckets:
+                sorted_buckets.append({"label": b, "count": raw_buckets[b]})
+        demographics["income_buckets"] = sorted_buckets
+
     env = _make_env()
     tmpl = env.from_string(OWNER_TMPL)
     return tmpl.render(
@@ -743,6 +807,7 @@ def render_owner(cluster_id, stats, parcels, county_breakdown, sos_data, neighbo
         officers=officers_list,
         parcels=parcels_display,
         parcel_table_capped=parcel_table_capped,
+        demographics=demographics,
     )
 
 # ---------------------------------------------------------------------------
@@ -1538,6 +1603,18 @@ def build_geo_leaderboard_pages(conn, output_dir, cluster_connection_count=None)
     print(f"{len(county_data)} pages")
 
 
+def fetch_portfolio_demographics_batch(conn, cluster_ids):
+    """Returns {cluster_id: {atlanta_parcel_count, avg_income, avg_renter, avg_white, avg_black, income_buckets, market_share}}"""
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("""
+            SELECT cluster_id, atlanta_parcel_count, avg_neighborhood_income, avg_neighborhood_renter_pct,
+                   avg_neighborhood_white_pct, avg_neighborhood_black_pct,
+                   income_bucket_counts, market_share_json
+            FROM portfolio_demographics
+            WHERE cluster_id = ANY(%s)
+        """, (cluster_ids,))
+        return {row["cluster_id"]: dict(row) for row in cur.fetchall()}
+
 def worker(args):
     """Worker function run in a subprocess. Processes a slice of cluster_ids."""
     cluster_ids, output_dir, db_url, worker_id, linkable_agent_ids, cluster_related = args
@@ -1555,6 +1632,7 @@ def worker(args):
             nbhd_map       = fetch_neighborhood_concentration_batch(conn, batch)
             sos_ids_map    = fetch_entity_sos_ids_batch(conn, batch)
             officers_map   = fetch_officers_batch(conn, batch)
+            demo_map       = fetch_portfolio_demographics_batch(conn, batch)
 
             for cid in batch:
                 stats = stats_map.get(cid)
@@ -1566,11 +1644,13 @@ def worker(args):
                 neighborhoods  = nbhd_map.get(cid, [])
                 entity_sos_ids = sos_ids_map.get(cid, [])
                 officers       = officers_map.get(cid, [])
+                demographics   = demo_map.get(cid)
                 html = render_owner(
                     cid, stats, parcels, county_breakdown, sos_data, neighborhoods,
                     linkable_agent_ids, cluster_related,
                     entity_sos_ids=entity_sos_ids,
                     officers=officers,
+                    demographics=demographics
                 )
                 out_path = output_dir / "owner" / str(cid) / "index.html"
                 write_if_changed(out_path, html)
