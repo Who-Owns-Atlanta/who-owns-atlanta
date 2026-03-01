@@ -143,7 +143,7 @@ LEADERBOARD_TMPL = _BASE_HEAD + """\
         <tr>
           <th>#</th>
           <th>Owner</th>
-          <th class="num">Parcels</th>
+          <th class="num">Parcels <span class="cap-note" style="text-transform:none; font-weight:400; opacity:0.7">(City / Total)</span></th>
           <th class="num">Acres</th>
           <th>Flags</th>
           <th class="num">Connected</th>
@@ -155,11 +155,18 @@ LEADERBOARD_TMPL = _BASE_HEAD + """\
           <td class="rank">{{ loop.index }}</td>
           <td class="owner-cell">
             <a href="/owner/{{ r.cluster_id }}/">{{ r.primary_name | e }}</a>
+            {% if r.has_demographics %}
+            <span class="demo-marker" title="Atlanta Portfolio Analysis Available">📊</span>
+            {% endif %}
             {% if r.alt_names %}
             <div class="alt-names">{{ r.alt_names | e }}</div>
             {% endif %}
           </td>
-          <td class="num">{{ r.parcel_count }}</td>
+          <td class="num">
+            <span class="city-count" style="font-weight:600">{{ r.atlanta_parcel_count }}</span>
+            <span class="count-separator" style="opacity:0.4; margin:0 2px">/</span>
+            <span class="total-count" style="opacity:0.8">{{ r.parcel_count }}</span>
+          </td>
           <td class="num">{{ r.acres }}</td>
           <td class="flags-cell">
             {% if r.is_corporate %}<span class="badge-corporate">CORPORATE</span>{% endif %}
@@ -186,10 +193,6 @@ OWNER_TMPL = _BASE_HEAD + """\
           <a href="/?cluster={{ cluster_id }}">view on map →</a>
         </nav>
       </div>
-      <div class="owner-flags">
-        {% if is_corporate %}<span class="badge-corporate">CORPORATE</span>{% endif %}
-        {% if is_institutional %}<span class="badge-institutional">INSTITUTIONAL</span>{% endif %}
-      </div>
     </div>
 
     <div class="stats-row">
@@ -214,6 +217,12 @@ OWNER_TMPL = _BASE_HEAD + """\
       </div>
       {% endif %}
     </div>
+
+    {% if badges %}
+    <div class="owner-badges-row">
+      {% for b in badges %}<span class="{{ b.class }}">{{ b.label | e }}</span>{% endfor %}
+    </div>
+    {% endif %}
 
     {# ── County Tax Parcel section ── #}
     <p class="profile-section-label">COUNTY TAX PARCEL <span class="src-ref"><a href="/faq/#data-sources">*</a></span></p>
@@ -517,15 +526,24 @@ AGENT_TMPL = _BASE_HEAD + """\
       <thead>
         <tr>
           <th>Owner</th>
-          <th class="num">Parcels</th>
+          <th class="num">Parcels <span class="cap-note" style="text-transform:none; font-weight:400; opacity:0.7">(City / Total)</span></th>
           <th>Flags</th>
         </tr>
       </thead>
       <tbody>
         {% for row in clusters %}
         <tr>
-          <td><a href="/owner/{{ row.cluster_id }}/">{{ row.primary_name | e }}</a></td>
-          <td class="num">{{ row.parcel_count }}</td>
+          <td>
+            <a href="/owner/{{ row.cluster_id }}/">{{ row.primary_name | e }}</a>
+            {% if row.has_demographics %}
+            <span class="demo-marker" title="Atlanta Portfolio Analysis Available">📊</span>
+            {% endif %}
+          </td>
+          <td class="num">
+            <span class="city-count" style="font-weight:600">{{ row.atlanta_parcel_count }}</span>
+            <span class="count-separator" style="opacity:0.4; margin:0 2px">/</span>
+            <span class="total-count" style="opacity:0.8">{{ row.parcel_count }}</span>
+          </td>
           <td class="flags-cell">
             {% if row.is_corporate %}<span class="badge-corporate">CORPORATE</span>{% endif %}
             {% if row.is_institutional %}<span class="badge-institutional">INSTITUTIONAL</span>{% endif %}
@@ -764,6 +782,16 @@ def render_owner(cluster_id, stats, parcels, county_breakdown, sos_data, neighbo
     parcel_table_capped = len(parcels) > 200
     parcels_display = parcels[:200]
 
+    # Badges for the horizontal row below stats
+    badges = []
+    if bool(stats["corporate_parcel_count"]):
+        badges.append({"label": "CORPORATE", "class": "badge-corporate"})
+    if bool(stats["institutional_parcel_count"]):
+        badges.append({"label": "INSTITUTIONAL", "class": "badge-institutional"})
+    for st in sos_states:
+        if st and st.strip().upper() not in ("GEORGIA", "GA"):
+            badges.append({"label": st.upper(), "class": "badge-state"})
+
     # Demographics
     if demographics:
         # Convert numeric types for template
@@ -812,6 +840,7 @@ def render_owner(cluster_id, stats, parcels, county_breakdown, sos_data, neighbo
         parcels=parcels_display,
         parcel_table_capped=parcel_table_capped,
         demographics=demographics,
+        badges=badges,
     )
 
 # ---------------------------------------------------------------------------
@@ -847,11 +876,13 @@ def ensure_materialized_views(conn):
 def fetch_leaderboard(conn):
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         cur.execute("""
-            SELECT cluster_id, owner_names, parcel_count, total_land_acres,
-                   corporate_parcel_count, institutional_parcel_count,
-                   primary_sos_status, primary_foreign_state
-            FROM mv_leaderboard
-            ORDER BY parcel_count DESC
+            SELECT l.cluster_id, l.owner_names, l.parcel_count, l.atlanta_parcel_count, 
+                   l.total_land_acres, l.corporate_parcel_count, l.institutional_parcel_count,
+                   l.primary_sos_status, l.primary_foreign_state,
+                   (pd.cluster_id IS NOT NULL) as has_demographics
+            FROM mv_leaderboard l
+            LEFT JOIN portfolio_demographics pd ON l.cluster_id = pd.cluster_id
+            ORDER BY l.parcel_count DESC
         """)
         return cur.fetchall()
 
@@ -1110,7 +1141,7 @@ def fetch_linkable_agent_ids(conn):
 
 
 def fetch_agent_clusters(conn, ra_ids):
-    """Returns {ra_id: [{cluster_id, primary_name, parcel_count, is_corporate, is_institutional}, ...]}."""
+    """Returns {ra_id: [{cluster_id, primary_name, parcel_count, atlanta_parcel_count, is_corporate, is_institutional, has_demographics}, ...]}."""
     if not ra_ids:
         return {}
     with conn.cursor() as cur:
@@ -1118,24 +1149,30 @@ def fetch_agent_clusters(conn, ra_ids):
             SELECT oe.sos_registered_agent_id AS ra_id,
                    oc.cluster_id, oc.owner_names[1] AS primary_name, oc.parcel_count,
                    (mc.corporate_parcel_count > 0) AS is_corporate,
-                   (mc.institutional_parcel_count > 0) AS is_institutional
+                   (mc.institutional_parcel_count > 0) AS is_institutional,
+                   mc.atlanta_parcel_count,
+                   (pd.cluster_id IS NOT NULL) AS has_demographics
             FROM owner_entities oe
             JOIN ownership_clusters oc ON oc.cluster_id = oe.cluster_id
             JOIN mv_cluster_stats mc ON mc.cluster_id = oe.cluster_id
+            LEFT JOIN portfolio_demographics pd ON pd.cluster_id = oe.cluster_id
             WHERE oe.sos_registered_agent_id = ANY(%s)
             GROUP BY oe.sos_registered_agent_id, oc.cluster_id, oc.owner_names[1], oc.parcel_count,
-                     mc.corporate_parcel_count, mc.institutional_parcel_count
+                     mc.corporate_parcel_count, mc.institutional_parcel_count,
+                     mc.atlanta_parcel_count, pd.cluster_id
             ORDER BY oe.sos_registered_agent_id, oc.parcel_count DESC
         """, (list(ra_ids),))
         result = defaultdict(list)
         for row in cur.fetchall():
-            ra_id, cluster_id, primary_name, parcel_count, is_corp, is_inst = row
+            ra_id, cluster_id, primary_name, parcel_count, is_corp, is_inst, atl_count, has_demo = row
             result[ra_id].append({
                 "cluster_id": cluster_id,
                 "primary_name": primary_name or f"Cluster {cluster_id}",
                 "parcel_count": int(parcel_count),
+                "atlanta_parcel_count": int(atl_count or 0),
                 "is_corporate": bool(is_corp),
                 "is_institutional": bool(is_inst),
+                "has_demographics": bool(has_demo),
             })
         return result
 
@@ -1353,11 +1390,13 @@ def build_leaderboard(conn, output_dir, cluster_connection_count=None):
             "primary_name": names[0] if names else f"Cluster {r['cluster_id']}",
             "alt_names": ", ".join(names[1:4]) if len(names) > 1 else "",
             "parcel_count": fmt_int(r["parcel_count"]),
+            "atlanta_parcel_count": fmt_int(r["atlanta_parcel_count"]),
             "acres": fmt_acres(r["total_land_acres"]),
             "is_corporate": bool(r["corporate_parcel_count"]),
             "is_institutional": bool(r["institutional_parcel_count"]),
             "foreign_state": r["primary_foreign_state"],
             "connection_count": counts.get(r["cluster_id"], 0),
+            "has_demographics": r["has_demographics"],
         })
 
     html = render_leaderboard(rows)
