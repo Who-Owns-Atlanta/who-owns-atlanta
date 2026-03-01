@@ -1,0 +1,143 @@
+name	display_name	type	description
+OBJECTID		int	
+LOCALID		string	
+NAME		string	
+GEOTYPE		string	
+FULLFIPS		string	
+LEGALAREA		float	
+EFFECTDATE		date	
+ENDDATE		date	
+SRCREF		string	
+ACRES		float	
+SQMILES		float	
+OLDNAME		string	
+NPU		string	
+CREATED_US		string	
+CREATED_DA		date	
+LAST_EDITE		string	
+LAST_EDI_1		date	
+GLOBALID		string	
+Shape_Leng		float	
+aggregatio		string	
+HasData		int	
+ORIGINAL_O		int	
+sourceCoun		string	
+apportionm		float	
+population		float	
+populati_1	TotalPop	float	
+gender_MED	MedianAge	float	
+gender_MAL	MalePop	float	
+gender_M_1	MalePopPct	float	
+gender_M_2	Male_0_4	float	
+gender_M_3	Male_0_4Pct	float	
+gender_M_4	Male_5_9	float	
+gender_M_5	Male_5_9Pct	float	
+gender_M_6	Male_10_14	float	
+gender_M_7	Male_10_14Pct	float	
+gender_M_8	Male_15_19	float	
+gender_M_9	Male_15_19Pct	float	
+gender__10	Male_20_24	float	
+gender__11	Male_20_24Pct	float	
+gender__12	Male_25_29	float	
+gender__13	Male_25_29Pct	float	
+gender__14	Male_30_34	float	
+gender__15	Male_30_34Pct	float	
+gender__16	Male_35_39	float	
+gender__17	Male_35_39Pct	float	
+gender__18	Male_40_44	float	
+gender__19	Male_40_44Pct	float	
+gender__20	Male_45_49	float	
+gender__21	Male_45_49Pct	float	
+gender__22	Male_50_54	float	
+gender__23	Male_50_54Pct	float	
+gender__24	Male_55_59	float	
+gender__25	Male_55_59Pct	float	
+gender__26	Male_60_	float	
+gender__27	Male_60_Pct	float	
+gender_FEM	FemalePop	float	
+gender_F_1	FemalePopPct	float	
+gender_F_2	Female_0_4	float	
+gender_F_3	Female_0_4Pct	float	
+gender_F_4	Female_5_9	float	
+gender_F_5	Female_5_9Pct	float	
+gender_F_6	Female_10_14	float	
+gender_F_7	Female_10_14Pct	float	
+gender_F_8	Female_15_19	float	
+gender_F_9	Female_15_19Pct	float	
+gender__28	Female_20_24	float	
+gender__29	Female_20_24Pct	float	
+gender__30	Female_25_29	float	
+gender__31	Female_25_29Pct	float	
+gender__32	Female_30_34	float	
+gender__33	Female_30_34Pct	float	
+gender__34	Female_35_39	float	
+gender__35	Female_35_39Pct	float	
+gender__36	Female_40_44	float	
+gender__37	Female_40_44Pct	float	
+gender__38	Female_45_49	float	
+gender__39	Female_45_49Pct	float	
+gender__40	Female_50_54	float	
+gender__41	Female_50_54Pct	float	
+gender__42	Female_55_59	float	
+gender__43	Female_55_59Pct	float	
+gender__44	Female_60_	float	
+gender__45	Female_60_Pct	float	
+householdt	TotalHH	float	
+OwnerRente	OwnerOccupy	float	
+OwnerRen_1	OwnerOccupyPct	float	
+OwnerRen_2	RenterOccupy	float	
+OwnerRen_3	RenterOccupyPct	float	
+housinguni	TotalHU	float	
+vacant_VAC	VacantHU	float	
+vacant_V_1	VacantHUPct	float	
+raceandhis	WhitePop	float	
+raceandh_1	WhitePopPct	float	
+raceandh_2	BlackPop	float	
+raceandh_3	BlackPopPct	float	
+raceandh_4	AsianPop	float	
+raceandh_5	AsianPopPct	float	
+raceandh_6	IndianPop	float	
+raceandh_7	IndianPopPct	float	
+raceandh_8	PacificPop	float	
+raceandh_9	PacificPopPct	float	
+raceand_10	OtherRace	float	
+raceand_11	OtherRactPct	float	
+hispanicor	HispanicPop	float	
+hispanic_1	HispanicPopPct	float	
+educationa	Edu_HS_NoDiploma	float	
+educatio_1	Edu_HS_Diploma	float	
+educatio_2	Edu_GED	float	
+educatio_3	Edu_College_NoDegree	float	
+educatio_4	Edu_AssociateDegree	float	
+educatio_5	Edu_BachelorDegree	float	
+educatio_6	Edu_GraduateDegree	float	
+househol_1	AverageHHSize	float	
+households	HHBelowPovery	float	
+householdi	MedianHHIncome	float	
+homevalue_	MedianHValue	float	
+F5yearincre	MedianAge_1	float	
+unitsinstr	HU_50_	float	
+unitsins_1	HU_50_Pct	float	
+unitsins_2	HU_20_49	float	
+unitsins_3	HU_20_49Pct	float	
+unitsins_4	HU_10_19	float	
+unitsins_5	HU_10_19Pct	float	
+unitsins_6	HU_5_9	float	
+unitsins_7	HU_5_9Pct	float	
+unitsins_8	HU_3_4	float	
+unitsins_9	HU_3_4Pct	float	
+unitsin_10	HU_2	float	
+unitsin_11	HU_2Pct	float	
+unitsin_12	HU_1_Attached	float	
+unitsin_13	HU_1_AttachedPct	float	
+unitsin_14	HU_1_Detached	float	
+unitsin_15	HU_1_DetachedPct	float	
+commute_AC	WorkHome	float	
+commute__1	OtherMeans	float	
+commute__2	Walked	float	
+commute__3	Bicycle	float	
+commute__4	PublicTrans	float	
+commute__5	DroveAlone	float	
+commute__6	Carpooled	float	
+Shape__Area		float	
+Shape__Length		float	
