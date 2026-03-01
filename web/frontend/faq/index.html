@@ -20,77 +20,121 @@
   <main class="content-main content-prose">
     <h1>FAQ</h1>
 
-    <details>
-      <summary>Why doesn't my address show up in search?</summary>
-      <p>Search covers addresses in Fulton and DeKalb counties only. Addresses in Cobb, Gwinnett, Clayton, or other metro counties are not included. Some addresses inside the city limits of Atlanta fall in neither county dataset due to boundary quirks — these are also missing. If your address is in Fulton or DeKalb and still doesn't appear, the address point may not be in the county's GIS data or may be spelled differently than expected.</p>
-    </details>
+    <div class="faq-item">
+      <p class="faq-q">Why doesn't my address show up in search?</p>
+      <p>
+        Search covers addresses in the City of Atlanta only. Addresses in Fulton and DeKalb counties outide the City limits can be browsed to on the map.  
+        Clayton, Gwinnett, Cobb, or other metro counties are not included.  
+        If your address is in Atlanta and still doesn't appear in search, it may be one several 
+        where the address point may not be in the county's GIS data or may be spelled differently than expected - try browsing the map.
+      </p>
+    </div>
 
-    <details>
-      <summary>The owner shown is wrong or out of date. What gives?</summary>
-      <p>Parcel records come from county tax assessor data, which lags behind actual deed transfers — sometimes by months. If a property recently sold, the new owner may not appear yet. The data reflects the most recent county extract we've processed; the methodology page notes when that was.</p>
-    </details>
+    <div class="faq-item">
+      <p class="faq-q">What can't I search by <em>X</em>?</p>
+      <p>
+        To attempt both maintain a shoe-string budget and keep this site online, most of it is statically generated to reserve
+        resources for the portions that require live data manipulations (database queries).
+      </p>
+    </div>
 
-    <details>
-      <summary>What does the CORPORATE flag mean?</summary>
-      <p>The owner name matches patterns associated with a business entity — LLC, LP, Inc., Corp., Trust, Holdings, and similar. It does not mean the owner is a large or predatory landlord; many small local landlords also hold property through LLCs. What it does mean is that the owner is not an individual holding property in their own name.</p>
-    </details>
 
-    <details>
-      <summary>What does the INSTITUTIONAL flag mean?</summary>
-      <p>The owner appears to be a government body, university, hospital, religious organization, homeowners association, or similar non-profit entity. Some of these are large landholders (Atlanta Public Schools, Emory University, the City of Atlanta) that show up prominently on the leaderboard.</p>
-    </details>
+    <div class="faq-item">
+      <p class="faq-q">Why aren't more metro counties included?</p>
+      <p>
+        Money. An original goal was replicating the work in the 
+        <a href="https://taylorshelton.info/publication/horizontal-holdings/" target="_blank">Horizontal Holdings</a> paper.
+        While Fulton, Delkalb, and Gwinnet provide Tax Parcel data for free, 
+        <a href="https://geo-cobbcountyga.hub.arcgis.com/pages/9e9f789d5b2d4a26bbf091a50230d4d8" target="_blank">Cobb</a>  belives the data should cost $22k and 
+        <a href="https://www.claytoncountyga.gov/government/community-economic-development/geographic-information-system/"  target="_blank">Clayton</a>
+        charges $0.10-per-parcel which is also likely a "You could've bought a car!" number.
+      </p>
+      </div>
 
-    <details>
-      <summary>Why are multiple LLCs grouped together on an owner profile?</summary>
-      <p>Many property investors hold land through dozens of separately-named entities. When those entities share a mailing address, a registered agent, or other identifiers, they're grouped into a cluster so you can see the full portfolio. See the <a href="/methodology/">Methodology</a> page for details on how clustering works and its limitations.</p>
-    </details>
 
-    <details>
-      <summary>I found a clustering error — two unrelated owners are grouped together.</summary>
-      <p>Clustering is imperfect and we know some errors exist (see the <a href="/methodology/">Methodology</a> page). If you find a specific case, please open an issue on GitHub (link forthcoming). Include the cluster ID and the names you believe are incorrectly linked.</p>
-    </details>
+    <div class="faq-item">
+      <p class="faq-q">The owner shown is wrong or out of date. What gives?</p>
+      <p>
+        Parcel records come from county tax assessor data, which lags behind actual deed transfers — sometimes by months. 
+        If a property recently sold, the new owner may not appear yet. The data reflects the most recent county extract we've processed; 
+        see our <a href="/faq/#data-sources">data sources</a> for more details.
+      </p>
+    </div>
 
-    <details>
-      <summary>Why doesn't the map show parcel boundaries?</summary>
-      <p>Parcel tile generation is in progress. The map currently shows only the base street layer. Parcel overlays — colored by ownership type at low zoom, by ownership cluster at high zoom — will be added once tiles are built and deployed.</p>
-    </details>
+    <div class="faq-item">
+      <p class="faq-q">What does the CORPORATE flag mean?</p>
+      <p>
+        The owner name matches patterns associated with a business entity — LLC, LP, Inc., Corp., Trust, Holdings, and similar. 
+        It does not mean the owner is a large or predatory landlord; many small local landlords also hold property through LLCs. 
+        What it does mean is that they are likely not your grandma creating generational wealth (ie, an individual holding property in their own name).
+      </p>
+    </div>
 
-    <details>
-      <summary>Can I download the data?</summary>
-      <p>Not yet. Bulk download is on the roadmap. The underlying county records are public data; links to the original sources will be added to the methodology page.</p>
-    </details>
+    <div class="faq-item">
+      <p class="faq-q">What does the INSTITUTIONAL flag mean?</p>
+      <p>
+        The owner appears to be a government body, university, hospital, religious organization, homeowners association, or similar non-profit entity. 
+        Some of these are large landholders (Atlanta Public Schools, Emory University, the City of Atlanta) that show up prominently on the leaderboard.
+      </p>
+    </div>
 
-    <details>
-      <summary>I have a tip about a specific landlord or property.</summary>
-      <p>Please get in touch via GitHub (link forthcoming when the repository is made public).</p>
-    </details>
+    <div class="faq-item">
+      <p class="faq-q">Why are multiple LLCs grouped together on an owner profile?</p>
+      <p>
+        Many property investors hold land through dozens of separately-named entities. 
+        When those entities share a mailing address, a registered agent, or other identifiers, 
+        they're grouped into a cluster so you can see the full portfolio. 
+        See the <a href="/methodology/">Methodology</a> page for details on how clustering works and its limitations.
+      </p>
+    </div>
 
-    <details id="data-sources">
-      <summary>Where does the data come from?</summary>
+    <div class="faq-item">
+      <p class="faq-q">
+        I found a clustering error — two unrelated owners are grouped together.</p>
+      <p>
+        Clustering is imperfect and we know some errors exist (see the <a href="/methodology/">Methodology</a> page). 
+        If you find a specific case, feel free to report it. Include the cluster ID and the names you believe are incorrectly linked.
+        <i>Note: </i> this would help refine the methodology for future runs - do not expect to see changes
+      </p>
+    </div>
+
+    <div class="faq-item">
+      <p class="faq-q">Can I download the data?</p>
+      <p>
+        Not at this time. Everything is built on publicly avaiable data listed in the <a href="/faq/#data-sources">data sources</a>.
+        The intent is to release the code so anyone can replicate and refine the process or even adapt it for their region.
+      </p>
+    </div>
+
+
+    <div class="faq-item" id="data-sources">
+      <p class="faq-q">Where does the data come from?</p>
       <p>All data in Who Owns Atlanta? is drawn from public records. The table below lists each source, what it provides, and when we last ingested it.</p>
       <div id="datasources-table-wrap">Loading…</div>
+      <p>
+        <ul>
+          <li><b>Admin Date</b> - the date the data provider says it was current through</li>
+          <li><b>Load Date</b> - the date it was loaded for inclusion in this data set</li>
+        </ul>
+      </p>
       <script>
-        document.getElementById('data-sources').addEventListener('toggle', function handler() {
-          if (!this.open) return;
-          this.removeEventListener('toggle', handler);
-          fetch('/data/datasources.json')
-            .then(r => r.json())
-            .then(data => {
-              const rows = Object.values(data).map(s => {
-                const link = s.url ? `<a href="${s.url}" target="_blank" rel="noopener noreferrer">${s.name} ↗</a>` : s.name;
-                const adminDate = s.admin_date || '—';
-                const lastLoaded = s.last_loaded || '—';
-                return `<tr><td>${link}</td><td>${s.description}</td><td>${adminDate}</td><td>${lastLoaded}</td></tr>`;
-              }).join('');
-              document.getElementById('datasources-table-wrap').innerHTML =
-                `<table><thead><tr><th>Source</th><th>What it provides</th><th>Admin date</th><th>Last loaded</th></tr></thead><tbody>${rows}</tbody></table>`;
-            })
-            .catch(() => {
-              document.getElementById('datasources-table-wrap').textContent = 'Could not load data sources.';
-            });
-        });
+        fetch('/data/datasources.json')
+          .then(r => r.json())
+          .then(data => {
+            const rows = Object.values(data).map(s => {
+              const link = s.url ? `<a href="${s.url}" target="_blank" rel="noopener noreferrer">${s.name} ↗</a>` : s.name;
+              const adminDate = s.admin_date || '—';
+              const lastLoaded = s.last_loaded || '—';
+              return `<tr><td>${link}</td><td>${s.description}</td><td>${adminDate}</td><td>${lastLoaded}</td></tr>`;
+            }).join('');
+            document.getElementById('datasources-table-wrap').innerHTML =
+              `<table><thead><tr><th>Source</th><th>What it provides</th><th>Admin date</th><th>Last loaded</th></tr></thead><tbody>${rows}</tbody></table>`;
+          })
+          .catch(() => {
+            document.getElementById('datasources-table-wrap').textContent = 'Could not load data sources.';
+          });
       </script>
-    </details>
+    </div>
   </main>
 
   <footer>
