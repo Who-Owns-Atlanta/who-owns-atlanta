@@ -123,9 +123,12 @@ SELECT
         FILTER (WHERE oe.sos_registered_agent IS NOT NULL), NULL) AS registered_agents,
     mode() WITHIN GROUP (ORDER BY oe.sos_status)                  AS primary_sos_status,
     mode() WITHIN GROUP (ORDER BY oe.sos_foreign_state)           AS primary_foreign_state,
+    array_remove(array_agg(DISTINCT oe.sos_foreign_state)
+        FILTER (WHERE oe.sos_foreign_state IS NOT NULL AND oe.sos_foreign_state NOT IN ('Georgia', 'GA')), NULL) AS foreign_states,
     round(sum(p.land_acres)::numeric, 2)                          AS total_land_acres,
     count(*) FILTER (WHERE p.is_corporate)                        AS corporate_parcel_count,
     count(*) FILTER (WHERE p.is_institutional)                    AS institutional_parcel_count,
+    count(*) FILTER (WHERE p.city_neighborhood IS NOT NULL)       AS atlanta_parcel_count,
     coalesce(sum(pp.permit_count), 0)                             AS total_permit_count,
     coalesce(sum(pp.open_count), 0)                               AS total_open_count
 FROM ownership_clusters oc
@@ -158,13 +161,15 @@ SELECT
     cluster_id,
     owner_names,
     parcel_count,
+    atlanta_parcel_count,
     total_land_acres,
     corporate_parcel_count,
     institutional_parcel_count,
     total_permit_count,
     total_open_count,
     primary_sos_status,
-    primary_foreign_state
+    primary_foreign_state,
+    foreign_states
 FROM mv_cluster_stats
 ORDER BY parcel_count DESC
 LIMIT 500;

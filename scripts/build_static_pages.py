@@ -138,26 +138,27 @@ LEADERBOARD_TMPL = _BASE_HEAD + """\
       <span class="muted">{{ total }} owners shown.</span></p>
 
     <div class="table-scroll">
-    <table>
+    <table class="leaderboard-table">
       <thead>
         <tr>
           <th>#</th>
           <th>Owner</th>
           <th class="num">Parcels <span class="cap-note" style="text-transform:none; font-weight:400; opacity:0.7">(City / Total)</span></th>
           <th class="num">Acres</th>
-          <th>Flags</th>
-          <th class="num">Connected</th>
+          <th class="num related-col">Related</th>
         </tr>
       </thead>
       <tbody>
         {% for r in rows %}
-        <tr>
+        <tr class="owner-main-row">
           <td class="rank">{{ loop.index }}</td>
           <td class="owner-cell">
-            <a href="/owner/{{ r.cluster_id }}/">{{ r.primary_name | e }}</a>
-            {% if r.has_demographics %}
-            <span class="demo-marker" title="Atlanta Portfolio Analysis Available">📊</span>
-            {% endif %}
+            <div class="owner-name-row">
+              <a href="/owner/{{ r.cluster_id }}/">{{ r.primary_name | e }}</a>
+              {% if r.has_demographics %}
+              <span class="demo-marker" title="Atlanta Portfolio Analysis Available">📊</span>
+              {% endif %}
+            </div>
             {% if r.alt_names %}
             <div class="alt-names">{{ r.alt_names | e }}</div>
             {% endif %}
@@ -168,15 +169,24 @@ LEADERBOARD_TMPL = _BASE_HEAD + """\
             <span class="total-count" style="opacity:0.8">{{ r.parcel_count }}</span>
           </td>
           <td class="num">{{ r.acres }}</td>
-          <td class="flags-cell">
-            {% if r.is_corporate %}<span class="badge-corporate">CORPORATE</span>{% endif %}
-            {% if r.is_institutional %}<span class="badge-institutional">INSTITUTIONAL</span>{% endif %}
-            {% if r.foreign_state and r.foreign_state != 'Georgia' %}
-            <span class="badge-state">{{ r.foreign_state | e }}</span>
-            {% endif %}
-          </td>
-          <td class="num">{% if r.connection_count > 0 %}<a href="/owner/{{ r.cluster_id }}/#related" class="connection-count">{{ r.connection_count }}</a>{% endif %}</td>
+          <td class="num related-col">{% if r.connection_count > 0 %}<a href="/owner/{{ r.cluster_id }}/#related" class="connection-count">{{ r.connection_count }}</a>{% endif %}</td>
         </tr>
+        {% if r.is_corporate or r.is_institutional or r.foreign_states %}
+        <tr class="owner-badges-row-tr">
+          <td></td>
+          <td colspan="4">
+            <div class="leaderboard-badges-row">
+              {% if r.is_corporate %}<span class="badge-corporate">CORPORATE</span>{% endif %}
+              {% if r.is_institutional %}<span class="badge-institutional">INSTITUTIONAL</span>{% endif %}
+              {% if r.foreign_states %}
+                {% for st in r.foreign_states %}
+                <span class="badge-state">{{ st | upper | e }}</span>
+                {% endfor %}
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% endif %}
         {% endfor %}
       </tbody>
     </table>
@@ -522,33 +532,45 @@ AGENT_TMPL = _BASE_HEAD + """\
       ({{ total_parcels }} parcel{{ 's' if total_parcels != 1 else '' }} total)</p>
 
     <div class="table-scroll">
-    <table class="parcel-table">
+    <table class="leaderboard-table">
       <thead>
         <tr>
           <th>Owner</th>
           <th class="num">Parcels <span class="cap-note" style="text-transform:none; font-weight:400; opacity:0.7">(City / Total)</span></th>
-          <th>Flags</th>
         </tr>
       </thead>
       <tbody>
         {% for row in clusters %}
-        <tr>
-          <td>
-            <a href="/owner/{{ row.cluster_id }}/">{{ row.primary_name | e }}</a>
-            {% if row.has_demographics %}
-            <span class="demo-marker" title="Atlanta Portfolio Analysis Available">📊</span>
-            {% endif %}
+        <tr class="owner-main-row">
+          <td class="owner-cell">
+            <div class="owner-name-row">
+              <a href="/owner/{{ row.cluster_id }}/">{{ row.primary_name | e }}</a>
+              {% if row.has_demographics %}
+              <span class="demo-marker" title="Atlanta Portfolio Analysis Available">📊</span>
+              {% endif %}
+            </div>
           </td>
           <td class="num">
             <span class="city-count" style="font-weight:600">{{ row.atlanta_parcel_count }}</span>
             <span class="count-separator" style="opacity:0.4; margin:0 2px">/</span>
             <span class="total-count" style="opacity:0.8">{{ row.parcel_count }}</span>
           </td>
-          <td class="flags-cell">
-            {% if row.is_corporate %}<span class="badge-corporate">CORPORATE</span>{% endif %}
-            {% if row.is_institutional %}<span class="badge-institutional">INSTITUTIONAL</span>{% endif %}
+        </tr>
+        {% if row.is_corporate or row.is_institutional or row.foreign_states %}
+        <tr class="owner-badges-row-tr">
+          <td colspan="2">
+            <div class="leaderboard-badges-row">
+              {% if row.is_corporate %}<span class="badge-corporate">CORPORATE</span>{% endif %}
+              {% if row.is_institutional %}<span class="badge-institutional">INSTITUTIONAL</span>{% endif %}
+              {% if row.foreign_states %}
+                {% for st in row.foreign_states %}
+                <span class="badge-state">{{ st | upper | e }}</span>
+                {% endfor %}
+              {% endif %}
+            </div>
           </td>
         </tr>
+        {% endif %}
         {% endfor %}
       </tbody>
     </table>
@@ -599,42 +621,55 @@ GEO_LEADERBOARD_TMPL = _BASE_HEAD + """\
       <span class="muted">{{ total }} owners shown, {{ area_total_parcels }} total parcels.</span></p>
 
     <div class="table-scroll">
-    <table>
+    <table class="leaderboard-table">
       <thead>
         <tr>
           <th>#</th>
           <th>Owner</th>
           <th class="num">In area</th>
           <th class="num">Total</th>
-          <th>Flags</th>
-          <th class="num">Connected</th>
+          <th class="num related-col">Related</th>
           {% if geo_key %}<th></th>{% endif %}
         </tr>
       </thead>
       <tbody>
         {% for r in rows %}
-        <tr>
+        <tr class="owner-main-row">
           <td class="rank">{{ loop.index }}</td>
           <td class="owner-cell">
-            <a href="/owner/{{ r.cluster_id }}/">{{ r.primary_name | e }}</a>
+            <div class="owner-name-row">
+              <a href="/owner/{{ r.cluster_id }}/">{{ r.primary_name | e }}</a>
+              {% if r.has_demographics %}
+              <span class="demo-marker" title="Atlanta Portfolio Analysis Available">📊</span>
+              {% endif %}
+            </div>
             {% if r.alt_names %}
             <div class="alt-names">{{ r.alt_names | e }}</div>
             {% endif %}
           </td>
           <td class="num">{{ r.local_parcel_count }}</td>
           <td class="num muted">{{ r.total_parcel_count }}</td>
-          <td class="flags-cell">
-            {% if r.is_corporate %}<span class="badge-corporate">CORPORATE</span>{% endif %}
-            {% if r.is_institutional %}<span class="badge-institutional">INSTITUTIONAL</span>{% endif %}
-            {% if r.foreign_state and r.foreign_state != 'Georgia' %}
-            <span class="badge-state">{{ r.foreign_state | e }}</span>
-            {% endif %}
-          </td>
-          <td class="num">{% if r.connection_count > 0 %}<a href="/owner/{{ r.cluster_id }}/#related" class="connection-count">{{ r.connection_count }}</a>{% endif %}</td>
+          <td class="num related-col">{% if r.connection_count > 0 %}<a href="/owner/{{ r.cluster_id }}/#related" class="connection-count">{{ r.connection_count }}</a>{% endif %}</td>
           {% if geo_key %}
           <td class="map-link-cell"><a href="/?cluster={{ r.cluster_id }}&geo={{ geo_key }}&area={{ area_raw_enc }}" title="View on map" class="map-link">map →</a></td>
           {% endif %}
         </tr>
+        {% if r.is_corporate or r.is_institutional or r.foreign_states %}
+        <tr class="owner-badges-row-tr">
+          <td></td>
+          <td colspan="{{ '5' if geo_key else '4' }}">
+            <div class="leaderboard-badges-row">
+              {% if r.is_corporate %}<span class="badge-corporate">CORPORATE</span>{% endif %}
+              {% if r.is_institutional %}<span class="badge-institutional">INSTITUTIONAL</span>{% endif %}
+              {% if r.foreign_states %}
+                {% for st in r.foreign_states %}
+                <span class="badge-state">{{ st | upper | e }}</span>
+                {% endfor %}
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% endif %}
         {% endfor %}
       </tbody>
     </table>
@@ -878,7 +913,7 @@ def fetch_leaderboard(conn):
         cur.execute("""
             SELECT l.cluster_id, l.owner_names, l.parcel_count, l.atlanta_parcel_count, 
                    l.total_land_acres, l.corporate_parcel_count, l.institutional_parcel_count,
-                   l.primary_sos_status, l.primary_foreign_state,
+                   l.primary_sos_status, l.primary_foreign_state, l.foreign_states,
                    (pd.cluster_id IS NOT NULL) as has_demographics
             FROM mv_leaderboard l
             LEFT JOIN portfolio_demographics pd ON l.cluster_id = pd.cluster_id
@@ -1395,6 +1430,7 @@ def build_leaderboard(conn, output_dir, cluster_connection_count=None):
             "is_corporate": bool(r["corporate_parcel_count"]),
             "is_institutional": bool(r["institutional_parcel_count"]),
             "foreign_state": r["primary_foreign_state"],
+            "foreign_states": r["foreign_states"],
             "connection_count": counts.get(r["cluster_id"], 0),
             "has_demographics": r["has_demographics"],
         })

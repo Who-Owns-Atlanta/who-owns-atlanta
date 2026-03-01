@@ -30,6 +30,7 @@ FIELD_MAP = {
     "raceandh_3": "black_pct",
     "raceandh_5": "asian_pct",
     "hispanic_1": "hispanic_pct",
+    "households": "below_poverty_count",
     "householdi": "median_household_income",
     "homevalue_": "median_home_value",
     "educatio_5": "bachelors_degree_pct",

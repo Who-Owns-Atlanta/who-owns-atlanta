@@ -153,6 +153,25 @@ th.num, td.num {
   font-variant-numeric: tabular-nums;
 }
 
+th.related-col, td.num.related-col {
+  width: 4rem;
+}
+
+tr.owner-main-row td {
+  border-bottom: none;
+  padding-bottom: 0.25rem;
+}
+
+tr.owner-badges-row-tr td {
+  padding-top: 0;
+  padding-bottom: 0.75rem;
+}
+
+tr.owner-badges-row-tr:hover td,
+tr.owner-main-row:hover + tr.owner-badges-row-tr td {
+  background: #f8fafc;
+}
+
 td.rank {
   color: var(--pico-muted-color);
   font-size: 0.8rem;
@@ -165,7 +184,27 @@ td.owner-cell a {
   text-decoration: none;
 }
 
-td.owner-cell a:hover { text-decoration: underline; }
+.owner-name-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.1rem;
+}
+
+.leaderboard-badges-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.35rem;
+}
+
+.leaderboard-badges-row .badge-corporate,
+.leaderboard-badges-row .badge-institutional,
+.leaderboard-badges-row .badge-state {
+  font-size: 0.65rem;
+  padding: 0.05rem 0.4rem;
+  margin-bottom: 0;
+}
 
 .alt-names {
   font-size: 0.78rem;
