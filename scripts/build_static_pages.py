@@ -353,11 +353,15 @@ OWNER_TMPL = _BASE_HEAD + """\
     <div class="portfolio-maps">
       <div class="map-container">
         <h4>Portfolio vs. Neighborhood Income</h4>
-        <img src="/img/owners/cluster_{{ cluster_id }}_income.png" alt="Map showing portfolio on income choropleth" loading="lazy" onerror="this.style.display='none'">
+        <a href="/img/owners/cluster_{{ cluster_id }}_income.png" target="_blank">
+          <img src="/img/owners/cluster_{{ cluster_id }}_income.png" alt="Map showing portfolio on income choropleth" loading="lazy" onerror="this.style.display='none'">
+        </a>
       </div>
       <div class="map-container">
         <h4>Portfolio vs. Renter Concentration</h4>
-        <img src="/img/owners/cluster_{{ cluster_id }}_renter.png" alt="Map showing portfolio on renter choropleth" loading="lazy" onerror="this.style.display='none'">
+        <a href="/img/owners/cluster_{{ cluster_id }}_renter.png" target="_blank">
+          <img src="/img/owners/cluster_{{ cluster_id }}_renter.png" alt="Map showing portfolio on renter choropleth" loading="lazy" onerror="this.style.display='none'">
+        </a>
       </div>
     </div>
     {% endif %}
