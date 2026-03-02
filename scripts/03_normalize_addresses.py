@@ -7,8 +7,7 @@ then joins back to parcel tables. Uses concurrent requests for speed.
 import concurrent.futures
 import requests
 from sqlalchemy import create_engine, text
-
-DB_URL = "postgresql://woa:woa@localhost:5434/who_owns_atl"
+from scripts.utils import DB_URL, create_unified_view
 LIBPOSTAL_URL = "http://localhost:6789"
 WORKERS = 32
 BATCH_SIZE = 10000
@@ -130,59 +129,6 @@ def apply_to_tables(engine):
         print(f"  Updated {result.rowcount:,} rows")
 
 
-def update_unified_view(engine):
-    """Recreate the unified view to include owner_addr_norm."""
-    with engine.begin() as conn:
-        conn.execute(text("DROP VIEW IF EXISTS parcels_unified CASCADE;"))
-        conn.execute(text("""
-            CREATE VIEW parcels_unified AS
-            SELECT
-                'fulton'::text AS county,
-                parcelid AS parcel_id,
-                owner AS owner_name,
-                NULL::text AS owner_name2,
-                address AS site_address,
-                owneraddr1 AS owner_address,
-                owneraddr2 AS owner_city_state_zip,
-                owner_addr_norm,
-                classcode AS property_class,
-                lucode AS land_use,
-                livunits::int AS living_units,
-                landacres AS land_acres,
-                NULL::numeric AS appraised_value,
-                taxdist AS tax_district,
-                nbrhood AS neighborhood_code,
-                subdiv AS subdivision,
-                is_corporate,
-                is_institutional,
-                geometry
-            FROM fulton_parcels
-            UNION ALL
-            SELECT
-                'dekalb'::text AS county,
-                COALESCE(parcelid, lowparcelid) AS parcel_id,
-                ownernme1 AS owner_name,
-                ownernme2 AS owner_name2,
-                siteaddress AS site_address,
-                pstladdress AS owner_address,
-                pstlcitystatezip AS owner_city_state_zip,
-                owner_addr_norm,
-                classdscrp AS property_class,
-                landuse AS land_use,
-                NULL::int AS living_units,
-                NULL::numeric AS land_acres,
-                totapr1 AS appraised_value,
-                cvttxdscrp AS tax_district,
-                nghbrhdcd AS neighborhood_code,
-                cnvyname AS subdivision,
-                is_corporate,
-                is_institutional,
-                geometry
-            FROM dekalb_parcels;
-        """))
-    print("  Updated parcels_unified view")
-
-
 if __name__ == "__main__":
     total = setup_lookup_table(engine)
 
@@ -193,7 +139,7 @@ if __name__ == "__main__":
     apply_to_tables(engine)
 
     print("\nUpdating unified view...")
-    update_unified_view(engine)
+    create_unified_view(engine, refresh_mviews=True)
 
     # Sample
     with engine.connect() as conn:

@@ -133,7 +133,7 @@ tippecanoe \
   --no-feature-limit \
   <(PGPASSWORD="$DB_PASS" ogr2ogr -f GeoJSON /vsistdout/ \
       "PG:host=$DB_HOST port=$DB_PORT dbname=$DB_NAME user=$DB_USER password=$DB_PASS" \
-      -sql "SELECT geometry, parcel_id, county, is_corporate, is_institutional, cluster_id, cluster_size, unit_count, is_condo FROM _tile_export_base" \
+      -sql "SELECT geometry, parcel_id, county, is_corporate, is_institutional, cluster_id, cluster_size, unit_count, is_condo FROM _tile_export_base ORDER BY ST_Area(geometry) DESC" \
       -nln parcels)
 
 # Pass 2: z13-14 (detail)
@@ -151,7 +151,7 @@ tippecanoe \
   --no-feature-limit \
   <(PGPASSWORD="$DB_PASS" ogr2ogr -f GeoJSON /vsistdout/ \
       "PG:host=$DB_HOST port=$DB_PORT dbname=$DB_NAME user=$DB_USER password=$DB_PASS" \
-      -sql "SELECT * FROM _tile_export_base" \
+      -sql "SELECT * FROM _tile_export_base ORDER BY ST_Area(geometry) DESC" \
       -nln parcels)
 
 echo "    Exports complete."
