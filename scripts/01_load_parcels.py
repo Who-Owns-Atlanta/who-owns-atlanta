@@ -69,7 +69,9 @@ def create_unified_view(engine):
                 subdiv AS subdivision,
                 is_corporate,
                 is_institutional,
-                (lucode IN ('106', '110', '166', '188', '208') OR (livunits::int = 0 AND (subdiv ILIKE '%%CONDO%%' OR subdiv ILIKE '%%CONDOMINIUM%%')))::int AS is_condo_potential,
+                COALESCE(
+                    (lucode IN ('106', '110') OR (COALESCE(livunits::int, 0) = 0 AND (subdiv ILIKE '%%CONDO%%' OR subdiv ILIKE '%%CONDOMINIUM%%') AND lucode NOT IN ('111', '166', '188', '208')))
+                , false)::int AS is_condo_potential,
                 city_neighborhood,
                 city_npu,
                 city_council,
@@ -101,7 +103,7 @@ def create_unified_view(engine):
                 cnvyname AS subdivision,
                 is_corporate,
                 is_institutional,
-                (classdscrp = 'R9' OR landuse = 'COS' OR common_area IS NOT NULL)::int AS is_condo_potential,
+                (0)::int AS is_condo_potential,
                 city_neighborhood,
                 city_npu,
                 city_council,

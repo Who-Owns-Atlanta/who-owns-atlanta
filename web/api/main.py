@@ -77,7 +77,7 @@ def parcel(county: str, parcel_id: str, response: Response):
                         parcelid, address, owner, owneraddr1, owneraddr2, 
                         is_corporate, is_institutional, lucode, classcode, 
                         landacres, livunits, city_neighborhood, city_npu, city_council,
-                        excode, NULL::numeric AS appraised_value, NULL::text AS ownernme2,
+                        excode, NULL::double precision AS appraised_value, NULL::text AS ownernme2,
                         NULL::text AS zoning, NULL::text AS histdesc, NULL::text AS ovldesc,
                         geometry
                     FROM fulton_parcels 
@@ -93,7 +93,7 @@ def parcel(county: str, parcel_id: str, response: Response):
                             COALESCE(' ' || NULLIF(TRIM(pstlzip5), ''), '')
                         ), ''),
                         is_corporate, is_institutional, landuse, classdscrp,
-                        NULL::numeric, NULL::double precision, city_neighborhood, city_npu, city_council,
+                        NULL::double precision, NULL::double precision, city_neighborhood, city_npu, city_council,
                         NULL::text, totapr1, ownernme2,
                         zoning, histdesc, ovldesc,
                         geometry
