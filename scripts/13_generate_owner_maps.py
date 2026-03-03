@@ -1,6 +1,6 @@
 """Generate static map images for top property owners (Parallelized).
 
-Uses shot-scraper to capture income and renter choropleth maps for owners with 100+ parcels.
+Uses shot-scraper to capture income and renter choropleth maps for owners with 10+ Atlanta parcels.
 """
 
 import os
@@ -15,12 +15,13 @@ DB_URL = os.environ.get("DATABASE_URL", "postgresql://woa:woa@localhost:5434/who
 OUTPUT_DIR = Path("web/frontend/img/owners")
 PORT = 8001
 
-def fetch_top_owners(conn, min_parcels=100, limit=None, cluster_ids=None):
+def fetch_top_owners(conn, min_parcels=10, limit=None, cluster_ids=None):
     with conn.cursor() as cur:
         if cluster_ids:
             return cluster_ids
             
-        query = "SELECT cluster_id FROM mv_cluster_stats WHERE parcel_count >= %s ORDER BY parcel_count DESC"
+        # Filter by atlanta_parcel_count to match demographic logic
+        query = "SELECT cluster_id FROM mv_cluster_stats WHERE atlanta_parcel_count >= %s ORDER BY atlanta_parcel_count DESC"
         params = [min_parcels]
         if limit:
             query += " LIMIT %s"
@@ -33,14 +34,17 @@ def capture_task(args):
     url, out_file, label = args
     
     try:
-        subprocess.run([
+        # Wait 10s for the map to finish loading and rendering
+        result = subprocess.run([
             "shot-scraper", url, 
             "-o", str(out_file), 
-            "--wait-for", "window.rendered === true",
+            "--wait", "10000",
             "--width", "800",
             "--height", "600"
-        ], check=True, capture_output=True)
+        ], check=True, capture_output=True, text=True)
         return f"  Captured {label}"
+    except subprocess.CalledProcessError as e:
+        return f"  Error capturing {label}: {e.stderr or e.stdout or str(e)}"
     except Exception as e:
         return f"  Error capturing {label}: {e}"
 
@@ -51,6 +55,10 @@ def generate_maps(limit=None, workers=4, cluster_ids=None):
     cids = fetch_top_owners(conn, limit=limit, cluster_ids=cluster_ids)
     conn.close()
     
+    if not cids:
+        print("No owners found matching criteria.")
+        return
+
     print(f"Generating maps for {len(cids)} owners using {workers} workers...")
     
     # 1. Prepare tasks
@@ -62,6 +70,7 @@ def generate_maps(limit=None, workers=4, cluster_ids=None):
             tasks.append((url, str(out_file), f"cluster {cid} {mode}"))
 
     # 2. Start temporary web server
+    print(f"Starting web server on port {PORT}...")
     server_proc = subprocess.Popen(
         ["python3", "-m", "http.server", str(PORT), "--directory", "web/frontend"],
         stdout=subprocess.DEVNULL,
@@ -69,8 +78,26 @@ def generate_maps(limit=None, workers=4, cluster_ids=None):
     )
     
     try:
-        # Give server a second to start
-        time.sleep(2)
+        # Wait for server to be responsive
+        import requests
+        retries = 10
+        server_ready = False
+        while retries > 0:
+            try:
+                r = requests.get(f"http://localhost:{PORT}/owner_visual.html", timeout=1)
+                if r.status_code == 200:
+                    server_ready = True
+                    break
+            except:
+                pass
+            time.sleep(1)
+            retries -= 1
+        
+        if not server_ready:
+            print("Error: Web server failed to start.")
+            return
+
+        print("Web server ready. Starting captures...")
         
         # 3. Run tasks in parallel
         with Pool(processes=workers) as pool:
@@ -78,6 +105,7 @@ def generate_maps(limit=None, workers=4, cluster_ids=None):
                 print(result)
                     
     finally:
+        print(f"Stopping web server (PID {server_proc.pid})...")
         server_proc.terminate()
         server_proc.wait()
 
@@ -86,7 +114,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--cluster-ids", type=str, help="Comma-separated list of cluster IDs")
-    parser.add_argument("--workers", type=int, default=8, help="Number of parallel shot-scraper processes")
+    parser.add_argument("--workers", type=int, default=4, help="Number of parallel shot-scraper processes")
     args = parser.parse_args()
     
     c_ids = None

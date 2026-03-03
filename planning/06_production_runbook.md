@@ -60,6 +60,8 @@ Scripts run in numbered order. Not every update requires all of them.
                               ⚠ Drops ownership_clusters CASCADE (takes mv_leaderboard with it)
 10b_cluster_refinement.py   — Pass A: fuse fragmented series; Pass B: fission false bridges
 validate_pipeline.py        — Assert known-firm benchmarks and structural invariants ← run here
+12_portfolio_demographics.py — Calculate neighborhood demographic profiles for clusters
+capture_maps_playwright.py   — Generate income/renter map images for top owners
     [scripts/sql/04_create_materialized_views.sql] — Recreate mv_address_search, mv_parcel_permits,
                                                      mv_cluster_stats, mv_leaderboard
 11_city_enrichment.py       — Spatial-join Atlanta GIS → add city_neighborhood/npu/council_district
@@ -148,6 +150,27 @@ Spatial-joins Atlanta GIS boundaries into `city_neighborhood`, `city_npu`,
 `city_council_district` columns on parcel rows. Requires GIS layers to already
 be loaded (they persist in PostGIS; re-run [section C](#c-update-city-gis-data)
 only if the boundary files changed).
+
+### Step 6b — Calculate demographics
+
+```bash
+uv run scripts/12_portfolio_demographics.py
+```
+
+### Step 6c — Generate owner map images
+
+```bash
+# Uses Playwright + xvfb-run to capture demographic visuals for portfolios
+# (Requires xvfb and playwright chromium)
+xvfb-run uv run scripts/capture_maps_playwright.py --workers 4
+```
+
+### Step 7 — Rebuild outputs
+
+
+```bash
+uv run scripts/12_portfolio_demographics.py
+```
 
 ### Step 7 — Rebuild outputs
 
@@ -307,6 +330,12 @@ uv run scripts/10_sos_network_enrichment.py
 
 # Fission/fusion post-processing
 uv run scripts/10b_cluster_refinement.py
+
+# Calculate demographics
+uv run scripts/12_portfolio_demographics.py
+
+# Generate owner map images
+xvfb-run uv run scripts/capture_maps_playwright.py --workers 4
 
 # Validate — fix any failures before proceeding
 uv run scripts/validate_pipeline.py

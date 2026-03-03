@@ -82,7 +82,17 @@
 
         const map = new maplibregl.Map({
             container: 'map',
-            style: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
+            style: {
+                version: 8,
+                sources: {},
+                layers: [
+                    {
+                        id: 'background',
+                        type: 'background',
+                        paint: { 'background-color': '#f8fafc' }
+                    }
+                ]
+            },
             center: [-84.3880, 33.7490],
             zoom: 10.5,
             interactive: false,
