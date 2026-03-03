@@ -421,6 +421,7 @@ OWNER_TMPL = _BASE_HEAD + """\
       </div>
     </div>
 
+    {% if demographics.atlanta_parcel_count >= 10 %}
     <div class="portfolio-maps">
       <div class="map-container">
         <h4>Portfolio vs. Neighborhood Income</h4>
@@ -435,6 +436,7 @@ OWNER_TMPL = _BASE_HEAD + """\
         </a>
       </div>
     </div>
+    {% endif %}
     {% endif %}
 
     {# ── Neighborhood breakdown ── #}

@@ -94,9 +94,15 @@ async def main(cluster_ids=None, workers=4):
                 await asyncio.gather(*tasks)
                 
             await browser.close()
+            
     finally:
         server_proc.terminate()
         server_proc.wait()
+        
+    # Ensure images are world-readable
+    print("Setting permissions on generated images...")
+    subprocess.run(["chmod", "-R", "644", str(OUTPUT_DIR)], check=False)
+    subprocess.run(["chmod", "755", str(OUTPUT_DIR)], check=False)
 
 if __name__ == "__main__":
     import argparse
