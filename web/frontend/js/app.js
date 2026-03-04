@@ -27,6 +27,7 @@ const map = new maplibregl.Map({
   style: 'https://tiles.openfreemap.org/styles/liberty',
   center: [-84.388, 33.749],  // Fallback center
   zoom: 10,                   // Initial zoom while loading
+  minZoom: 10,                // Keeps fitBounds from landing below our tile coverage
 });
 
 const ATLANTA_BOUNDS = [[-84.551, 33.637], [-84.289, 33.887]];

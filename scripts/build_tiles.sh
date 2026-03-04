@@ -114,14 +114,40 @@ psql_cmd -c "
 
 echo "==> Starting parallel tippecanoe passes..."
 
+TILE_TMP_OVERVIEW="$WORK_DIR/tiles_overview"
 TILE_TMP_LOW="$WORK_DIR/tiles_low"
 TILE_TMP_HIGH="$WORK_DIR/tiles_high"
 
-# Pass 1: z10-12 (overview)
+# Overview SQL — no cluster_id/cluster_size (not used at z10-12)
+OVERVIEW_SQL="SELECT geometry, parcel_id, county, is_corporate, is_institutional, unit_count, is_condo FROM _tile_export_base ORDER BY ST_Area(geometry) DESC"
+
+# Pass 1a: z10-11 (city overview — feature-dropped, capped at 1.5 MB per tile)
+# tippecanoe's natural dropping keeps the largest parcels (by area), discarding
+# sub-pixel ones first. This gives a representative color distribution without
+# the 15 MB / 8.7 MB tiles that were timing out.
+tippecanoe \
+  --output-to-directory "$TILE_TMP_OVERVIEW" \
+  --no-tile-compression \
+  --minimum-zoom=10 \
+  --maximum-zoom=11 \
+  --layer=parcels \
+  --attribute-type=is_corporate:bool \
+  --attribute-type=is_institutional:bool \
+  --attribute-type=is_condo:bool \
+  --attribute-type=unit_count:int \
+  --simplification=10 \
+  --maximum-tile-bytes=1500000 \
+  --drop-smallest-as-needed \
+  <(PGPASSWORD="$DB_PASS" ogr2ogr -f GeoJSON /vsistdout/ \
+      "PG:host=$DB_HOST port=$DB_PORT dbname=$DB_NAME user=$DB_USER password=$DB_PASS" \
+      -sql "$OVERVIEW_SQL" \
+      -nln parcels)
+
+# Pass 1b: z12 (neighbourhood overview — full features, no cluster attrs)
 tippecanoe \
   --output-to-directory "$TILE_TMP_LOW" \
   --no-tile-compression \
-  --minimum-zoom=10 \
+  --minimum-zoom=12 \
   --maximum-zoom=12 \
   --layer=parcels \
   --attribute-type=is_corporate:bool \
@@ -133,7 +159,7 @@ tippecanoe \
   --no-feature-limit \
   <(PGPASSWORD="$DB_PASS" ogr2ogr -f GeoJSON /vsistdout/ \
       "PG:host=$DB_HOST port=$DB_PORT dbname=$DB_NAME user=$DB_USER password=$DB_PASS" \
-      -sql "SELECT geometry, parcel_id, county, is_corporate, is_institutional, cluster_id, cluster_size, unit_count, is_condo FROM _tile_export_base ORDER BY ST_Area(geometry) DESC" \
+      -sql "$OVERVIEW_SQL" \
       -nln parcels)
 
 # Pass 2: z13-14 (detail)
@@ -166,7 +192,7 @@ tile-join \
   --output-to-directory "$TILE_TMP" \
   --no-tile-compression \
   --no-tile-size-limit \
-  "$TILE_TMP_LOW" "$TILE_TMP_HIGH"
+  "$TILE_TMP_OVERVIEW" "$TILE_TMP_LOW" "$TILE_TMP_HIGH"
 
 echo "==> Installing tiles to $OUTPUT_DIR..."
 OLD_DIR="${OUTPUT_DIR}.old"
