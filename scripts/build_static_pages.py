@@ -722,14 +722,19 @@ OWNER_TMPL = _BASE_HEAD + """\
 AGENTS_INDEX_TMPL = _BASE_HEAD + """\
     <p class="breadcrumb"><a href="/l/">← Leaderboards</a></p>
     <h1>Registered Agents</h1>
-    <p class="lead">Individual registered agents appearing across multiple owner clusters.
-      <span class="muted">{{ total }} agents shown.</span></p>
+    <p class="lead">Individual registered agent accounts appearing across multiple owner clusters.
+      <span class="muted">{{ total }} accounts shown.</span></p>
+
+    <div class="view-toggle">
+      <a href="/l/agents/" class="toggle-btn">Grouped by Name</a>
+      <span class="toggle-btn active">All Individual Accounts</span>
+    </div>
 
     <div class="table-scroll">
     <table>
       <thead>
         <tr>
-          <th>Agent</th>
+          <th>Agent Account</th>
           <th class="num">Clusters</th>
           <th class="num">Parcels</th>
         </tr>
@@ -737,7 +742,59 @@ AGENTS_INDEX_TMPL = _BASE_HEAD + """\
       <tbody>
         {% for r in rows %}
         <tr>
-          <td><a href="/agent/{{ r.ra_id }}/">{{ r.name | e }}</a></td>
+          <td>
+            <a href="/agent/{{ r.ra_id }}/">{{ r.name | e }}</a>
+            <div class="agent-composition-bar" title="Portfolio composition: {{ r.corp_pct }}% Corporate, {{ r.inst_pct }}% Institutional, {{ r.other_pct }}% Other">
+              {% if r.corp_pct > 0 %}<span class="seg-corp" style="width: {{ r.corp_pct }}%"></span>{% endif %}
+              {% if r.inst_pct > 0 %}<span class="seg-inst" style="width: {{ r.inst_pct }}%"></span>{% endif %}
+              {% if r.other_pct > 0 %}<span class="seg-other" style="width: {{ r.other_pct }}%"></span>{% endif %}
+            </div>
+            {% if r.address %}<div class="ra-address-small">{{ r.address | e }}</div>{% endif %}
+          </td>
+          <td class="num">{{ r.cluster_count }}</td>
+          <td class="num">{{ r.total_parcels }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+
+    <p class="sources-footnote"><a href="/faq/#data-sources">ⓘ Data sources</a></p>
+""" + _BASE_FOOT
+
+GROUPED_AGENTS_INDEX_TMPL = _BASE_HEAD + """\
+    <p class="breadcrumb"><a href="/l/">← Leaderboards</a></p>
+    <h1>Registered Agents</h1>
+    <p class="lead">Registered agents appearing across multiple owner clusters, grouped by name.
+      <span class="muted">{{ total }} names shown.</span></p>
+
+    <div class="view-toggle">
+      <span class="toggle-btn active">Grouped by Name</span>
+      <a href="/l/agents/all/" class="toggle-btn">All Individual Accounts</a>
+    </div>
+
+    <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Agent Name</th>
+          <th class="num">Accounts</th>
+          <th class="num">Clusters</th>
+          <th class="num">Parcels</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td>
+            <a href="/agent/by-name/{{ r.slug }}/">{{ r.name | e }}</a>
+            <div class="agent-composition-bar" title="Portfolio composition: {{ r.corp_pct }}% Corporate, {{ r.inst_pct }}% Institutional, {{ r.other_pct }}% Other">
+              {% if r.corp_pct > 0 %}<span class="seg-corp" style="width: {{ r.corp_pct }}%"></span>{% endif %}
+              {% if r.inst_pct > 0 %}<span class="seg-inst" style="width: {{ r.inst_pct }}%"></span>{% endif %}
+              {% if r.other_pct > 0 %}<span class="seg-other" style="width: {{ r.other_pct }}%"></span>{% endif %}
+            </div>
+          </td>
+          <td class="num">{{ r.account_count }}</td>
           <td class="num">{{ r.cluster_count }}</td>
           <td class="num">{{ r.total_parcels }}</td>
         </tr>
@@ -750,12 +807,20 @@ AGENTS_INDEX_TMPL = _BASE_HEAD + """\
 """ + _BASE_FOOT
 
 AGENT_TMPL = _BASE_HEAD + """\
-    <p class="breadcrumb"><a href="/l/">← Leaderboards</a> / <a href="/l/agents/">Registered Agents</a></p>
+    <p class="breadcrumb"><a href="/l/">← Leaderboards</a> / <a href="/l/agents/all/">Registered Agents</a></p>
     <div class="owner-header">
       <div class="owner-names">
         <h1>{{ agent_name | e }}</h1>
+        {% if agent_address %}<p class="agent-address-sub">{{ agent_address | e }}</p>{% endif %}
       </div>
     </div>
+
+    {% if account_count > 1 %}
+    <div class="agent-group-link">
+      <p>This is one of <strong>{{ account_count }}</strong> individual accounts registered under the name 
+         <a href="/agent/by-name/{{ name_slug }}/"><strong>{{ agent_name | e }}</strong></a>.</p>
+    </div>
+    {% endif %}
 
     <p class="lead">Registered agent for {{ cluster_count }} owner cluster{{ 's' if cluster_count != 1 else '' }}
       ({{ total_parcels }} parcel{{ 's' if total_parcels != 1 else '' }} total)</p>
@@ -803,6 +868,80 @@ AGENT_TMPL = _BASE_HEAD + """\
         {% endfor %}
       </tbody>
     </table>
+    </div>
+
+    <p class="sources-footnote"><a href="/faq/#data-sources">ⓘ Data sources</a></p>
+""" + _BASE_FOOT
+
+GROUPED_AGENT_TMPL = _BASE_HEAD + """\
+    <p class="breadcrumb"><a href="/l/">← Leaderboards</a> / <a href="/l/agents/">Registered Agents</a></p>
+    <div class="owner-header">
+      <div class="owner-names">
+        <h1>{{ agent_name | e }}</h1>
+      </div>
+    </div>
+
+    <p class="lead">Registered agent for <strong>{{ cluster_count }}</strong> owner cluster{{ 's' if cluster_count != 1 else '' }} 
+      across <strong>{{ account_count }}</strong> individual GA SOS accounts.
+      ({{ total_parcels }} parcel{{ 's' if total_parcels != 1 else '' }} total)</p>
+
+    <div class="table-scroll">
+    <table class="leaderboard-table">
+      <thead>
+        <tr>
+          <th>Owner</th>
+          <th class="num">Parcels <span class="cap-note" style="text-transform:none; font-weight:400; opacity:0.7">(City / Total)</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in clusters %}
+        <tr class="owner-main-row">
+          <td class="owner-cell">
+            <div class="owner-name-row">
+              <a href="/owner/{{ row.cluster_id }}/">{{ row.primary_name | e }}</a>
+              {% if row.income_spark %}
+              <span class="income-spark" title="Atlanta portfolio: income distribution Low→High">{% for seg in row.income_spark %}<span style="width:{{ seg.pct }}%;background:{{ seg.color }}"></span>{% endfor %}</span>
+              {% endif %}
+            </div>
+          </td>
+          <td class="num">
+            <span class="city-count" style="font-weight:600">{{ row.atlanta_parcel_count }}</span>
+            <span class="count-separator" style="opacity:0.4; margin:0 2px">/</span>
+            <span class="total-count" style="opacity:0.8">{{ row.parcel_count }}</span>
+          </td>
+        </tr>
+        {% if row.is_corporate or row.is_institutional or row.foreign_states %}
+        <tr class="owner-badges-row-tr">
+          <td colspan="2">
+            <div class="leaderboard-badges-row">
+              {% if row.is_corporate %}<span class="badge-corporate">CORPORATE</span>{% endif %}
+              {% if row.is_institutional %}<span class="badge-institutional">INSTITUTIONAL</span>{% endif %}
+              {% if row.foreign_states %}
+                {% for st in row.foreign_states %}
+                <span class="badge-state">{{ st | upper | e }}</span>
+                {% endfor %}
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% endif %}
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+
+    <div class="accounts-section" style="margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #eee;">
+      <h3>Individual Agent Accounts</h3>
+      <p class="small muted">GA SOS assigns unique IDs to each registered agent entry. These accounts all share this name:</p>
+      <ul class="ra-accounts-list">
+        {% for acc in accounts %}
+        <li>
+          <a href="/agent/{{ acc.ra_id }}/">{{ acc.name | e }}</a>
+          {% if acc.address %} — <span class="muted">{{ acc.address | e }}</span>{% endif %}
+          <span class="small muted">({{ acc.cluster_count }} clusters)</span>
+        </li>
+        {% endfor %}
+      </ul>
     </div>
 
     <p class="sources-footnote"><a href="/faq/#data-sources">ⓘ Data sources</a></p>
@@ -1476,15 +1615,17 @@ def fetch_neighborhood_concentration_batch(conn, cluster_ids):
     return dict(by_cluster)
 
 def fetch_linkable_agent_ids(conn):
-    """Returns {ra_id: {name, cluster_count}} for individual (non-commercial) RAs in ≥2 clusters."""
+    """Returns {ra_id: {name, address, cluster_count}} for individual (non-commercial) RAs in ≥2 clusters."""
     blocklist_clauses = " AND ".join(
         f"oe.sos_registered_agent NOT ILIKE %s" for _ in COMMERCIAL_RA_PATTERNS
     )
     sql = f"""
         SELECT oe.sos_registered_agent_id AS ra_id,
                MAX(oe.sos_registered_agent) AS ra_name,
+               MAX(oe.sos_registered_agent_address) AS ra_address,
                COUNT(DISTINCT oe.cluster_id) AS cluster_count
         FROM owner_entities oe
+        JOIN ownership_clusters oc USING (cluster_id)
         WHERE oe.sos_registered_agent IS NOT NULL
           AND oe.sos_registered_agent != ''
           AND oe.sos_registered_agent != 'NONE'
@@ -1496,9 +1637,13 @@ def fetch_linkable_agent_ids(conn):
         cur.execute(sql, COMMERCIAL_RA_PATTERNS)
         result = {}
         for row in cur.fetchall():
-            ra_id, ra_name, cluster_count = row
+            ra_id, ra_name, ra_address, cluster_count = row
             if not is_commercial_ra(ra_name):
-                result[ra_id] = {"name": ra_name, "cluster_count": int(cluster_count)}
+                result[ra_id] = {
+                    "name": ra_name,
+                    "address": ra_address,
+                    "cluster_count": int(cluster_count)
+                }
         return result
 
 
@@ -1510,8 +1655,8 @@ def fetch_agent_clusters(conn, ra_ids):
         cur.execute("""
             SELECT oe.sos_registered_agent_id AS ra_id,
                    oc.cluster_id, oc.owner_names[1] AS primary_name, oc.parcel_count,
-                   (mc.corporate_parcel_count > 0) AS is_corporate,
-                   (mc.institutional_parcel_count > 0) AS is_institutional,
+                   mc.corporate_parcel_count,
+                   mc.institutional_parcel_count,
                    mc.atlanta_parcel_count,
                    pd.income_bucket_counts
             FROM owner_entities oe
@@ -1526,14 +1671,16 @@ def fetch_agent_clusters(conn, ra_ids):
         """, (list(ra_ids),))
         result = defaultdict(list)
         for row in cur.fetchall():
-            ra_id, cluster_id, primary_name, parcel_count, is_corp, is_inst, atl_count, buckets = row
+            ra_id, cluster_id, primary_name, parcel_count, corp_count, inst_count, atl_count, buckets = row
             result[ra_id].append({
                 "cluster_id": cluster_id,
                 "primary_name": primary_name or f"Cluster {cluster_id}",
                 "parcel_count": int(parcel_count),
                 "atlanta_parcel_count": int(atl_count or 0),
-                "is_corporate": bool(is_corp),
-                "is_institutional": bool(is_inst),
+                "is_corporate": bool(corp_count and corp_count > 0),
+                "is_institutional": bool(inst_count and inst_count > 0),
+                "corporate_parcel_count": int(corp_count or 0),
+                "institutional_parcel_count": int(inst_count or 0),
                 "income_spark": _income_spark(buckets),
             })
         return result
@@ -1794,24 +1941,77 @@ def build_leaderboard(conn, output_dir, cluster_connection_count=None, last_upda
     print(f"done ({len(rows)} rows)")
 
 def build_agent_pages(linkable_agents, agent_clusters, output_dir, last_updated_str=None):
-    """Generate /agent/{ra_id}/index.html for each linkable registered agent,
-    plus /agents/index.html listing all of them."""
+    """Generate /agent/{ra_id}/index.html for each individual account,
+    plus /agent/by-name/{slug}/index.html for grouped names,
+    plus /l/agents/index.html (grouped) and /l/agents/all/index.html (individual)."""
     env = _make_env()
     tmpl = env.from_string(AGENT_TMPL)
     index_tmpl = env.from_string(AGENTS_INDEX_TMPL)
+    grouped_index_tmpl = env.from_string(GROUPED_AGENTS_INDEX_TMPL)
+    grouped_detail_tmpl = env.from_string(GROUPED_AGENT_TMPL)
     written = 0
 
+    # 1. Group the data by Slug
+    # slug -> {name, slug, accounts: [ra_id], clusters: {cluster_id: cluster_info}, is_corporate, is_institutional}
+    grouped_map = defaultdict(lambda: {
+        "name": "", "slug": "", "accounts": [], "clusters": {},
+        "is_corporate": False, "is_institutional": False,
+        "corporate_parcel_count": 0, "institutional_parcel_count": 0
+    })
+    for ra_id, info in linkable_agents.items():
+        raw_name = info["name"]
+        slug = slugify(raw_name)
+        if not slug: continue
+        g = grouped_map[slug]
+        if not g["name"]:
+            g["name"] = raw_name
+            g["slug"] = slug
+        
+        clusters = agent_clusters.get(ra_id, [])
+        g["accounts"].append({
+            "ra_id": ra_id,
+            "name": raw_name,
+            "address": info.get("address"),
+            "cluster_count": len(clusters)
+        })
+        for c in clusters:
+            cid = c["cluster_id"]
+            if cid not in g["clusters"]:
+                g["clusters"][cid] = c
+                if c.get("is_corporate"): 
+                    g["is_corporate"] = True
+                    g["corporate_parcel_count"] += c.get("corporate_parcel_count", 0)
+                if c.get("is_institutional"): 
+                    g["is_institutional"] = True
+                    g["institutional_parcel_count"] += c.get("institutional_parcel_count", 0)
+            elif c["parcel_count"] > g["clusters"][cid]["parcel_count"]:
+                # If we've seen this cluster before via a different RA entry,
+                # we don't double-count it, but we keep the most complete info.
+                g["clusters"][cid] = c
+
+    # 2. Build Individual Agent Detail Pages
     index_rows = []
     for ra_id, info in linkable_agents.items():
+        slug = slugify(info["name"])
+        if not slug: continue
+        g = grouped_map[slug]
         clusters = agent_clusters.get(ra_id, [])
         total_parcels = sum(c["parcel_count"] for c in clusters)
+        
+        corp_p = sum(c.get("corporate_parcel_count", 0) for c in clusters)
+        inst_p = sum(c.get("institutional_parcel_count", 0) for c in clusters)
+        other_p = max(0, total_parcels - corp_p - inst_p)
+
         html = tmpl.render(
             page_title=f"{info['name']} — Registered Agent",
             meta_description=f"{info['name']} is a registered agent for {info['cluster_count']} owner clusters in Atlanta.",
             agent_name=info["name"],
+            agent_address=info.get("address"),
             cluster_count=len(clusters),
             total_parcels=total_parcels,
             clusters=clusters,
+            account_count=len(g["accounts"]),
+            name_slug=g["slug"],
             last_updated_str=last_updated_str,
         )
         out_path = output_dir / "agent" / str(ra_id) / "index.html"
@@ -1820,21 +2020,82 @@ def build_agent_pages(linkable_agents, agent_clusters, output_dir, last_updated_
         index_rows.append({
             "ra_id": ra_id,
             "name": info["name"],
-            "cluster_count": info["cluster_count"],
+            "address": info.get("address"),
+            "cluster_count": len(clusters),
             "total_parcels": total_parcels,
+            "is_corporate": corp_p > 0,
+            "is_institutional": inst_p > 0,
+            "corporate_parcel_count": corp_p,
+            "institutional_parcel_count": inst_p,
+            "corp_pct": round(corp_p / total_parcels * 100, 1) if total_parcels > 0 else 0,
+            "inst_pct": round(inst_p / total_parcels * 100, 1) if total_parcels > 0 else 0,
+            "other_pct": round(other_p / total_parcels * 100, 1) if total_parcels > 0 else 0,
         })
 
-    index_rows.sort(key=lambda r: (-r["cluster_count"], r["name"]))
+    # 3. Build Grouped Agent Detail Pages
+    grouped_index_rows = []
+    for slug, g in grouped_map.items():
+        clusters = sorted(g["clusters"].values(), key=lambda x: -x["parcel_count"])
+        total_parcels = sum(c["parcel_count"] for c in clusters)
+        corp_p = g["corporate_parcel_count"]
+        inst_p = g["institutional_parcel_count"]
+        other_p = max(0, total_parcels - corp_p - inst_p)
+        
+        html = grouped_detail_tmpl.render(
+            page_title=f"{g['name']} — Registered Agent",
+            meta_description=f"{g['name']} is a registered agent for {len(clusters)} owner clusters in Atlanta.",
+            agent_name=g["name"],
+            cluster_count=len(clusters),
+            total_parcels=total_parcels,
+            clusters=clusters,
+            account_count=len(g["accounts"]),
+            accounts=sorted(g["accounts"], key=lambda a: (-a["cluster_count"], a["ra_id"])),
+            last_updated_str=last_updated_str,
+        )
+        out_path = output_dir / "agent" / "by-name" / g["slug"] / "index.html"
+        write_if_changed(out_path, html)
+        written += 1
+        grouped_index_rows.append({
+            "name": g["name"],
+            "slug": g["slug"],
+            "account_count": len(g["accounts"]),
+            "cluster_count": len(clusters),
+            "total_parcels": total_parcels,
+            "is_corporate": g["is_corporate"],
+            "is_institutional": g["is_institutional"],
+            "corporate_parcel_count": corp_p,
+            "institutional_parcel_count": inst_p,
+            "corp_pct": round(corp_p / total_parcels * 100, 1) if total_parcels > 0 else 0,
+            "inst_pct": round(inst_p / total_parcels * 100, 1) if total_parcels > 0 else 0,
+            "other_pct": round(other_p / total_parcels * 100, 1) if total_parcels > 0 else 0,
+        })
+
+    # 4. Build Index Pages
+    # Individual Index (/l/agents/all/)
+    index_rows.sort(key=lambda r: (-r["total_parcels"], r["name"]))
     index_html = index_tmpl.render(
-        page_title="Registered Agents",
-        meta_description="Individual registered agents appearing across multiple owner clusters in Atlanta.",
+        page_title="Registered Agent Accounts",
+        meta_description="Individual registered agent accounts appearing across multiple owner clusters in Atlanta.",
         rows=index_rows,
         total=len(index_rows),
         last_updated_str=last_updated_str,
     )
+    for dest in [output_dir / "l" / "agents" / "all" / "index.html",
+                 output_dir / "agents" / "all" / "index.html"]:
+        write_if_changed(dest, index_html)
+
+    # Grouped Index (/l/agents/)
+    grouped_index_rows.sort(key=lambda r: (-r["total_parcels"], r["name"]))
+    grouped_index_html = grouped_index_tmpl.render(
+        page_title="Registered Agents",
+        meta_description="Registered agents appearing across multiple owner clusters in Atlanta, grouped by name.",
+        rows=grouped_index_rows,
+        total=len(grouped_index_rows),
+        last_updated_str=last_updated_str,
+    )
     for dest in [output_dir / "l" / "agents" / "index.html",
                  output_dir / "agents" / "index.html"]:
-        write_if_changed(dest, index_html)
+        write_if_changed(dest, grouped_index_html)
 
     return written
 

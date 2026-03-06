@@ -480,6 +480,97 @@ td.flags-cell .badge-state {
 
 .ra-list li + li { margin-top: 0.2rem; }
 
+.ra-address-small {
+  font-size: 0.8rem;
+  color: var(--pico-muted-color);
+}
+
+.ra-index-badges {
+  margin-left: 0.25rem;
+  display: inline-flex;
+  gap: 2px;
+  vertical-align: middle;
+}
+
+.agent-composition-bar {
+  display: inline-flex;
+  width: 40px;
+  height: 8px;
+  border-radius: 2px;
+  overflow: hidden;
+  background: #f1f5f9;
+  vertical-align: middle;
+  margin-left: 0.5rem;
+  border: 1px solid #e2e8f0;
+}
+
+.agent-composition-bar span {
+  height: 100%;
+}
+
+.agent-composition-bar .seg-corp { background: #dc2626; }
+.agent-composition-bar .seg-inst { background: #d97706; }
+.agent-composition-bar .seg-other { background: #e2e8f0; }
+
+.agent-address-sub {
+  font-size: 0.95rem;
+  color: var(--pico-muted-color);
+  margin-top: -0.5rem;
+  margin-bottom: 1rem;
+}
+
+.agent-group-link {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1.5rem;
+  font-size: 0.95rem;
+}
+
+.agent-group-link p { margin: 0; }
+
+.ra-accounts-list {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0;
+}
+
+.ra-accounts-list li {
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.ra-accounts-list li:last-child { border-bottom: none; }
+
+.view-toggle {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.toggle-btn {
+  padding: 0.4rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  text-decoration: none;
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid transparent;
+}
+
+.toggle-btn:hover {
+  background: #e2e8f0;
+}
+
+.toggle-btn.active {
+  background: white;
+  color: var(--pico-primary);
+  border-color: #cbd5e1;
+  font-weight: 600;
+  cursor: default;
+}
+
 /* ── Parcel table cap note ───────────────────────────────────── */
 .table-cap-note {
   font-size: 0.8rem;
