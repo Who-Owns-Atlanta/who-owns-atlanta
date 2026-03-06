@@ -37,7 +37,7 @@ def create_unified_view(engine, refresh_mviews=False):
                 is_corporate,
                 is_institutional,
                 COALESCE(
-                    (lucode IN ('106', '110') OR (COALESCE(livunits::int, 0) = 0 AND (subdiv ILIKE '%%CONDO%%' OR subdiv ILIKE '%%CONDOMINIUM%%') AND lucode NOT IN ('111', '166', '188', '208')))
+                    (lucode IN ('106', '107', '110') OR (COALESCE(livunits::int, 0) = 0 AND (subdiv ILIKE '%%CONDO%%' OR subdiv ILIKE '%%CONDOMINIUM%%') AND lucode NOT IN ('111', '166', '188', '208')))
                 , false)::int AS is_condo_potential,
                 city_neighborhood,
                 city_npu,
@@ -48,7 +48,7 @@ def create_unified_view(engine, refresh_mviews=False):
                 classcode LIKE 'R%%' OR 
                 classcode LIKE 'T%%' OR 
                 (classcode LIKE 'C%%' AND livunits::int > 0) OR
-                lucode IN ('111', '166', '188', '211')
+                lucode IN ('102', '103', '111', '166', '188', '211')
 
             UNION ALL
 
@@ -71,7 +71,12 @@ def create_unified_view(engine, refresh_mviews=False):
                 cnvyname AS subdivision,
                 is_corporate,
                 is_institutional,
-                (0)::int AS is_condo_potential,
+                (CASE 
+                    WHEN cnvyname ILIKE '%%CONDO%%' OR cnvyname ILIKE '%%CONDOMINIUM%%' THEN 1
+                    WHEN unit IS NOT NULL AND unit <> '' THEN 1
+                    WHEN unit_no IS NOT NULL AND unit_no <> '' THEN 1
+                    ELSE 0
+                END)::int AS is_condo_potential,
                 city_neighborhood,
                 city_npu,
                 city_council,
