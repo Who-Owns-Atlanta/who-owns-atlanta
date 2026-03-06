@@ -17,6 +17,7 @@ import re
 from collections import defaultdict
 import networkx as nx
 from sqlalchemy import create_engine, text
+from utils_persistence import reassign_cluster_ids
 
 DB_URL = "postgresql://woa:woa@localhost:5434/who_owns_atl"
 engine = create_engine(DB_URL)
@@ -729,10 +730,8 @@ if __name__ == "__main__":
     fused  = pass_a_fusion(engine)
     splits = pass_b_fission(engine)
 
-    if fused or splits:
-        rebuild_ownership_clusters(engine)
-    else:
-        print("\nNo changes — skipping ownership_clusters rebuild.")
+    reassign_cluster_ids(engine)
+    rebuild_ownership_clusters(engine)
 
     print("\n=== Done ===")
     print("Next step:")

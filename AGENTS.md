@@ -1,6 +1,6 @@
 # DEVELOPMENT ENVIRONMENT GUIDELINES
 
-- **IMPORTANT** You are following plans in ./planning/ , udpdating as you progress and writing news ones there as well.
+- **IMPORTANT** You are following plans in ./planning/ , updating as you progress as well as writing new ones there.
 
 - **IMPORTANT** This file should be AGENTS.md . IF `CLAUDE.md` or `GEMINI.md` exist, they should be symlinks to this file. DO NOT OVERWRITE THE SYMLINKS.
 
@@ -13,9 +13,9 @@
 - prefix PGPASSWORD= to all psql cli commands
 
 # TOOLS
-Don't ask permission before running read-only or non-destructive commands.
-If a command only reads/lists/searches—it doesn't write, delete, move, or
-modify—run it immediately without narrating your intent first.
+Don't ask permission before running read-only or non-destructive commands. If a command only reads/lists/searches - NO write, delete, move, or change - run it immediately without narrating your intent first.
+
+**
 
 Most commong linux tools exist; use any tools liberally. These tools are extrememly releve to this project:
 - `uv` - this is a managed `Python` project.

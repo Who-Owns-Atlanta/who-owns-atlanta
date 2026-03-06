@@ -3,11 +3,14 @@ import networkx as nx
 from sqlalchemy import create_engine, text
 from multiprocessing import Pool, cpu_count
 
+from utils_persistence import ensure_persistence_schema
+
 DB_URL = "postgresql://woa:woa@localhost:5434/who_owns_atl"
 engine = create_engine(DB_URL)
 
 # --- Tuning knobs ---
 # Skip names with many distinct addresses (likely generic labels like 'BRANDYWINE')
+# ... rest of file (import and engine part) ...
 # Increased to 100 as institutional noise (MARTA, GA Power) is now institutional-flagged.
 NAME_ENTROPY_LIMIT = 100
 
@@ -56,31 +59,54 @@ def is_junk_addr(addr: str) -> bool:
 def build_owner_entities(engine):
     """Create a table of distinct (owner_name_norm, owner_addr_norm) pairs."""
     print("Building owner entities...")
+    ensure_persistence_schema(engine)
     with engine.begin() as conn:
         conn.execute(text("DROP TABLE IF EXISTS owner_entities CASCADE;"))
+
+        # Build raw entity aggregates into a temp table
+        conn.execute(text("""
+            CREATE TEMP TABLE tmp_raw_entities AS
+            SELECT
+                UPPER(TRIM(owner_name)) AS owner_name_norm,
+                COALESCE(owner_addr_norm, '') AS owner_addr_norm,
+                county,
+                BOOL_OR(is_institutional) AS is_institutional,
+                COUNT(*) AS count,
+                ARRAY_AGG(parcel_id) AS parcel_ids
+            FROM parcels_unified
+            WHERE owner_name IS NOT NULL AND TRIM(owner_name) != ''
+            GROUP BY UPPER(TRIM(owner_name)), COALESCE(owner_addr_norm, ''), county;
+        """))
+
+        # Upsert into entity_registry to assign/retrieve stable entity_ids
+        conn.execute(text("""
+            INSERT INTO entity_registry (name_norm, addr_norm, county)
+            SELECT owner_name_norm, owner_addr_norm, county
+            FROM tmp_raw_entities
+            ON CONFLICT (name_norm, addr_norm, county) DO UPDATE
+                SET last_seen = NOW();
+        """))
+
+        # Create owner_entities with stable entity_id from registry
         conn.execute(text("""
             CREATE TABLE owner_entities AS
             SELECT
-                ROW_NUMBER() OVER () AS entity_id,
-                owner_name_norm,
-                owner_addr_norm,
-                county,
-                is_institutional,
-                count,
-                parcel_ids
-            FROM (
-                SELECT
-                    UPPER(TRIM(owner_name)) AS owner_name_norm,
-                    COALESCE(owner_addr_norm, '') AS owner_addr_norm,
-                    county,
-                    BOOL_OR(is_institutional) AS is_institutional,
-                    COUNT(*) AS count,
-                    ARRAY_AGG(parcel_id) AS parcel_ids
-                FROM parcels_unified
-                WHERE owner_name IS NOT NULL AND TRIM(owner_name) != ''
-                GROUP BY UPPER(TRIM(owner_name)), COALESCE(owner_addr_norm, ''), county
-            ) sub;
+                er.entity_id,
+                ne.owner_name_norm,
+                ne.owner_addr_norm,
+                ne.county,
+                ne.is_institutional,
+                ne.count,
+                ne.parcel_ids
+            FROM tmp_raw_entities ne
+            JOIN entity_registry er
+                ON er.name_norm = ne.owner_name_norm
+               AND er.addr_norm = ne.owner_addr_norm
+               AND er.county    = ne.county;
         """))
+
+        conn.execute(text("DROP TABLE tmp_raw_entities;"))
+
         total = conn.execute(text("SELECT COUNT(*) FROM owner_entities")).scalar()
         print(f"  {total:,} distinct owner entities")
     return total
