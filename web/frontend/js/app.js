@@ -123,6 +123,7 @@ let _clusterSourceHandlers = [];  // event handlers registered for the GeoJSON c
 
 const CLUSTER_PIN_THRESHOLD = 50; // use GeoJSON cluster source above this count
 let activeAreaFilter = null;  // { label, geometry } when an area filter is active
+let mapMode = 'ownership';    // 'ownership' | 'income' | 'poverty' | 'renter'
 const hoverPopup    = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 12 });
 
 // Add parcel tile layer once map is ready (only if URL is configured)
@@ -166,6 +167,23 @@ map.on('load', () => {
       'fill-outline-color': 'rgba(0,0,0,0.15)',
     },
   });
+
+  // Neighborhood demographics choropleth (hidden by default; shown in demog modes)
+  map.addSource('nbhd-demo', {
+    type: 'geojson',
+    data: '/geojson/neighborhood_demographics.json',
+  });
+  map.addLayer({
+    id: 'nbhd-choropleth',
+    type: 'fill',
+    source: 'nbhd-demo',
+    layout: { visibility: 'none' },
+    paint: {
+      'fill-color': CHORO_COLORS.income,
+      'fill-opacity': 0.80,
+      'fill-outline-color': 'rgba(255,255,255,0.4)',
+    },
+  }, 'parcels-overview'); // render below parcel layers
 
   // Atlanta city limits boundary
   map.addSource('city-limits', {
@@ -304,6 +322,26 @@ map.on('load', () => {
       .addTo(map);
   });
 
+  // Neighborhood hover tooltip — only in demographic modes
+  map.on('mousemove', 'nbhd-choropleth', (e) => {
+    if (mapMode === 'ownership') return;
+    if (map.getZoom() >= 13) return; // parcel detail takes over at z13+
+    const p = e.features[0].properties;
+    const value = mapMode === 'income'
+      ? `Median income: $${p.income.toLocaleString()}`
+      : mapMode === 'poverty'
+      ? `${p.poverty_pct}% below poverty line`
+      : `${p.renter_pct}% renter-occupied`;
+    hoverPopup
+      .setLngLat(e.lngLat)
+      .setHTML(`<div class="hover-tip"><div class="hover-address">${escHtml(p.name)}</div><div class="hover-owner">${value}</div></div>`)
+      .addTo(map);
+    map.getCanvas().style.cursor = 'default';
+  });
+  map.on('mouseleave', 'nbhd-choropleth', () => {
+    if (mapMode !== 'ownership') { hoverPopup.remove(); map.getCanvas().style.cursor = ''; }
+  });
+
   updateLegend();
   map.on('zoomend', updateLegend);
 
@@ -365,6 +403,17 @@ const OVERVIEW_COLOR = [
   'rgba(148, 163, 184, 0.4)',
 ];
 
+// Choropleth color expressions for demographic modes.
+// Each interpolates a property from the neighborhood_demographics.json features.
+const CHORO_COLORS = {
+  income:  ['interpolate', ['linear'], ['get', 'income'],
+              20000, '#ffffcc', 45000, '#a1dab4', 68000, '#41b6c4', 120000, '#2c7fb8', 200001, '#253494'],
+  poverty: ['interpolate', ['linear'], ['get', 'poverty_pct'],
+              0, '#ffffb2', 5, '#fecc5c', 14, '#fd8d3c', 30, '#e31a1c', 50, '#800026'],
+  renter:  ['interpolate', ['linear'], ['get', 'renter_pct'],
+              5, '#f7f4f9', 26, '#d4b9da', 50, '#9e9ac8', 66, '#6a51a3', 90, '#3f007d'],
+};
+
 // ---------------------------------------------------------------------------
 // Map legend
 // ---------------------------------------------------------------------------
@@ -396,30 +445,96 @@ function swatch(color, label, shape) {
   return `<div class="legend-item"><span class="legend-swatch" style="background:${color}"></span>${label}</div>`;
 }
 
+const LEGEND_TABS = [
+  { key: 'ownership', label: 'Ownership' },
+  { key: 'income',    label: 'Income' },
+  { key: 'poverty',   label: 'Poverty' },
+  { key: 'renter',    label: 'Renter %' },
+];
+
+const CHORO_META = {
+  income:  { title: 'Median household income', labels: ['$20k', '$68k', '$200k+'],
+             stops: ['#ffffcc', '#41b6c4', '#253494'] },
+  poverty: { title: 'Below poverty line',       labels: ['0%', '14%', '50%+'],
+             stops: ['#ffffb2', '#fd8d3c', '#800026'] },
+  renter:  { title: 'Renter-occupied housing',  labels: ['5%', '50%', '90%+'],
+             stops: ['#f7f4f9', '#9e9ac8', '#3f007d'] },
+};
+
 function updateLegend() {
   const legend = document.getElementById('map-legend');
   legend.hidden = false;
-  if (map.getZoom() >= 13) {
-    legend.innerHTML =
-      swatch('#dc2626', 'Corporate') +
-      swatch('#d97706', 'Institutional') +
-      swatch('#3b82f6', 'Individual portfolio') +
-      swatch('#8b5cf6', 'Condo building') +
-      swatch('#94a3b8', 'Single owner');
+
+  const tabsHtml = `<div class="legend-tabs">${
+    LEGEND_TABS.map(t =>
+      `<button class="legend-tab${mapMode === t.key ? ' active' : ''}" data-mode="${t.key}">${t.label}</button>`
+    ).join('')
+  }</div>`;
+
+  let contentHtml = '';
+  if (mapMode === 'ownership') {
+    if (map.getZoom() >= 13) {
+      contentHtml =
+        swatch('#dc2626', 'Corporate') +
+        swatch('#d97706', 'Institutional') +
+        swatch('#3b82f6', 'Individual portfolio') +
+        swatch('#8b5cf6', 'Condo building') +
+        swatch('#94a3b8', 'Single owner');
+    } else {
+      contentHtml =
+        swatch('rgba(220,38,38,0.8)',  'Corporate') +
+        swatch('rgba(217,119,6,0.8)',  'Institutional') +
+        swatch('rgba(139,92,246,0.8)', 'Condo building') +
+        swatch('rgba(148,163,184,0.6)', 'Other');
+    }
+    if (activeClusterId) {
+      const isLarge = clusterParcels.filter(p => p.lon && p.lat).length >= CLUSTER_PIN_THRESHOLD;
+      contentHtml += isLarge
+        ? swatch('#16a34a', 'In cluster', 'dot')
+        : swatch('#16a34a', 'In cluster', 'pin');
+    }
   } else {
-    legend.innerHTML =
-      swatch('rgba(220,38,38,0.8)',  'Corporate') +
-      swatch('rgba(217,119,6,0.8)',  'Institutional') +
-      swatch('rgba(139,92,246,0.8)', 'Condo building') +
-      swatch('rgba(148,163,184,0.6)', 'Other');
+    const m = CHORO_META[mapMode];
+    const gradient = m.stops.map((c, i) => `${c} ${i * 50}%`).join(', ');
+    contentHtml = `
+      <div class="legend-ramp-title">${m.title}</div>
+      <div class="legend-ramp-bar" style="background:linear-gradient(to right,${gradient})"></div>
+      <div class="legend-ramp-labels">${m.labels.map(l => `<span>${l}</span>`).join('')}</div>`;
   }
-  legend.innerHTML += swatch(null, 'City limits', 'boundary');
-  if (activeClusterId) {
-    const isLarge = clusterParcels.filter(p => p.lon && p.lat).length >= CLUSTER_PIN_THRESHOLD;
-    legend.innerHTML += isLarge
-      ? swatch('#16a34a', 'In cluster', 'dot')
-      : swatch('#16a34a', 'In cluster', 'pin');
+  contentHtml += swatch(null, 'City limits', 'boundary');
+
+  legend.innerHTML = tabsHtml + contentHtml;
+  legend.querySelectorAll('.legend-tab').forEach(btn => {
+    btn.addEventListener('click', () => setMapMode(btn.dataset.mode));
+  });
+}
+
+function setMapMode(mode) {
+  mapMode = mode;
+  const isDemog = mode !== 'ownership';
+
+  // Overview layer (z10–12): hide ownership colors in demog mode so choropleth shows cleanly
+  map.setPaintProperty('parcels-overview', 'fill-color',
+    isDemog ? 'rgba(0,0,0,0)' : OVERVIEW_COLOR);
+
+  // Detail layer (z13+): always show ownership colors — choropleth fades out by z13 anyway
+  map.setPaintProperty('parcels-detail', 'fill-color', clusterColor());
+  map.setPaintProperty('parcels-detail', 'fill-opacity', detailOpacity());
+
+  if (isDemog) {
+    map.setPaintProperty('nbhd-choropleth', 'fill-color', CHORO_COLORS[mode]);
+    // Fade choropleth out as user zooms into parcel detail
+    map.setPaintProperty('nbhd-choropleth', 'fill-opacity', [
+      'interpolate', ['linear'], ['zoom'],
+      10, 0.80,
+      12, 0.65,
+      13, 0.0,
+    ]);
+    map.setLayoutProperty('nbhd-choropleth', 'visibility', 'visible');
+  } else {
+    map.setLayoutProperty('nbhd-choropleth', 'visibility', 'none');
   }
+  updateLegend();
 }
 
 // ---------------------------------------------------------------------------
