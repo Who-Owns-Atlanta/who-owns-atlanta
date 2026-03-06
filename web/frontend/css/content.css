@@ -840,6 +840,24 @@ td.map-link-cell a:hover { color: var(--pico-primary); }
   filter: grayscale(0) opacity(1);
 }
 
+/* Income distribution spark bar — inline in owner name rows */
+.income-spark {
+  display: inline-flex;
+  width: 40px;
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  vertical-align: middle;
+  margin-left: 0.35rem;
+  gap: 1px;
+  flex-shrink: 0;
+  opacity: 0.75;
+  cursor: help;
+  transition: opacity 0.15s;
+}
+.income-spark:hover { opacity: 1; }
+.income-spark span { height: 100%; min-width: 1px; }
+
 /* Racial composition stacked bar */
 .race-bar {
   display: flex;

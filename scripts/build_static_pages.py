@@ -335,8 +335,8 @@ LEADERBOARD_TMPL = _BASE_HEAD + """\
           <td class="owner-cell">
             <div class="owner-name-row">
               <a href="/owner/{{ r.cluster_id }}/">{{ r.primary_name | e }}</a>
-              {% if r.has_demographics %}
-              <span class="demo-marker" title="Atlanta Portfolio Analysis Available">📊</span>
+              {% if r.income_spark %}
+              <span class="income-spark" title="Atlanta portfolio: income distribution Low→High">{% for seg in r.income_spark %}<span style="width:{{ seg.pct }}%;background:{{ seg.color }}"></span>{% endfor %}</span>
               {% endif %}
             </div>
             {% if r.alt_names %}
@@ -776,8 +776,8 @@ AGENT_TMPL = _BASE_HEAD + """\
           <td class="owner-cell">
             <div class="owner-name-row">
               <a href="/owner/{{ row.cluster_id }}/">{{ row.primary_name | e }}</a>
-              {% if row.has_demographics %}
-              <span class="demo-marker" title="Atlanta Portfolio Analysis Available">📊</span>
+              {% if row.income_spark %}
+              <span class="income-spark" title="Atlanta portfolio: income distribution Low→High">{% for seg in row.income_spark %}<span style="width:{{ seg.pct }}%;background:{{ seg.color }}"></span>{% endfor %}</span>
               {% endif %}
             </div>
           </td>
@@ -870,8 +870,8 @@ GEO_LEADERBOARD_TMPL = _BASE_HEAD + """\
           <td class="owner-cell">
             <div class="owner-name-row">
               <a href="/owner/{{ r.cluster_id }}/">{{ r.primary_name | e }}</a>
-              {% if r.has_demographics %}
-              <span class="demo-marker" title="Atlanta Portfolio Analysis Available">📊</span>
+              {% if r.income_spark %}
+              <span class="income-spark" title="Atlanta portfolio: income distribution Low→High">{% for seg in r.income_spark %}<span style="width:{{ seg.pct }}%;background:{{ seg.color }}"></span>{% endfor %}</span>
               {% endif %}
             </div>
             {% if r.alt_names %}
@@ -996,6 +996,28 @@ def fmt_int(val):
     if val is None:
         return 0
     return int(val)
+
+# Income bucket order and colors for the inline spark bar
+_SPARK_BUCKETS = [
+    ("Low",      "#ef4444"),  # red
+    ("Low-Mid",  "#f97316"),  # orange
+    ("Mid",      "#eab308"),  # yellow
+    ("Mid-High", "#84cc16"),  # lime
+    ("High",     "#22c55e"),  # green
+]
+
+def _income_spark(bucket_counts):
+    """Return list of (color, width_pct) for the income spark bar, or None if no data."""
+    if not bucket_counts:
+        return None
+    total = sum(bucket_counts.get(b, 0) for b, _ in _SPARK_BUCKETS)
+    if total == 0:
+        return None
+    return [
+        {"color": color, "pct": round(bucket_counts.get(bucket, 0) / total * 100, 1)}
+        for bucket, color in _SPARK_BUCKETS
+    ]
+
 
 def fetch_ownership_demographics(conn):
     """Fetch data from the two ownership demographics MVs."""
@@ -1220,10 +1242,10 @@ def ensure_materialized_views(conn):
 def fetch_leaderboard(conn):
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         cur.execute("""
-            SELECT l.cluster_id, l.owner_names, l.parcel_count, l.atlanta_parcel_count, 
+            SELECT l.cluster_id, l.owner_names, l.parcel_count, l.atlanta_parcel_count,
                    l.total_land_acres, l.corporate_parcel_count, l.institutional_parcel_count,
                    l.primary_sos_status, l.primary_foreign_state, l.foreign_states,
-                   (pd.cluster_id IS NOT NULL) as has_demographics
+                   pd.income_bucket_counts
             FROM mv_leaderboard l
             LEFT JOIN portfolio_demographics pd ON l.cluster_id = pd.cluster_id
             ORDER BY l.parcel_count DESC
@@ -1485,7 +1507,7 @@ def fetch_linkable_agent_ids(conn):
 
 
 def fetch_agent_clusters(conn, ra_ids):
-    """Returns {ra_id: [{cluster_id, primary_name, parcel_count, atlanta_parcel_count, is_corporate, is_institutional, has_demographics}, ...]}."""
+    """Returns {ra_id: [{cluster_id, primary_name, parcel_count, atlanta_parcel_count, is_corporate, is_institutional, income_spark}, ...]}."""
     if not ra_ids:
         return {}
     with conn.cursor() as cur:
@@ -1495,7 +1517,7 @@ def fetch_agent_clusters(conn, ra_ids):
                    (mc.corporate_parcel_count > 0) AS is_corporate,
                    (mc.institutional_parcel_count > 0) AS is_institutional,
                    mc.atlanta_parcel_count,
-                   (pd.cluster_id IS NOT NULL) AS has_demographics
+                   pd.income_bucket_counts
             FROM owner_entities oe
             JOIN ownership_clusters oc ON oc.cluster_id = oe.cluster_id
             JOIN mv_cluster_stats mc ON mc.cluster_id = oe.cluster_id
@@ -1503,12 +1525,12 @@ def fetch_agent_clusters(conn, ra_ids):
             WHERE oe.sos_registered_agent_id = ANY(%s)
             GROUP BY oe.sos_registered_agent_id, oc.cluster_id, oc.owner_names[1], oc.parcel_count,
                      mc.corporate_parcel_count, mc.institutional_parcel_count,
-                     mc.atlanta_parcel_count, pd.cluster_id
+                     mc.atlanta_parcel_count, pd.income_bucket_counts
             ORDER BY oe.sos_registered_agent_id, oc.parcel_count DESC
         """, (list(ra_ids),))
         result = defaultdict(list)
         for row in cur.fetchall():
-            ra_id, cluster_id, primary_name, parcel_count, is_corp, is_inst, atl_count, has_demo = row
+            ra_id, cluster_id, primary_name, parcel_count, is_corp, is_inst, atl_count, buckets = row
             result[ra_id].append({
                 "cluster_id": cluster_id,
                 "primary_name": primary_name or f"Cluster {cluster_id}",
@@ -1516,7 +1538,7 @@ def fetch_agent_clusters(conn, ra_ids):
                 "atlanta_parcel_count": int(atl_count or 0),
                 "is_corporate": bool(is_corp),
                 "is_institutional": bool(is_inst),
-                "has_demographics": bool(has_demo),
+                "income_spark": _income_spark(buckets),
             })
         return result
 
@@ -1576,17 +1598,19 @@ def fetch_geo_data(conn, col_name):
                    mc.institutional_parcel_count > 0 AS is_institutional,
                    mc.primary_foreign_state,
                    mc.parcel_count AS total_parcel_count,
-                   COUNT(*) AS local_parcel_count
+                   COUNT(*) AS local_parcel_count,
+                   pd.income_bucket_counts
             FROM owner_entities oe
             CROSS JOIN LATERAL unnest(oe.parcel_ids) AS u(pid)
             JOIN area_map am ON am.parcelid = u.pid
             JOIN mv_cluster_stats mc ON mc.cluster_id = oe.cluster_id
-            GROUP BY 1, 2, 3, 4, 5, 6, 7, 8
+            LEFT JOIN portfolio_demographics pd ON pd.cluster_id = oe.cluster_id
+            GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, pd.income_bucket_counts
             ORDER BY area, local_parcel_count DESC
         """)
         by_area = defaultdict(list)
         for row in cur.fetchall():
-            area, cid, name, alt_arr, is_corp, is_inst, fstate, total_count, local_count = row
+            area, cid, name, alt_arr, is_corp, is_inst, fstate, total_count, local_count, buckets = row
             alts = [n for n in (alt_arr or []) if n]
             by_area[area].append({
                 "cluster_id": cid,
@@ -1598,6 +1622,7 @@ def fetch_geo_data(conn, col_name):
                 "total_parcel_count": int(total_count),
                 "local_parcel_count": int(local_count),
                 "connection_count": 0,  # filled in below if cluster_connection_count passed
+                "income_spark": _income_spark(buckets),
             })
         return dict(by_area)
 
@@ -1614,15 +1639,17 @@ def fetch_county_geo_data(conn):
                    mc.institutional_parcel_count > 0 AS is_institutional,
                    mc.primary_foreign_state,
                    mc.parcel_count AS total_parcel_count,
-                   SUM(oe.count) AS local_parcel_count
+                   SUM(oe.count) AS local_parcel_count,
+                   pd.income_bucket_counts
             FROM owner_entities oe
             JOIN mv_cluster_stats mc ON mc.cluster_id = oe.cluster_id
-            GROUP BY 1, 2, 3, 4, 5, 6, 7, 8
+            LEFT JOIN portfolio_demographics pd ON pd.cluster_id = oe.cluster_id
+            GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, pd.income_bucket_counts
             ORDER BY county, local_parcel_count DESC
         """)
         by_county = defaultdict(list)
         for row in cur.fetchall():
-            county, cid, name, alt_arr, is_corp, is_inst, fstate, total_count, local_count = row
+            county, cid, name, alt_arr, is_corp, is_inst, fstate, total_count, local_count, buckets = row
             alts = [n for n in (alt_arr or []) if n]
             by_county[county].append({
                 "cluster_id": cid,
@@ -1634,6 +1661,7 @@ def fetch_county_geo_data(conn):
                 "total_parcel_count": int(total_count),
                 "local_parcel_count": int(local_count),
                 "connection_count": 0,
+                "income_spark": _income_spark(buckets),
             })
         return dict(by_county)
 
@@ -1760,7 +1788,7 @@ def build_leaderboard(conn, output_dir, cluster_connection_count=None, last_upda
             "foreign_state": r["primary_foreign_state"],
             "foreign_states": r["foreign_states"],
             "connection_count": counts.get(r["cluster_id"], 0),
-            "has_demographics": r["has_demographics"],
+            "income_spark": _income_spark(r["income_bucket_counts"]),
         })
 
     html = render_leaderboard(rows, last_updated_str)
