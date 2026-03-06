@@ -14,7 +14,7 @@ import re
 import sys
 import time
 import multiprocessing
-from collections import defaultdict
+from collections import defaultdict, Counter
 from pathlib import Path
 from urllib.parse import quote_plus
 
@@ -966,9 +966,19 @@ GEO_INDEX_TMPL = _BASE_HEAD + """\
       <tbody>
         {% for r in rows %}
         <tr>
-          <td><a href="{{ r.url }}">{{ r.area | e }}</a></td>
+          <td>
+            <a href="{{ r.url }}">{{ r.area | e }}</a>
+            {% if r.area_spark %}
+            <span class="income-spark" title="Area-wide: income distribution Low→High">{% for seg in r.area_spark %}<span style="width:{{ seg.pct }}%;background:{{ seg.color }}"></span>{% endfor %}</span>
+            {% endif %}
+          </td>
           <td class="num">{{ r.total_parcels }}</td>
-          <td class="muted">{{ r.top_owner | e }}</td>
+          <td class="muted">
+            {{ r.top_owner | e }}
+            {% if r.top_owner_spark %}
+            <span class="income-spark" title="Top owner Atlanta portfolio: income distribution Low→High">{% for seg in r.top_owner_spark %}<span style="width:{{ seg.pct }}%;background:{{ seg.color }}"></span>{% endfor %}</span>
+            {% endif %}
+          </td>
           {% if r.map_url %}<td class="map-link-cell"><a href="{{ r.map_url }}" title="View on map" class="map-link-small">map →</a></td>{% endif %}
         </tr>
         {% endfor %}
@@ -982,7 +992,12 @@ GEO_INDEX_TMPL = _BASE_HEAD + """\
 GEO_LEADERBOARD_TMPL = _BASE_HEAD + """\
     <p class="breadcrumb"><a href="{{ index_url }}">← {{ index_label }}</a></p>
     <div class="geo-title-row">
-      <h1>{{ area_name | e }}</h1>
+      <div class="geo-title-name">
+        <h1>{{ area_name | e }}</h1>
+        {% if area_spark %}
+        <span class="income-spark" title="Area-wide: income distribution Low→High">{% for seg in area_spark %}<span style="width:{{ seg.pct }}%;background:{{ seg.color }}"></span>{% endfor %}</span>
+        {% endif %}
+      </div>
       {% if area_map_url %}<a href="{{ area_map_url }}" class="geo-map-link">view on map →</a>{% endif %}
     </div>
     <p class="lead">Top property owners within this {{ geo_type_label }}.
@@ -1006,9 +1021,6 @@ GEO_LEADERBOARD_TMPL = _BASE_HEAD + """\
           <td class="owner-cell">
             <div class="owner-name-row">
               <a href="/owner/{{ r.cluster_id }}/">{{ r.primary_name | e }}</a>
-              {% if r.income_spark %}
-              <span class="income-spark" title="Atlanta portfolio: income distribution Low→High">{% for seg in r.income_spark %}<span style="width:{{ seg.pct }}%;background:{{ seg.color }}"></span>{% endfor %}</span>
-              {% endif %}
             </div>
             {% if r.alt_names %}
             <div class="alt-names">{{ r.alt_names | e }}</div>
@@ -1724,16 +1736,38 @@ def fetch_address_linkage(conn):
 def fetch_geo_data(conn, col_name):
     """Fetch (area, cluster_id, primary_name, flags, local_parcel_count) for one
     Atlanta geographic field ('city_neighborhood', 'city_council', 'city_npu').
-    Returns {area: [rows sorted by local_parcel_count desc]}.
+    Returns:
+        by_area: {area: [rows sorted by local_parcel_count desc]}
+        area_demographics: {area: income_bucket_counts}
     """
-    with conn.cursor() as cur:
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        # 1. Fetch Area-wide demographics (household-weighted census profile)
+        # We get the mapping of neighborhoods to areas from parcels_unified
         cur.execute(f"""
-            WITH area_map AS (
-                SELECT parcelid, {col_name} AS area FROM fulton_parcels WHERE {col_name} IS NOT NULL
-                UNION ALL
-                SELECT parcelid, {col_name} FROM dekalb_parcels WHERE {col_name} IS NOT NULL
-            )
-            SELECT am.area,
+            SELECT p.area,
+                   CASE 
+                       WHEN d.median_household_income < 40000 THEN 'Low'
+                       WHEN d.median_household_income < 57000 THEN 'Low-Mid'
+                       WHEN d.median_household_income < 84000 THEN 'Mid'
+                       WHEN d.median_household_income < 136000 THEN 'Mid-High'
+                       ELSE 'High'
+                   END as bucket,
+                   SUM(d.total_households) as count
+            FROM (
+                SELECT DISTINCT {col_name} AS area, city_neighborhood 
+                FROM parcels_unified 
+                WHERE {col_name} IS NOT NULL
+            ) p
+            JOIN gis.neighborhood_demographics d ON p.city_neighborhood = d.neighborhood_name
+            GROUP BY 1, 2
+        """)
+        area_demographics = defaultdict(dict)
+        for row in cur.fetchall():
+            area_demographics[row["area"]][row["bucket"]] = row["count"]
+
+        # 2. Fetch Top Owners in area
+        cur.execute(f"""
+            SELECT p.{col_name} AS area,
                    oe.cluster_id,
                    mc.owner_names[1] AS primary_name,
                    mc.owner_names[2:4] AS alt_names_arr,
@@ -1741,19 +1775,22 @@ def fetch_geo_data(conn, col_name):
                    mc.institutional_parcel_count > 0 AS is_institutional,
                    mc.primary_foreign_state,
                    mc.parcel_count AS total_parcel_count,
-                   COUNT(*) AS local_parcel_count,
-                   pd.income_bucket_counts
+                   COUNT(*) AS local_parcel_count
             FROM owner_entities oe
-            CROSS JOIN LATERAL unnest(oe.parcel_ids) AS u(pid)
-            JOIN area_map am ON am.parcelid = u.pid
+            CROSS JOIN LATERAL unnest(oe.parcel_ids) AS pid
+            JOIN parcels_unified p ON p.parcel_id = pid
             JOIN mv_cluster_stats mc ON mc.cluster_id = oe.cluster_id
-            LEFT JOIN portfolio_demographics pd ON pd.cluster_id = oe.cluster_id
-            GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, pd.income_bucket_counts
+            WHERE p.{col_name} IS NOT NULL
+            GROUP BY 1, 2, 3, 4, 5, 6, 7, 8
             ORDER BY area, local_parcel_count DESC
         """)
         by_area = defaultdict(list)
         for row in cur.fetchall():
-            area, cid, name, alt_arr, is_corp, is_inst, fstate, total_count, local_count, buckets = row
+            area, cid, name, alt_arr, is_corp, is_inst, fstate, total_count, local_count = (
+                row["area"], row["cluster_id"], row["primary_name"], row["alt_names_arr"],
+                row["is_corporate"], row["is_institutional"], row["primary_foreign_state"],
+                row["total_parcel_count"], row["local_parcel_count"]
+            )
             alts = [n for n in (alt_arr or []) if n]
             by_area[area].append({
                 "cluster_id": cid,
@@ -1764,17 +1801,44 @@ def fetch_geo_data(conn, col_name):
                 "foreign_state": fstate,
                 "total_parcel_count": int(total_count),
                 "local_parcel_count": int(local_count),
-                "connection_count": 0,  # filled in below if cluster_connection_count passed
-                "income_spark": _income_spark(buckets),
+                "connection_count": 0,
+                "income_spark": None  # Removed per user request for geo leaderboards
             })
-        return dict(by_area)
+        return dict(by_area), dict(area_demographics)
 
 
 def fetch_county_geo_data(conn):
-    """Top owners by parcel count per county. Returns {county: [rows]}."""
-    with conn.cursor() as cur:
+    """Top owners by parcel count per county. 
+    Returns:
+        by_county: {county: [rows]}
+        area_demographics: {county: income_bucket_counts}
+    """
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        # 1. Fetch County-wide demographics (household-weighted)
         cur.execute("""
-            SELECT oe.county,
+            SELECT p.county,
+                   CASE 
+                       WHEN d.median_household_income < 40000 THEN 'Low'
+                       WHEN d.median_household_income < 57000 THEN 'Low-Mid'
+                       WHEN d.median_household_income < 84000 THEN 'Mid'
+                       WHEN d.median_household_income < 136000 THEN 'Mid-High'
+                       ELSE 'High'
+                   END as bucket,
+                   SUM(d.total_households) as count
+            FROM (
+                SELECT DISTINCT county, city_neighborhood
+                FROM parcels_unified
+            ) p
+            JOIN gis.neighborhood_demographics d ON p.city_neighborhood = d.neighborhood_name
+            GROUP BY 1, 2
+        """)
+        area_demographics = defaultdict(dict)
+        for row in cur.fetchall():
+            area_demographics[row["county"]][row["bucket"]] = row["count"]
+
+        # 2. Fetch Top Owners per county
+        cur.execute("""
+            SELECT p.county,
                    oe.cluster_id,
                    mc.owner_names[1] AS primary_name,
                    mc.owner_names[2:4] AS alt_names_arr,
@@ -1782,17 +1846,21 @@ def fetch_county_geo_data(conn):
                    mc.institutional_parcel_count > 0 AS is_institutional,
                    mc.primary_foreign_state,
                    mc.parcel_count AS total_parcel_count,
-                   SUM(oe.count) AS local_parcel_count,
-                   pd.income_bucket_counts
+                   COUNT(*) AS local_parcel_count
             FROM owner_entities oe
+            CROSS JOIN LATERAL unnest(oe.parcel_ids) AS pid
+            JOIN parcels_unified p ON p.parcel_id = pid
             JOIN mv_cluster_stats mc ON mc.cluster_id = oe.cluster_id
-            LEFT JOIN portfolio_demographics pd ON pd.cluster_id = oe.cluster_id
-            GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, pd.income_bucket_counts
+            GROUP BY 1, 2, 3, 4, 5, 6, 7, 8
             ORDER BY county, local_parcel_count DESC
         """)
         by_county = defaultdict(list)
         for row in cur.fetchall():
-            county, cid, name, alt_arr, is_corp, is_inst, fstate, total_count, local_count, buckets = row
+            county, cid, name, alt_arr, is_corp, is_inst, fstate, total_count, local_count = (
+                row["county"], row["cluster_id"], row["primary_name"], row["alt_names_arr"],
+                row["is_corporate"], row["is_institutional"], row["primary_foreign_state"],
+                row["total_parcel_count"], row["local_parcel_count"]
+            )
             alts = [n for n in (alt_arr or []) if n]
             by_county[county].append({
                 "cluster_id": cid,
@@ -1804,9 +1872,9 @@ def fetch_county_geo_data(conn):
                 "total_parcel_count": int(total_count),
                 "local_parcel_count": int(local_count),
                 "connection_count": 0,
-                "income_spark": _income_spark(buckets),
+                "income_spark": None
             })
-        return dict(by_county)
+        return dict(by_county), dict(area_demographics)
 
 
 def build_cluster_related(linkable_agents, agent_clusters, address_groups=None):
@@ -2149,7 +2217,8 @@ def build_address_pages(address_groups, output_dir, last_updated_str=None):
 
 def _build_geo_section(env, area_rows, output_dir, url_base, geo_type_label, area_label,
                        index_title, index_lead, area_display_fn=None, geo_key=None,
-                       cluster_connection_count=None, last_updated_str=None):
+                       cluster_connection_count=None, last_updated_str=None,
+                       area_demographics=None):
     """Build individual area pages + index page for one geo dimension.
     area_display_fn: optional callable(raw_area) -> display string (e.g. 'District 5')
     Returns number of area pages written.
@@ -2168,6 +2237,11 @@ def _build_geo_section(env, area_rows, output_dir, url_base, geo_type_label, are
         area_raw_enc = quote_plus(str(area)) if geo_key else ""
         area_map_url = f"/?geo={geo_key}&area={area_raw_enc}" if geo_key else ""
 
+        # Aggregate area sparkline from provided area_demographics
+        area_spark = None
+        if area_demographics and area in area_demographics:
+            area_spark = _income_spark(area_demographics[area])
+
         # Filter out single-parcel owners (homeowners, not portfolios)
         filtered = [r for r in rows if r["total_parcel_count"] > 1]
         top100 = filtered[:100]
@@ -2179,6 +2253,7 @@ def _build_geo_section(env, area_rows, output_dir, url_base, geo_type_label, are
             page_title=f"{display} — Top Property Owners",
             meta_description=f"Top property owners in {display}, ranked by local parcel count.",
             area_name=display,
+            area_spark=area_spark,
             geo_type_label=geo_type_label,
             index_url=index_url,
             index_label=index_title,
@@ -2198,10 +2273,12 @@ def _build_geo_section(env, area_rows, output_dir, url_base, geo_type_label, are
             "url": f"/{url_base}/{slug}/",
             "total_parcels": area_total,
             "top_owner": filtered[0]["primary_name"] if filtered else "",
+            "top_owner_spark": filtered[0]["income_spark"] if filtered else None,
+            "area_spark": area_spark,
             "map_url": area_map_url,
         })
 
-    index_rows.sort(key=lambda r: r["area"])
+    index_rows.sort(key=lambda r: -r["total_parcels"])
     index_html = idx_tmpl.render(
         page_title=index_title,
         meta_description=index_lead,
@@ -2230,7 +2307,7 @@ def build_geo_leaderboard_pages(conn, output_dir, cluster_connection_count=None,
 
     # Atlanta neighborhoods
     print("  neighborhood...", end=" ", flush=True)
-    nbhd_data = fetch_geo_data(conn, "city_neighborhood")
+    nbhd_data, nbhd_demographics = fetch_geo_data(conn, "city_neighborhood")
     n = _build_geo_section(
         env, nbhd_data, base / "atlanta" / "neighborhood",
         url_base="l/atlanta/neighborhood",
@@ -2240,13 +2317,14 @@ def build_geo_leaderboard_pages(conn, output_dir, cluster_connection_count=None,
         index_lead="Top property owners by Atlanta neighborhood.",
         geo_key="neighborhood",
         cluster_connection_count=cluster_connection_count,
-        last_updated_str=last_updated_str
+        last_updated_str=last_updated_str,
+        area_demographics=nbhd_demographics
     )
     print(f"{n} pages")
 
     # Atlanta council districts
     print("  council...", end=" ", flush=True)
-    council_data = fetch_geo_data(conn, "city_council")
+    council_data, council_demographics = fetch_geo_data(conn, "city_council")
     n = _build_geo_section(
         env, council_data, base / "atlanta" / "council",
         url_base="l/atlanta/council",
@@ -2257,13 +2335,14 @@ def build_geo_leaderboard_pages(conn, output_dir, cluster_connection_count=None,
         area_display_fn=lambda v: f"District {v}",
         geo_key="council",
         cluster_connection_count=cluster_connection_count,
-        last_updated_str=last_updated_str
+        last_updated_str=last_updated_str,
+        area_demographics=council_demographics
     )
     print(f"{n} pages")
 
     # Atlanta NPUs
     print("  npu...", end=" ", flush=True)
-    npu_data = fetch_geo_data(conn, "city_npu")
+    npu_data, npu_demographics = fetch_geo_data(conn, "city_npu")
     n = _build_geo_section(
         env, npu_data, base / "atlanta" / "npu",
         url_base="l/atlanta/npu",
@@ -2274,38 +2353,27 @@ def build_geo_leaderboard_pages(conn, output_dir, cluster_connection_count=None,
         area_display_fn=lambda v: f"NPU {v}",
         geo_key="npu",
         cluster_connection_count=cluster_connection_count,
-        last_updated_str=last_updated_str
+        last_updated_str=last_updated_str,
+        area_demographics=npu_demographics
     )
     print(f"{n} pages")
 
     # County leaderboards
     print("  county...", end=" ", flush=True)
-    county_data = fetch_county_geo_data(conn)
-    env2 = _make_env()
-    geo_tmpl = env2.from_string(GEO_LEADERBOARD_TMPL)
-    counts = cluster_connection_count or {}
-    for county, rows in county_data.items():
-        county_total = sum(r["local_parcel_count"] for r in rows)
-        filtered = [r for r in rows if r["total_parcel_count"] > 1]
-        top500 = filtered[:500]
-        for r in top500:
-            r["connection_count"] = counts.get(r["cluster_id"], 0)
-        html = geo_tmpl.render(
-            page_title=f"{county.title()} County — Top Property Owners",
-            meta_description=f"Top property owners in {county.title()} County by parcel count.",
-            area_name=f"{county.title()} County",
-            geo_type_label="county",
-            index_url="/l/",
-            index_label="Leaderboards",
-            area_map_url="",
-            rows=top500,
-            total=len(top500),
-            area_total_parcels=county_total,
-            last_updated_str=last_updated_str,
-        )
-        out_path = base / county / "index.html"
-        write_if_changed(out_path, html)
-    print(f"{len(county_data)} pages")
+    county_data, county_demographics = fetch_county_geo_data(conn)
+    n = _build_geo_section(
+        env, county_data, base,
+        url_base="l",
+        geo_type_label="county",
+        area_label="County",
+        index_title="Counties",
+        index_lead="Top property owners by county.",
+        area_display_fn=lambda v: v.title(),
+        cluster_connection_count=cluster_connection_count,
+        last_updated_str=last_updated_str,
+        area_demographics=county_demographics
+    )
+    print(f"{n} pages")
 
 
 def fetch_portfolio_demographics_batch(conn, cluster_ids):

@@ -480,6 +480,13 @@ td.flags-cell .badge-state {
 
 .ra-list li + li { margin-top: 0.2rem; }
 
+.ra-name-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.2rem;
+}
+
 .ra-address-small {
   font-size: 0.8rem;
   color: var(--pico-muted-color);
@@ -663,10 +670,17 @@ td.flags-cell .badge-state {
 /* ── Geo title row (area name + map link) ────────────────────── */
 .geo-title-row {
   display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 0.25rem;
+}
+
+.geo-title-name {
+  display: flex;
   align-items: baseline;
   gap: 1rem;
-  flex-wrap: wrap;
-  margin-bottom: 0.25rem;
 }
 
 .geo-title-row h1 { margin-bottom: 0; }
