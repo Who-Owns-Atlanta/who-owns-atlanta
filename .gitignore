@@ -12,8 +12,9 @@ build/
 venv/
 .playwright-mcp/
 
-# Generated files to S3
+# Generated files (not tracked in repo)
 /web/frontend/tiles/
+/web/frontend/img/
 
 # uv
 .python-version
