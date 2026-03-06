@@ -176,3 +176,168 @@ LIMIT 500;
 
 CREATE INDEX idx_mv_leaderboard
     ON mv_leaderboard (cluster_id);
+
+
+-- ---------------------------------------------------------------------------
+-- mv_ownership_demographics
+-- Citywide aggregate: neighborhood-level demographic stats by ownership type.
+-- Parcel-level join — each Atlanta parcel weighted equally.
+-- Coverage: Fulton + DeKalb parcels with city_neighborhood match (~168k parcels).
+-- Ownership hierarchy: institutional > corporate > individual.
+-- "other_pct" is the remainder after white/black/hispanic/asian (AIAN,
+-- multiracial, etc. collapsed by source data); clamped to >= 0.
+-- Poverty rate derived from below_poverty_count / total_households * 100.
+-- ---------------------------------------------------------------------------
+
+DROP MATERIALIZED VIEW IF EXISTS mv_ownership_demographics CASCADE;
+
+CREATE MATERIALIZED VIEW mv_ownership_demographics AS
+WITH atlanta_parcels AS (
+    SELECT
+        CASE
+            WHEN is_institutional THEN 'institutional'
+            WHEN is_corporate     THEN 'corporate'
+            ELSE                       'individual'
+        END                          AS owner_type,
+        city_neighborhood
+    FROM fulton_parcels
+    WHERE city_neighborhood IS NOT NULL
+
+    UNION ALL
+
+    SELECT
+        CASE
+            WHEN is_institutional THEN 'institutional'
+            WHEN is_corporate     THEN 'corporate'
+            ELSE                       'individual'
+        END                          AS owner_type,
+        city_neighborhood
+    FROM dekalb_parcels
+    WHERE city_neighborhood IS NOT NULL
+),
+joined AS (
+    SELECT
+        p.owner_type,
+        nd.median_household_income,
+        nd.median_home_value,
+        nd.renter_occupied_pct,
+        nd.owner_occupied_pct,
+        nd.white_pct,
+        nd.black_pct,
+        nd.hispanic_pct,
+        nd.asian_pct,
+        GREATEST(0, 100.0 - nd.white_pct - nd.black_pct
+                           - nd.hispanic_pct - nd.asian_pct)    AS other_pct,
+        CASE WHEN nd.total_households > 0
+             THEN nd.below_poverty_count / nd.total_households * 100
+             ELSE NULL END                                       AS poverty_pct,
+        nd.vacant_units_pct,
+        nd.bachelors_degree_pct,
+        nd.graduate_degree_pct
+    FROM atlanta_parcels p
+    JOIN gis.neighborhood_demographics nd
+        ON nd.neighborhood_name = p.city_neighborhood
+)
+SELECT
+    owner_type,
+    count(*)                                                         AS parcel_count,
+    round(avg(median_household_income)::numeric)                     AS avg_neighborhood_income,
+    round(percentile_cont(0.5) WITHIN GROUP
+          (ORDER BY median_household_income)::numeric)               AS median_neighborhood_income,
+    round(avg(median_home_value)::numeric)                           AS avg_neighborhood_home_value,
+    round(avg(renter_occupied_pct)::numeric, 1)                      AS avg_renter_pct,
+    round(avg(owner_occupied_pct)::numeric, 1)                       AS avg_owner_occupied_pct,
+    round(avg(white_pct)::numeric, 1)                                AS avg_white_pct,
+    round(avg(black_pct)::numeric, 1)                                AS avg_black_pct,
+    round(avg(hispanic_pct)::numeric, 1)                             AS avg_hispanic_pct,
+    round(avg(asian_pct)::numeric, 1)                                AS avg_asian_pct,
+    round(avg(other_pct)::numeric, 1)                                AS avg_other_pct,
+    round(avg(poverty_pct)::numeric, 1)                              AS avg_poverty_pct,
+    round(avg(vacant_units_pct)::numeric, 1)                         AS avg_vacant_pct,
+    round(avg(bachelors_degree_pct)::numeric, 1)                     AS avg_bachelors_pct,
+    round(avg(graduate_degree_pct)::numeric, 1)                      AS avg_graduate_pct
+FROM joined
+GROUP BY owner_type;
+
+CREATE INDEX idx_mv_ownership_demographics
+    ON mv_ownership_demographics (owner_type);
+
+
+-- ---------------------------------------------------------------------------
+-- mv_ownership_by_income_quartile
+-- Same parcel-level base as mv_ownership_demographics, split by neighborhood
+-- income quartile (computed across ALL Atlanta parcels, not per-type).
+-- Quartile boundaries are therefore consistent across ownership types.
+-- income_quartile: 1 = lowest 25%, 4 = highest 25%.
+-- ---------------------------------------------------------------------------
+
+DROP MATERIALIZED VIEW IF EXISTS mv_ownership_by_income_quartile CASCADE;
+
+CREATE MATERIALIZED VIEW mv_ownership_by_income_quartile AS
+WITH atlanta_parcels AS (
+    SELECT
+        CASE
+            WHEN is_institutional THEN 'institutional'
+            WHEN is_corporate     THEN 'corporate'
+            ELSE                       'individual'
+        END                          AS owner_type,
+        city_neighborhood
+    FROM fulton_parcels
+    WHERE city_neighborhood IS NOT NULL
+
+    UNION ALL
+
+    SELECT
+        CASE
+            WHEN is_institutional THEN 'institutional'
+            WHEN is_corporate     THEN 'corporate'
+            ELSE                        'individual'
+        END                          AS owner_type,
+        city_neighborhood
+    FROM dekalb_parcels
+    WHERE city_neighborhood IS NOT NULL
+),
+joined AS (
+    SELECT
+        p.owner_type,
+        nd.median_household_income,
+        nd.median_home_value,
+        nd.renter_occupied_pct,
+        nd.white_pct,
+        nd.black_pct,
+        nd.hispanic_pct,
+        nd.asian_pct,
+        GREATEST(0, 100.0 - nd.white_pct - nd.black_pct
+                           - nd.hispanic_pct - nd.asian_pct)    AS other_pct,
+        CASE WHEN nd.total_households > 0
+             THEN nd.below_poverty_count / nd.total_households * 100
+             ELSE NULL END                                       AS poverty_pct,
+        nd.vacant_units_pct,
+        -- Quartile computed globally so boundaries are the same for all types
+        ntile(4) OVER (ORDER BY nd.median_household_income)     AS income_quartile
+    FROM atlanta_parcels p
+    JOIN gis.neighborhood_demographics nd
+        ON nd.neighborhood_name = p.city_neighborhood
+)
+SELECT
+    income_quartile,
+    owner_type,
+    count(*)                                                         AS parcel_count,
+    round(min(median_household_income)::numeric)                     AS income_quartile_min,
+    round(max(median_household_income)::numeric)                     AS income_quartile_max,
+    round(avg(median_household_income)::numeric)                     AS avg_neighborhood_income,
+    round(avg(median_home_value)::numeric)                           AS avg_neighborhood_home_value,
+    round(avg(renter_occupied_pct)::numeric, 1)                      AS avg_renter_pct,
+    round(avg(white_pct)::numeric, 1)                                AS avg_white_pct,
+    round(avg(black_pct)::numeric, 1)                                AS avg_black_pct,
+    round(avg(hispanic_pct)::numeric, 1)                             AS avg_hispanic_pct,
+    round(avg(asian_pct)::numeric, 1)                                AS avg_asian_pct,
+    round(avg(other_pct)::numeric, 1)                                AS avg_other_pct,
+    round(avg(poverty_pct)::numeric, 1)                              AS avg_poverty_pct,
+    round(avg(vacant_units_pct)::numeric, 1)                         AS avg_vacant_pct
+FROM joined
+GROUP BY income_quartile, owner_type
+ORDER BY income_quartile, owner_type;
+
+CREATE INDEX idx_mv_ownership_by_income_quartile
+    ON mv_ownership_by_income_quartile (income_quartile, owner_type);

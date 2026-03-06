@@ -114,6 +114,183 @@ _BASE_FOOT = """\
 </html>
 """
 
+NUMBERS_TMPL = """\
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>By the Numbers — Who Owns Atlanta?</title>
+  <meta name="description" content="How corporate, institutional, and individual property ownership in Atlanta maps onto neighborhood income, race, and housing conditions.">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.classless.min.css">
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/content.css">
+</head>
+<body class="content-page">
+  <header>
+    <a href="/" class="site-name">Who Owns Atlanta?</a>
+    <nav class="header-nav">
+      <a href="/leaderboard/">Leaderboard</a>
+    </nav>
+  </header>
+
+  <main class="content-main content-prose">
+    <h1>By the Numbers</h1>
+
+    <p class="lead">
+      Corporate-owned parcels in Atlanta are concentrated in lower-income, majority-Black neighborhoods
+      at significantly higher rates than individually-owned parcels.
+      Across {{ totals.total_parcels | int | format_int }} city parcels with neighborhood data,
+      the average corporate-owned parcel sits in a neighborhood with a median household income of
+      <strong>${{ totals.corp_income | int | format_int }}</strong> — versus
+      <strong>${{ totals.indiv_income | int | format_int }}</strong> for individually-owned parcels.
+      Corporate portfolios average <strong>{{ totals.corp_black | round(1) }}%</strong> Black-majority
+      neighborhoods compared to <strong>{{ totals.indiv_black | round(1) }}%</strong> for individual owners.
+    </p>
+
+    <h2>Ownership Type Summary</h2>
+    <div class="table-scroll">
+    <table class="leaderboard-table">
+      <thead>
+        <tr>
+          <th>Metric</th>
+          <th class="num">Corporate</th>
+          <th class="num">Institutional</th>
+          <th class="num">Individual</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Parcel count</td>
+          {% for r in by_type %}
+          <td class="num">{{ r.parcel_count | format_int }}
+            <span style="opacity:0.55;font-size:0.8em">({{ (r.parcel_count / totals.total_parcels * 100) | round(1) }}%)</span>
+          </td>
+          {% endfor %}
+        </tr>
+        <tr>
+          <td>Avg neighborhood median income</td>
+          {% for r in by_type %}
+          <td class="num">${{ r.avg_neighborhood_income | int | format_int }}</td>
+          {% endfor %}
+        </tr>
+        <tr>
+          <td>Avg neighborhood % Black</td>
+          {% for r in by_type %}
+          <td class="num">{{ r.avg_black_pct | round(1) }}%</td>
+          {% endfor %}
+        </tr>
+        <tr>
+          <td>Avg poverty rate</td>
+          {% for r in by_type %}
+          <td class="num">{{ r.avg_poverty_pct | round(1) }}%</td>
+          {% endfor %}
+        </tr>
+        <tr>
+          <td>Avg renter %</td>
+          {% for r in by_type %}
+          <td class="num">{{ r.avg_renter_pct | round(1) }}%</td>
+          {% endfor %}
+        </tr>
+        <tr>
+          <td>Avg neighborhood median home value</td>
+          {% for r in by_type %}
+          <td class="num">${{ r.avg_neighborhood_home_value | int | format_int }}</td>
+          {% endfor %}
+        </tr>
+        <tr>
+          <td>Avg vacancy rate</td>
+          {% for r in by_type %}
+          <td class="num">{{ r.avg_vacant_pct | round(1) }}%</td>
+          {% endfor %}
+        </tr>
+      </tbody>
+    </table>
+    </div>
+
+    <h2>Racial Composition of Neighborhoods</h2>
+    <p>Average racial composition of neighborhoods where each ownership type holds property.</p>
+
+    <div class="demographics-grid" style="grid-template-columns: 1fr 1fr 1fr;">
+      {% for r in by_type %}
+      {% set other_pct = [0, 100 - r.avg_black_pct - r.avg_white_pct - r.avg_hispanic_pct - r.avg_asian_pct] | max %}
+      <div class="demo-card">
+        <h3>{{ r.owner_type | capitalize }}</h3>
+        <p style="font-size:0.8rem; color:#475569; margin-bottom:0.5rem;">
+          {{ r.avg_black_pct | round(1) }}% Black &middot;
+          {{ r.avg_white_pct | round(1) }}% White &middot;
+          {{ r.avg_hispanic_pct | round(1) }}% Hispanic &middot;
+          {{ r.avg_asian_pct | round(1) }}% Asian
+        </p>
+        <div class="race-bar">
+          {% if r.avg_black_pct > 0    %}<div class="race-segment" style="width:{{ r.avg_black_pct | round(1) }}%;    background:#6366f1;" title="Black {{ r.avg_black_pct | round(1) }}%"></div>{% endif %}
+          {% if r.avg_white_pct > 0    %}<div class="race-segment" style="width:{{ r.avg_white_pct | round(1) }}%;    background:#94a3b8;" title="White {{ r.avg_white_pct | round(1) }}%"></div>{% endif %}
+          {% if r.avg_hispanic_pct > 0 %}<div class="race-segment" style="width:{{ r.avg_hispanic_pct | round(1) }}%; background:#f59e0b;" title="Hispanic {{ r.avg_hispanic_pct | round(1) }}%"></div>{% endif %}
+          {% if r.avg_asian_pct > 0    %}<div class="race-segment" style="width:{{ r.avg_asian_pct | round(1) }}%;    background:#10b981;" title="Asian {{ r.avg_asian_pct | round(1) }}%"></div>{% endif %}
+          {% if other_pct > 0          %}<div class="race-segment" style="width:{{ other_pct | round(1) }}%;           background:#e2e8f0;" title="Other {{ other_pct | round(1) }}%"></div>{% endif %}
+        </div>
+        <div class="race-legend">
+          <span class="race-legend-item"><span class="race-dot" style="background:#6366f1"></span>Black</span>
+          <span class="race-legend-item"><span class="race-dot" style="background:#94a3b8"></span>White</span>
+          <span class="race-legend-item"><span class="race-dot" style="background:#f59e0b"></span>Hispanic</span>
+          <span class="race-legend-item"><span class="race-dot" style="background:#10b981"></span>Asian</span>
+          <span class="race-legend-item"><span class="race-dot" style="background:#e2e8f0"></span>Other</span>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <h2>Where Each Ownership Type Concentrates</h2>
+    <p>Share of each ownership type's parcels by neighborhood income quartile (Q1 = lowest income, Q4 = highest).</p>
+
+    <div class="demographics-grid" style="grid-template-columns: 1fr 1fr 1fr;">
+      {% for r in by_type %}
+      {% set type_total = quartile_data[r.owner_type] | sum(attribute='parcel_count') %}
+      <div class="demo-card">
+        <h3>{{ r.owner_type | capitalize }}</h3>
+        <div class="income-buckets">
+          {% for q in quartile_data[r.owner_type] %}
+          {% set pct = (q.parcel_count / type_total * 100) | round(1) if type_total > 0 else 0 %}
+          <div class="bucket-row">
+            <span class="bucket-label">Q{{ q.income_quartile }} <span style="opacity:0.6;font-size:0.7em">&lt;${{ (q.income_quartile_max / 1000) | round(0) | int }}k</span></span>
+            <div class="bucket-bar-bg">
+              <div class="bucket-bar" style="width:{{ pct }}%"></div>
+            </div>
+            <span class="bucket-count">{{ pct }}%</span>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <h2>Notes</h2>
+    <ul>
+      <li><strong>Coverage:</strong> Atlanta city parcels only (those with a <code>city_neighborhood</code> assigned), approximately {{ totals.total_parcels | int | format_int }} of ~616k total county parcels.</li>
+      <li><strong>Neighborhood demographics:</strong> 2024 vintage (2020 Census base + ACS estimates), covering 248 neighborhoods.</li>
+      <li><strong>"Other" race</strong> is the remainder after Black + White + Hispanic + Asian and may include multiracial and Native American households.</li>
+      <li><strong>Q4 corporate poverty anomaly:</strong> The Q4 (highest-income) corporate figure shows an elevated poverty rate (~11%) compared to individual owners (~0.5%). This likely reflects a small number of commercial parcels in otherwise wealthy neighborhoods with atypically high census-tract poverty rates, rather than a genuine pattern.</li>
+      <li>See <a href="/methodology/">Methodology</a> for full data provenance and known limitations.</li>
+    </ul>
+  </main>
+
+  <footer>
+    <nav>
+      <a href="/">Map</a>
+      <a href="/l/">Leaderboards</a>
+      <a href="/numbers/">By the Numbers</a>
+      <a href="/about/">About</a>
+      <a href="/methodology/">Methodology</a>
+      <a href="/faq/">FAQ</a>
+    </nav>
+    <div class="last-updated">
+      Last updated: {{ last_updated_str }}
+    </div>
+  </footer>
+</body>
+</html>
+"""
+
 LEADERBOARD_TMPL = _BASE_HEAD + """\
     <h1>Leaderboards</h1>
     <nav class="leaderboard-subnav">
@@ -820,6 +997,58 @@ def fmt_int(val):
         return 0
     return int(val)
 
+def fetch_ownership_demographics(conn):
+    """Fetch data from the two ownership demographics MVs."""
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("SELECT * FROM mv_ownership_demographics ORDER BY parcel_count DESC")
+        by_type = [dict(r) for r in cur.fetchall()]
+
+        cur.execute("SELECT * FROM mv_ownership_by_income_quartile ORDER BY owner_type, income_quartile")
+        quartile_rows = cur.fetchall()
+
+    # Organise quartile rows by owner_type
+    quartile_data = {}
+    for row in quartile_rows:
+        t = row["owner_type"]
+        quartile_data.setdefault(t, []).append(dict(row))
+
+    # Pre-compute totals for the lede paragraph
+    corp  = next((r for r in by_type if r["owner_type"] == "corporate"), {})
+    indiv = next((r for r in by_type if r["owner_type"] == "individual"), {})
+    total_parcels = sum(r["parcel_count"] for r in by_type)
+    totals = {
+        "total_parcels":  total_parcels,
+        "corp_income":    corp.get("avg_neighborhood_income", 0),
+        "indiv_income":   indiv.get("avg_neighborhood_income", 0),
+        "corp_black":     corp.get("avg_black_pct", 0),
+        "indiv_black":    indiv.get("avg_black_pct", 0),
+    }
+    return by_type, quartile_data, totals
+
+
+def render_numbers_page(by_type, quartile_data, totals, last_updated_str):
+    env = _make_env()
+    env.filters["format_int"] = lambda v: f"{int(v):,}" if v is not None else "0"
+    tmpl = env.from_string(NUMBERS_TMPL)
+    return tmpl.render(
+        by_type=by_type,
+        quartile_data=quartile_data,
+        totals=totals,
+        last_updated_str=last_updated_str,
+    )
+
+
+def build_numbers_page(conn, output_dir, last_updated_str=None):
+    if last_updated_str is None:
+        last_updated_str = fetch_last_update(conn)
+    print("Building /numbers/ page...", end=" ", flush=True)
+    by_type, quartile_data, totals = fetch_ownership_demographics(conn)
+    html = render_numbers_page(by_type, quartile_data, totals, last_updated_str)
+    out = Path(output_dir) / "numbers" / "index.html"
+    write_if_changed(out, html)
+    print(f"done → {out}")
+
+
 def fetch_last_update(conn):
     """Returns the latest last_updated timestamp as a formatted string."""
     with conn.cursor() as cur:
@@ -1475,18 +1704,37 @@ def build_cluster_related(linkable_agents, agent_clusters, address_groups=None):
 
 
 def write_if_changed(path, content):
-    """Write content to path only if it differs from current content."""
+    """Write content to path only if it differs from current content.
+    Ensures correct permissions (755 for dirs, 644 for files)."""
     path = Path(path)
     if path.exists():
         try:
             if path.read_text() == content:
+                # Ensure permissions are correct even if content matches
+                if path.stat().st_mode & 0o777 != 0o644:
+                    path.chmod(0o644)
                 return False
         except Exception:
             pass
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content)
-    return True
 
+    # Create parent directories with 755
+    if not path.parent.exists():
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Ensure all parents in the path have 755 (up to the output-dir)
+    # This is a bit defensive but helps if mkdir didn't set them as expected
+    p = path.parent
+    while p and p.as_posix() != '/':
+        try:
+            if p.exists() and p.stat().st_mode & 0o777 != 0o755:
+                p.chmod(0o755)
+        except PermissionError:
+            break # Stop if we hit a dir we don't own
+        p = p.parent
+
+    path.write_text(content)
+    path.chmod(0o644)
+    return True
 
 # ---------------------------------------------------------------------------
 # Build
@@ -1916,6 +2164,7 @@ def main():
             build_geo_leaderboard_pages(conn, output_dir,
                                          cluster_connection_count=cluster_connection_count,
                                          last_updated_str=last_updated_str)
+            build_numbers_page(conn, output_dir, last_updated_str)
             # Agent pages are fast; always build unless owner-only
             print("Building agent pages...", end=" ", flush=True)
             n_agents = build_agent_pages(linkable_agents, agent_clusters, output_dir, last_updated_str)
