@@ -325,7 +325,6 @@ LEADERBOARD_TMPL = _BASE_HEAD + """\
           <th>Owner</th>
           <th class="num">Parcels <span class="cap-note" style="text-transform:none; font-weight:400; opacity:0.7">(City / Total)</span></th>
           <th class="num">Acres</th>
-          <th class="num related-col">Related</th>
         </tr>
       </thead>
       <tbody>
@@ -349,12 +348,11 @@ LEADERBOARD_TMPL = _BASE_HEAD + """\
             <span class="total-count" style="opacity:0.8">{{ r.parcel_count }}</span>
           </td>
           <td class="num">{{ r.acres }}</td>
-          <td class="num related-col">{% if r.connection_count > 0 %}<a href="/owner/{{ r.cluster_id }}/#related" class="connection-count">{{ r.connection_count }}</a>{% endif %}</td>
         </tr>
         {% if r.is_corporate or r.is_institutional or r.foreign_states %}
         <tr class="owner-badges-row-tr">
           <td></td>
-          <td colspan="4">
+          <td colspan="3">
             <div class="leaderboard-badges-row">
               {% if r.is_corporate %}<span class="badge-corporate">CORPORATE</span>{% endif %}
               {% if r.is_institutional %}<span class="badge-institutional">INSTITUTIONAL</span>{% endif %}
@@ -859,7 +857,6 @@ GEO_LEADERBOARD_TMPL = _BASE_HEAD + """\
           <th>Owner</th>
           <th class="num">In area</th>
           <th class="num">Total</th>
-          <th class="num related-col">Related</th>
           {% if geo_key %}<th></th>{% endif %}
         </tr>
       </thead>
@@ -880,7 +877,6 @@ GEO_LEADERBOARD_TMPL = _BASE_HEAD + """\
           </td>
           <td class="num">{{ r.local_parcel_count }}</td>
           <td class="num muted">{{ r.total_parcel_count }}</td>
-          <td class="num related-col">{% if r.connection_count > 0 %}<a href="/owner/{{ r.cluster_id }}/#related" class="connection-count">{{ r.connection_count }}</a>{% endif %}</td>
           {% if geo_key %}
           <td class="map-link-cell"><a href="/?cluster={{ r.cluster_id }}&geo={{ geo_key }}&area={{ area_raw_enc }}" title="View on map" class="map-link">map →</a></td>
           {% endif %}
@@ -888,7 +884,7 @@ GEO_LEADERBOARD_TMPL = _BASE_HEAD + """\
         {% if r.is_corporate or r.is_institutional or r.foreign_states %}
         <tr class="owner-badges-row-tr">
           <td></td>
-          <td colspan="{{ '5' if geo_key else '4' }}">
+          <td colspan="{{ '4' if geo_key else '3' }}">
             <div class="leaderboard-badges-row">
               {% if r.is_corporate %}<span class="badge-corporate">CORPORATE</span>{% endif %}
               {% if r.is_institutional %}<span class="badge-institutional">INSTITUTIONAL</span>{% endif %}
