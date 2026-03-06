@@ -12,6 +12,9 @@
 - The `@.env` contains all credentials - database, APIs
 - prefix PGPASSWORD= to all psql cli commands
 
+# TESTING/VALIDATION LOCATIONS
+- web:  http://who-owns-atlanta.local/
+
 # TOOLS
 Don't ask permission before running read-only or non-destructive commands. If a command only reads/lists/searches - NO write, delete, move, or change - run it immediately without narrating your intent first.
 
