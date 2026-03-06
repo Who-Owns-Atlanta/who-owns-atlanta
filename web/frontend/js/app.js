@@ -509,6 +509,18 @@ function updateLegend() {
   });
 }
 
+// Choropleth opacity depends on both map mode and whether an area filter is active.
+// With an area filter the choropleth stays visible at all zooms so the neighborhood
+// context isn't lost when drilling in. Without a filter it fades out by z13 so
+// parcel ownership colors take over cleanly.
+function updateChoroOpacity() {
+  if (mapMode === 'ownership') return;
+  const opacityExpr = activeAreaFilter
+    ? ['interpolate', ['linear'], ['zoom'], 10, 0.80, 13, 0.55, 15, 0.45]
+    : ['interpolate', ['linear'], ['zoom'], 10, 0.80, 12, 0.65, 13, 0.0];
+  map.setPaintProperty('nbhd-choropleth', 'fill-opacity', opacityExpr);
+}
+
 function setMapMode(mode) {
   mapMode = mode;
   const isDemog = mode !== 'ownership';
@@ -523,14 +535,8 @@ function setMapMode(mode) {
 
   if (isDemog) {
     map.setPaintProperty('nbhd-choropleth', 'fill-color', CHORO_COLORS[mode]);
-    // Fade choropleth out as user zooms into parcel detail
-    map.setPaintProperty('nbhd-choropleth', 'fill-opacity', [
-      'interpolate', ['linear'], ['zoom'],
-      10, 0.80,
-      12, 0.65,
-      13, 0.0,
-    ]);
     map.setLayoutProperty('nbhd-choropleth', 'visibility', 'visible');
+    updateChoroOpacity();
   } else {
     map.setLayoutProperty('nbhd-choropleth', 'visibility', 'none');
   }
@@ -1253,12 +1259,14 @@ function setAreaFilter(label, geometry) {
   filterToggle.classList.add('active');
   filterPanel.hidden = true;
   map.fitBounds(geomBounds(geometry), { padding: 40, maxZoom: 15 });
+  updateChoroOpacity();
 }
 
 function clearAreaFilter() {
   activeAreaFilter = null;
   if (map.getSource('area-overlay'))
     map.getSource('area-overlay').setData({ type: 'FeatureCollection', features: [] });
+  updateChoroOpacity();
   filterActive.hidden = true;
   filterToggle.classList.remove('active');
   filterNbInput.value  = '';
