@@ -12,18 +12,21 @@
 DROP MATERIALIZED VIEW IF EXISTS mv_address_search CASCADE;
 
 CREATE MATERIALIZED VIEW mv_address_search AS
+
+-- Arm 1: Fulton Address_Point → nearest Fulton parcel (priority=1 wins dedup)
 SELECT
     ap."FULLADDR"   AS fulladdr,
     ap."LAT"        AS lat,
     ap."LON"        AS lon,
     f.parcelid      AS parcel_id,
-    'fulton'::text  AS county
+    'fulton'::text  AS county,
+    1               AS priority
 FROM gis."Address_Point" ap
 CROSS JOIN LATERAL (
     SELECT fp.parcelid
     FROM fulton_parcels fp
     WHERE ST_DWithin(ap.geometry, fp.geometry, 0.0001)
-    ORDER BY 
+    ORDER BY
         (CASE WHEN fp.addrunit IS NOT NULL AND fp.addrunit <> '' AND ap."FULLADDR" ILIKE '%' || fp.addrunit || '%' THEN 1 ELSE 0 END) DESC,
         ST_Distance(ap.geometry, fp.geometry) ASC
     LIMIT 1
@@ -32,26 +35,54 @@ WHERE ap."FULLADDR" IS NOT NULL AND ap."FULLADDR" <> ''
 
 UNION ALL
 
+-- Arm 2: DeKalb Address_Point → nearest DeKalb parcel (priority=1)
 SELECT
     ap."FULLADDR"                              AS fulladdr,
     ap."LAT"                                   AS lat,
     ap."LON"                                   AS lon,
     d.parcel_id                                AS parcel_id,
-    'dekalb'::text                             AS county
+    'dekalb'::text                             AS county,
+    1                                          AS priority
 FROM gis."Address_Point" ap
 CROSS JOIN LATERAL (
     SELECT COALESCE(dp.parcelid, dp.lowparcelid) as parcel_id
     FROM dekalb_parcels dp
     WHERE ST_DWithin(ap.geometry, dp.geometry, 0.0001)
-    ORDER BY 
-        (CASE 
-            WHEN (dp.unit IS NOT NULL AND dp.unit <> '' AND ap."FULLADDR" ILIKE '%' || dp.unit || '%') 
-              OR (dp.unit_no IS NOT NULL AND dp.unit_no <> '' AND ap."FULLADDR" ILIKE '%' || dp.unit_no || '%') 
+    ORDER BY
+        (CASE
+            WHEN (dp.unit IS NOT NULL AND dp.unit <> '' AND ap."FULLADDR" ILIKE '%' || dp.unit || '%')
+              OR (dp.unit_no IS NOT NULL AND dp.unit_no <> '' AND ap."FULLADDR" ILIKE '%' || dp.unit_no || '%')
             THEN 1 ELSE 0 END) DESC,
         ST_Distance(ap.geometry, dp.geometry) ASC
     LIMIT 1
 ) d
-WHERE ap."FULLADDR" IS NOT NULL AND ap."FULLADDR" <> '';
+WHERE ap."FULLADDR" IS NOT NULL AND ap."FULLADDR" <> ''
+
+UNION ALL
+
+-- Arm 3: Fulton parcel tax addresses with centroid lat/lon (priority=2, loses dedup to Address_Point)
+SELECT
+    fp.address                              AS fulladdr,
+    ST_Y(ST_Centroid(fp.geometry))          AS lat,
+    ST_X(ST_Centroid(fp.geometry))          AS lon,
+    fp.parcelid                             AS parcel_id,
+    'fulton'::text                          AS county,
+    2                                       AS priority
+FROM fulton_parcels fp
+WHERE fp.address IS NOT NULL AND fp.address <> '' AND fp.address NOT ILIKE '0 %'
+
+UNION ALL
+
+-- Arm 4: DeKalb parcel tax addresses with centroid lat/lon (priority=2)
+SELECT
+    dp.siteaddress                          AS fulladdr,
+    ST_Y(ST_Centroid(dp.geometry))          AS lat,
+    ST_X(ST_Centroid(dp.geometry))          AS lon,
+    COALESCE(dp.parcelid, dp.lowparcelid)   AS parcel_id,
+    'dekalb'::text                          AS county,
+    2                                       AS priority
+FROM dekalb_parcels dp
+WHERE dp.siteaddress IS NOT NULL AND dp.siteaddress <> '' AND dp.siteaddress NOT ILIKE '0 %';
 
 CREATE INDEX idx_mv_address_search_trgm
     ON mv_address_search USING GIN (fulladdr gin_trgm_ops);

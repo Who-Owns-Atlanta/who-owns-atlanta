@@ -49,7 +49,7 @@ def search(response: Response, q: str = Query(..., min_length=3)):
                     fulladdr, lat, lon, parcel_id, county
                 FROM mv_address_search
                 WHERE fulladdr ILIKE %(q)s
-                ORDER BY fulladdr
+                ORDER BY fulladdr, priority
                 LIMIT 8
             """, {"q": q.upper() + "%"})
             return {"results": cur.fetchall()}
