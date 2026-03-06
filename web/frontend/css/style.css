@@ -58,6 +58,7 @@ body > header {
   color: var(--pico-color);
   white-space: nowrap;
   flex: 0 0 auto;
+  text-decoration: none;
 }
 
 /* ── Search ─────────────────────────────────────────────────── */

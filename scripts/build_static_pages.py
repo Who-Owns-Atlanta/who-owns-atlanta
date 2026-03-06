@@ -102,6 +102,7 @@ _BASE_FOOT = """\
     <nav>
       <a href="/">Map</a>
       <a href="/l/">Leaderboards</a>
+      <a href="/numbers/">By The Numbers</a>
       <a href="/about/">About</a>
       <a href="/methodology/">Methodology</a>
       <a href="/faq/">FAQ</a>
@@ -130,7 +131,7 @@ NUMBERS_TMPL = """\
   <header>
     <a href="/" class="site-name">Who Owns Atlanta?</a>
     <nav class="header-nav">
-      <a href="/leaderboard/">Leaderboard</a>
+      <a href="/l/">Leaderboards</a>
     </nav>
   </header>
 
@@ -302,8 +303,8 @@ LEADERBOARD_TMPL = _BASE_HEAD + """\
       </div>
       <div class="subnav-group">
         <span class="subnav-label">County</span>
-        <a href="/l/fulton/">Fulton</a>
-        <a href="/l/dekalb/">DeKalb</a>
+        <a href="/l/county/fulton/">Fulton</a>
+        <a href="/l/county/dekalb/">DeKalb</a>
       </div>
       <div class="subnav-group">
         <span class="subnav-label">Atlanta</span>
@@ -2362,8 +2363,8 @@ def build_geo_leaderboard_pages(conn, output_dir, cluster_connection_count=None,
     print("  county...", end=" ", flush=True)
     county_data, county_demographics = fetch_county_geo_data(conn)
     n = _build_geo_section(
-        env, county_data, base,
-        url_base="l",
+        env, county_data, base / "county",
+        url_base="l/county",
         geo_type_label="county",
         area_label="County",
         index_title="Counties",
