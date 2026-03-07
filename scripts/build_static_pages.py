@@ -132,6 +132,8 @@ NUMBERS_TMPL = """\
     .leaderboard-table td.cell-low  { background-color: rgba(99, 102, 241, 0.03); }
     /* Ensure number alignment and padding stay consistent */
     .leaderboard-table td.num { text-align: right; padding-right: 1.5rem; }
+    .bucket-label { text-align: left; white-space: nowrap; }
+    .bucket-row { grid-template-columns: 5.5rem 1fr 2.5rem; }
   </style>
 </head>
 <body class="content-page">
@@ -245,12 +247,6 @@ NUMBERS_TMPL = """\
       {% set other_pct = [0, 100 - r.avg_black_pct - r.avg_white_pct - r.avg_hispanic_pct - r.avg_asian_pct] | max %}
       <div class="demo-card">
         <h3>{{ r.owner_type | capitalize }}</h3>
-        <p style="font-size:0.8rem; color:#475569; margin-bottom:0.5rem;">
-          {{ r.avg_black_pct | round(1) }}% Black &middot;
-          {{ r.avg_white_pct | round(1) }}% White &middot;
-          {{ r.avg_hispanic_pct | round(1) }}% Hispanic &middot;
-          {{ r.avg_asian_pct | round(1) }}% Asian
-        </p>
         <div class="race-bar">
           {% if r.avg_black_pct > 0    %}<div class="race-segment" style="width:{{ r.avg_black_pct | round(1) }}%;    background:#6366f1;" title="Black {{ r.avg_black_pct | round(1) }}%"></div>{% endif %}
           {% if r.avg_white_pct > 0    %}<div class="race-segment" style="width:{{ r.avg_white_pct | round(1) }}%;    background:#94a3b8;" title="White {{ r.avg_white_pct | round(1) }}%"></div>{% endif %}
@@ -259,11 +255,11 @@ NUMBERS_TMPL = """\
           {% if other_pct > 0          %}<div class="race-segment" style="width:{{ other_pct | round(1) }}%;           background:#e2e8f0;" title="Other {{ other_pct | round(1) }}%"></div>{% endif %}
         </div>
         <div class="race-legend">
-          <span class="race-legend-item"><span class="race-dot" style="background:#6366f1"></span>Black</span>
-          <span class="race-legend-item"><span class="race-dot" style="background:#94a3b8"></span>White</span>
-          <span class="race-legend-item"><span class="race-dot" style="background:#f59e0b"></span>Hispanic</span>
-          <span class="race-legend-item"><span class="race-dot" style="background:#10b981"></span>Asian</span>
-          <span class="race-legend-item"><span class="race-dot" style="background:#e2e8f0"></span>Other</span>
+          {% if r.avg_black_pct > 0    %}<span class="race-legend-item"><span class="race-dot" style="background:#6366f1"></span>{{ r.avg_black_pct | round(1) }}% Black</span>{% endif %}
+          {% if r.avg_white_pct > 0    %}<span class="race-legend-item"><span class="race-dot" style="background:#94a3b8"></span>{{ r.avg_white_pct | round(1) }}% White</span>{% endif %}
+          {% if r.avg_hispanic_pct > 0 %}<span class="race-legend-item"><span class="race-dot" style="background:#f59e0b"></span>{{ r.avg_hispanic_pct | round(1) }}% Hispanic</span>{% endif %}
+          {% if r.avg_asian_pct > 0    %}<span class="race-legend-item"><span class="race-dot" style="background:#10b981"></span>{{ r.avg_asian_pct | round(1) }}% Asian</span>{% endif %}
+          {% if other_pct > 0          %}<span class="race-legend-item"><span class="race-dot" style="background:#e2e8f0"></span>{{ other_pct | round(1) }}% Other</span>{% endif %}
         </div>
       </div>
       {% endfor %}
@@ -281,7 +277,7 @@ NUMBERS_TMPL = """\
           {% for q in quartile_data[r.owner_type] %}
           {% set pct = (q.parcel_count / type_total * 100) | round(1) if type_total > 0 else 0 %}
           <div class="bucket-row">
-            <span class="bucket-label">Q{{ q.income_quartile }} <span style="opacity:0.6;font-size:0.7em">{% if q.income_quartile == 4 %}&gt;${{ (q.income_quartile_min / 1000) | round(0) | int }}k{% else %}&lt;${{ (q.income_quartile_max / 1000) | round(0) | int }}k{% endif %}</span></span>
+            <span class="bucket-label">Q{{ q.income_quartile }} <span style="opacity:0.6;font-size:0.7em">{% if q.income_quartile == 4 %}&gt; ${{ (q.income_quartile_min / 1000) | round(0) | int }}k{% else %}&lt; ${{ (q.income_quartile_max / 1000) | round(0) | int }}k{% endif %}</span></span>
             <div class="bucket-bar-bg">
               <div class="bucket-bar" style="width:{{ pct }}%"></div>
             </div>
