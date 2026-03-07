@@ -126,6 +126,13 @@ NUMBERS_TMPL = """\
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.classless.min.css">
   <link rel="stylesheet" href="/css/style.css">
   <link rel="stylesheet" href="/css/content.css">
+  <style>
+    .leaderboard-table td.cell-high { background-color: rgba(99, 102, 241, 0.2); }
+    .leaderboard-table td.cell-med  { background-color: rgba(99, 102, 241, 0.1); }
+    .leaderboard-table td.cell-low  { background-color: rgba(99, 102, 241, 0.03); }
+    /* Ensure number alignment and padding stay consistent */
+    .leaderboard-table td.num { text-align: right; padding-right: 1.5rem; }
+  </style>
 </head>
 <body class="content-page">
   <header>
@@ -167,51 +174,63 @@ NUMBERS_TMPL = """\
         <tr>
           <td>Parcel count</td>
           {% for r in by_type %}
-          <td class="num">{{ r.parcel_count | format_int }}
+          <td class="num {{ r.parcel_count_class }}">{{ r.parcel_count | format_int }}
             <span style="opacity:0.55;font-size:0.8em">({{ (r.parcel_count / totals.total_parcels * 100) | round(1) }}%)</span>
           </td>
           {% endfor %}
         </tr>
         <tr>
-          <td>Avg neighborhood median income</td>
+          <td>Avg portfolio size</td>
           {% for r in by_type %}
-          <td class="num">${{ r.avg_neighborhood_income | int | format_int }}</td>
+          <td class="num {{ r.avg_portfolio_size_class }}">{{ r.avg_portfolio_size | round(1) }} <span style="opacity:0.55;font-size:0.8em">parcels</span></td>
+          {% endfor %}
+        </tr>
+        <tr>
+          <td>% Out-of-State (Matched)</td>
+          {% for r in by_type %}
+          <td class="num {{ r.pct_out_of_state_class }}">{{ r.pct_out_of_state | round(1) }}%</td>
           {% endfor %}
         </tr>
         <tr>
           <td>Median neighborhood income</td>
           {% for r in by_type %}
-          <td class="num">${{ r.median_neighborhood_income | int | format_int }}</td>
+          <td class="num {{ r.median_neighborhood_income_class }}">${{ r.median_neighborhood_income | int | format_int }}</td>
           {% endfor %}
         </tr>
         <tr>
-          <td>Avg neighborhood % Black</td>
+          <td>Avg neighborhood median income</td>
           {% for r in by_type %}
-          <td class="num">{{ r.avg_black_pct | round(1) }}%</td>
-          {% endfor %}
-        </tr>
-        <tr>
-          <td>Avg poverty rate</td>
-          {% for r in by_type %}
-          <td class="num">{{ r.avg_poverty_pct | round(1) }}%</td>
-          {% endfor %}
-        </tr>
-        <tr>
-          <td>Avg renter %</td>
-          {% for r in by_type %}
-          <td class="num">{{ r.avg_renter_pct | round(1) }}%</td>
+          <td class="num {{ r.avg_neighborhood_income_class }}">${{ r.avg_neighborhood_income | int | format_int }}</td>
           {% endfor %}
         </tr>
         <tr>
           <td>Avg neighborhood median home value</td>
           {% for r in by_type %}
-          <td class="num">${{ r.avg_neighborhood_home_value | int | format_int }}</td>
+          <td class="num {{ r.avg_neighborhood_home_value_class }}">${{ r.avg_neighborhood_home_value | int | format_int }}</td>
+          {% endfor %}
+        </tr>
+        <tr>
+          <td>Avg % Bachelor's Degree</td>
+          {% for r in by_type %}
+          <td class="num {{ r.avg_bachelors_pct_class }}">{{ r.avg_bachelors_pct | round(1) }}%</td>
+          {% endfor %}
+        </tr>
+        <tr>
+          <td>Avg renter %</td>
+          {% for r in by_type %}
+          <td class="num {{ r.avg_renter_pct_class }}">{{ r.avg_renter_pct | round(1) }}%</td>
+          {% endfor %}
+        </tr>
+        <tr>
+          <td>Avg poverty rate</td>
+          {% for r in by_type %}
+          <td class="num {{ r.avg_poverty_pct_class }}">{{ r.avg_poverty_pct | round(1) }}%</td>
           {% endfor %}
         </tr>
         <tr>
           <td>Avg vacancy rate</td>
           {% for r in by_type %}
-          <td class="num">{{ r.avg_vacant_pct | round(1) }}%</td>
+          <td class="num {{ r.avg_vacant_pct_class }}">{{ r.avg_vacant_pct | round(1) }}%</td>
           {% endfor %}
         </tr>
       </tbody>
@@ -272,6 +291,33 @@ NUMBERS_TMPL = """\
         </div>
       </div>
       {% endfor %}
+    </div>
+
+    <h2>Highest Corporate Concentration</h2>
+    <p>Neighborhoods where corporate entities own the highest percentage of all residential parcels.</p>
+    <div class="table-scroll">
+    <table class="leaderboard-table">
+      <thead>
+        <tr>
+          <th>Neighborhood</th>
+          <th class="num">Total Parcels</th>
+          <th class="num">Corporate Parcels</th>
+          <th class="num">Corporate %</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for n in top_neighborhoods %}
+        <tr>
+          <td><a href="/l/atlanta/neighborhood/{{ n.slug }}/">{{ n.name }}</a></td>
+          <td class="num">{{ n.total_parcels | format_int }}</td>
+          <td class="num">{{ n.corporate_parcels | format_int }}</td>
+          <td class="num">{{ n.pct_corporate }}%</td>
+          <td class="map-link-cell"><a href="/?geo=neighborhood&area={{ n.name_enc }}" class="map-link-small">map →</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
     </div>
 
     <h2>Notes</h2>
@@ -1186,6 +1232,93 @@ def fetch_ownership_demographics(conn):
         cur.execute("SELECT * FROM mv_ownership_by_income_quartile ORDER BY owner_type, income_quartile")
         quartile_rows = cur.fetchall()
 
+        # New query for intensity (portfolio size)
+        cur.execute("""
+            SELECT
+                CASE
+                    WHEN institutional_parcel_count > 0 THEN 'institutional'
+                    WHEN corporate_parcel_count > 0 THEN 'corporate'
+                    ELSE 'individual'
+                END AS owner_type,
+                round(avg(parcel_count), 1) AS avg_portfolio_size
+            FROM mv_cluster_stats
+            GROUP BY 1
+        """)
+        intensity_rows = {r['owner_type']: r['avg_portfolio_size'] for r in cur.fetchall()}
+        
+        # New query for out-of-state %
+        cur.execute("""
+            WITH cluster_counts AS (
+                SELECT
+                    CASE
+                        WHEN institutional_parcel_count > 0 THEN 'institutional'
+                        WHEN corporate_parcel_count > 0 THEN 'corporate'
+                        ELSE 'individual'
+                    END AS owner_type,
+                    atlanta_parcel_count,
+                    primary_foreign_state
+                FROM mv_cluster_stats
+                WHERE atlanta_parcel_count > 0
+            )
+            SELECT
+                owner_type,
+                round(100.0 * sum(CASE WHEN primary_foreign_state IS NOT NULL AND primary_foreign_state NOT IN ('Georgia', 'GA') THEN atlanta_parcel_count ELSE 0 END) / sum(atlanta_parcel_count), 1) AS pct_out_of_state
+            FROM cluster_counts
+            GROUP BY 1
+        """)
+        oos_rows = {r['owner_type']: r['pct_out_of_state'] for r in cur.fetchall()}
+
+        # New query for top corporate neighborhoods (min 50 parcels)
+        cur.execute("""
+            WITH totals AS (
+                SELECT city_neighborhood, count(*) AS total_parcels
+                FROM parcels_unified WHERE city_neighborhood IS NOT NULL GROUP BY 1
+                HAVING count(*) >= 50
+            ),
+            corporate AS (
+                SELECT city_neighborhood, count(*) AS corporate_parcels
+                FROM parcels_unified WHERE city_neighborhood IS NOT NULL AND is_corporate = TRUE GROUP BY 1
+            )
+            SELECT
+                t.city_neighborhood AS name, 
+                t.total_parcels, 
+                c.corporate_parcels,
+                round(100.0 * c.corporate_parcels / t.total_parcels, 1) AS pct_corporate
+            FROM totals t JOIN corporate c ON t.city_neighborhood = c.city_neighborhood
+            ORDER BY pct_corporate DESC LIMIT 5
+        """)
+        top_neighborhoods = [dict(r) for r in cur.fetchall()]
+        for n in top_neighborhoods:
+            n['slug'] = slugify(n['name'])
+            n['name_enc'] = quote_plus(n['name'])
+
+    # Merge intensity and OOS into by_type
+    for r in by_type:
+        r['avg_portfolio_size'] = intensity_rows.get(r['owner_type'], 0)
+        r['pct_out_of_state'] = oos_rows.get(r['owner_type'], 0)
+
+    # Add ranking classes for each metric
+    metrics = [
+        "parcel_count", "avg_portfolio_size", "pct_out_of_state",
+        "median_neighborhood_income", "avg_neighborhood_income", "avg_neighborhood_home_value", 
+        "avg_bachelors_pct", "avg_renter_pct", "avg_poverty_pct", "avg_vacant_pct"
+    ]
+    for m in metrics:
+        vals = [r.get(m, 0) for r in by_type]
+        sorted_vals = sorted(list(set(vals)))  # unique values sorted ascending
+        for r in by_type:
+            val = r.get(m, 0)
+            if not sorted_vals:
+                r[f"{m}_class"] = "cell-low"
+            elif len(sorted_vals) == 1:
+                r[f"{m}_class"] = "cell-med"
+            elif val == sorted_vals[-1]:
+                r[f"{m}_class"] = "cell-high"
+            elif val == sorted_vals[0]:
+                r[f"{m}_class"] = "cell-low"
+            else:
+                r[f"{m}_class"] = "cell-med"
+
     # Organise quartile rows by owner_type
     quartile_data = {}
     for row in quartile_rows:
@@ -1210,10 +1343,10 @@ def fetch_ownership_demographics(conn):
         "corp_q12_pct":   round(corp_q12  / corp_total  * 100, 1) if corp_total  else 0,
         "indiv_q12_pct":  round(indiv_q12 / indiv_total * 100, 1) if indiv_total else 0,
     }
-    return by_type, quartile_data, totals
+    return by_type, quartile_data, totals, top_neighborhoods
 
 
-def render_numbers_page(by_type, quartile_data, totals, last_updated_str):
+def render_numbers_page(by_type, quartile_data, totals, top_neighborhoods, last_updated_str):
     env = _make_env()
     env.filters["format_int"] = lambda v: f"{int(v):,}" if v is not None else "0"
     tmpl = env.from_string(NUMBERS_TMPL)
@@ -1221,6 +1354,7 @@ def render_numbers_page(by_type, quartile_data, totals, last_updated_str):
         by_type=by_type,
         quartile_data=quartile_data,
         totals=totals,
+        top_neighborhoods=top_neighborhoods,
         last_updated_str=last_updated_str,
     )
 
@@ -1229,8 +1363,8 @@ def build_numbers_page(conn, output_dir, last_updated_str=None):
     if last_updated_str is None:
         last_updated_str = fetch_last_update(conn)
     print("Building /numbers/ page...", end=" ", flush=True)
-    by_type, quartile_data, totals = fetch_ownership_demographics(conn)
-    html = render_numbers_page(by_type, quartile_data, totals, last_updated_str)
+    by_type, quartile_data, totals, top_neighborhoods = fetch_ownership_demographics(conn)
+    html = render_numbers_page(by_type, quartile_data, totals, top_neighborhoods, last_updated_str)
     out = Path(output_dir) / "numbers" / "index.html"
     write_if_changed(out, html)
     print(f"done → {out}")
