@@ -145,8 +145,11 @@ NUMBERS_TMPL = """\
       the average corporate-owned parcel sits in a neighborhood with a median household income of
       <strong>${{ totals.corp_income | int | format_int }}</strong> — versus
       <strong>${{ totals.indiv_income | int | format_int }}</strong> for individually-owned parcels.
-      Corporate portfolios average <strong>{{ totals.corp_black | round(1) }}%</strong> Black-majority
-      neighborhoods compared to <strong>{{ totals.indiv_black | round(1) }}%</strong> for individual owners.
+      Corporate portfolios average <strong>{{ totals.corp_black | round(1) }}%</strong> Black neighborhoods
+      compared to <strong>{{ totals.indiv_black | round(1) }}%</strong> for individual owners.
+      By income quartile, <strong>{{ totals.corp_q12_pct }}%</strong> of corporate parcels fall in the
+      bottom half of Atlanta neighborhoods — versus <strong>{{ totals.indiv_q12_pct }}%</strong> for
+      individually-owned parcels.
     </p>
 
     <h2>Ownership Type Summary</h2>
@@ -173,6 +176,12 @@ NUMBERS_TMPL = """\
           <td>Avg neighborhood median income</td>
           {% for r in by_type %}
           <td class="num">${{ r.avg_neighborhood_income | int | format_int }}</td>
+          {% endfor %}
+        </tr>
+        <tr>
+          <td>Median neighborhood income</td>
+          {% for r in by_type %}
+          <td class="num">${{ r.median_neighborhood_income | int | format_int }}</td>
           {% endfor %}
         </tr>
         <tr>
@@ -253,7 +262,7 @@ NUMBERS_TMPL = """\
           {% for q in quartile_data[r.owner_type] %}
           {% set pct = (q.parcel_count / type_total * 100) | round(1) if type_total > 0 else 0 %}
           <div class="bucket-row">
-            <span class="bucket-label">Q{{ q.income_quartile }} <span style="opacity:0.6;font-size:0.7em">&lt;${{ (q.income_quartile_max / 1000) | round(0) | int }}k</span></span>
+            <span class="bucket-label">Q{{ q.income_quartile }} <span style="opacity:0.6;font-size:0.7em">{% if q.income_quartile == 4 %}&gt;${{ (q.income_quartile_min / 1000) | round(0) | int }}k{% else %}&lt;${{ (q.income_quartile_max / 1000) | round(0) | int }}k{% endif %}</span></span>
             <div class="bucket-bar-bg">
               <div class="bucket-bar" style="width:{{ pct }}%"></div>
             </div>
@@ -270,7 +279,7 @@ NUMBERS_TMPL = """\
       <li><strong>Coverage:</strong> Atlanta city parcels only (those with a <code>city_neighborhood</code> assigned), approximately {{ totals.total_parcels | int | format_int }} of ~616k total county parcels.</li>
       <li><strong>Neighborhood demographics:</strong> 2024 vintage (2020 Census base + ACS estimates), covering 248 neighborhoods.</li>
       <li><strong>"Other" race</strong> is the remainder after Black + White + Hispanic + Asian and may include multiracial and Native American households.</li>
-      <li><strong>Q4 corporate poverty anomaly:</strong> The Q4 (highest-income) corporate figure shows an elevated poverty rate (~11%) compared to individual owners (~0.5%). This likely reflects a small number of commercial parcels in otherwise wealthy neighborhoods with atypically high census-tract poverty rates, rather than a genuine pattern.</li>
+      <li><strong>Q4 corporate poverty anomaly:</strong> The Q4 (highest-income) corporate figure shows an elevated poverty rate (~11%) compared to individual owners (~0.5%). This likely reflects LIHTC (Low Income Housing Tax Credit) and other subsidized apartment portfolios operating in otherwise high-value neighborhoods — properties serving low-income tenants whose poverty rates pull up the corporate average despite the high neighborhood median income.</li>
       <li>See <a href="/methodology/">Methodology</a> for full data provenance and known limitations.</li>
     </ul>
   </main>
@@ -1171,7 +1180,8 @@ def fetch_ownership_demographics(conn):
     """Fetch data from the two ownership demographics MVs."""
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         cur.execute("SELECT * FROM mv_ownership_demographics ORDER BY parcel_count DESC")
-        by_type = [dict(r) for r in cur.fetchall()]
+        _type_order = {"corporate": 0, "institutional": 1, "individual": 2}
+        by_type = sorted([dict(r) for r in cur.fetchall()], key=lambda r: _type_order.get(r["owner_type"], 99))
 
         cur.execute("SELECT * FROM mv_ownership_by_income_quartile ORDER BY owner_type, income_quartile")
         quartile_rows = cur.fetchall()
@@ -1186,12 +1196,19 @@ def fetch_ownership_demographics(conn):
     corp  = next((r for r in by_type if r["owner_type"] == "corporate"), {})
     indiv = next((r for r in by_type if r["owner_type"] == "individual"), {})
     total_parcels = sum(r["parcel_count"] for r in by_type)
+    # Q1+Q2 concentration percentages
+    corp_q12    = sum(r["parcel_count"] for r in quartile_data.get("corporate",  []) if r["income_quartile"] in (1, 2))
+    indiv_q12   = sum(r["parcel_count"] for r in quartile_data.get("individual", []) if r["income_quartile"] in (1, 2))
+    corp_total  = sum(r["parcel_count"] for r in quartile_data.get("corporate",  []))
+    indiv_total = sum(r["parcel_count"] for r in quartile_data.get("individual", []))
     totals = {
         "total_parcels":  total_parcels,
         "corp_income":    corp.get("avg_neighborhood_income", 0),
         "indiv_income":   indiv.get("avg_neighborhood_income", 0),
         "corp_black":     corp.get("avg_black_pct", 0),
         "indiv_black":    indiv.get("avg_black_pct", 0),
+        "corp_q12_pct":   round(corp_q12  / corp_total  * 100, 1) if corp_total  else 0,
+        "indiv_q12_pct":  round(indiv_q12 / indiv_total * 100, 1) if indiv_total else 0,
     }
     return by_type, quartile_data, totals
 
