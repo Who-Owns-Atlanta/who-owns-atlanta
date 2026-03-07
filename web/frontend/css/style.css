@@ -732,7 +732,7 @@ footer nav a:hover { color: var(--pico-primary); }
     right: 0;
     width: 100%;
     height: auto;
-    max-height: 55vh;
+    max-height: 33vh;
     border-left: none;
     border-top: 1px solid #e2e8f0;
     border-radius: 12px 12px 0 0;
