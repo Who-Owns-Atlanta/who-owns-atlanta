@@ -68,6 +68,7 @@ def _make_env():
     """Create a Jinja2 Environment with our custom filters."""
     env = Environment(loader=BaseLoader())
     env.filters['urlencode'] = lambda s: quote_plus(str(s)) if s else ''
+    env.filters['format_int'] = lambda v: f"{int(v):,}" if v is not None else "0"
     return env
 
 # ---------------------------------------------------------------------------
@@ -1043,6 +1044,52 @@ GEO_INDEX_TMPL = _BASE_HEAD + """\
 
 GEO_LEADERBOARD_TMPL = _BASE_HEAD + """\
     <p class="breadcrumb"><a href="{{ index_url }}">← {{ index_label }}</a></p>
+    
+    {% if area_stats and geo_key == 'neighborhood' %}
+    <div class="demo-card" style="margin-bottom: 1.5rem; padding: 0.75rem 1rem;">
+      <div style="display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 1rem; margin-bottom: 0.5rem;">
+        <h2 style="margin: 0; font-size: 1rem; color: var(--pico-muted-color); text-transform: uppercase; letter-spacing: 0.05em;">{{ area_name | e }} Stats</h2>
+        <span style="font-size: 0.8rem; color: var(--pico-muted-color);">{% if area_stats.total_population %}Pop. {{ area_stats.total_population | format_int }}{% else %}Population N/A{% endif %}</span>
+      </div>
+      
+      <div class="vuln-stats" style="margin-top: 0; padding-top: 0; border-top: none; gap: 1.5rem; flex-wrap: wrap;">
+        <div class="vuln-stat">
+          <strong>${{ (area_stats.median_income or 0) | int | format_int }}</strong>
+          <span style="font-size: 0.7rem; text-transform: uppercase; color: var(--pico-muted-color);">Median Income</span>
+        </div>
+        <div class="vuln-stat">
+          <strong>{{ (area_stats.renter_pct or 0) | round(1) }}%</strong>
+          <span style="font-size: 0.7rem; text-transform: uppercase; color: var(--pico-muted-color);">Renters</span>
+        </div>
+        <div class="vuln-stat">
+          <strong>${{ (area_stats.median_home_value or 0) | int | format_int }}</strong>
+          <span style="font-size: 0.7rem; text-transform: uppercase; color: var(--pico-muted-color);">Home Value</span>
+        </div>
+        <div class="vuln-stat">
+          <strong>{{ (area_stats.vacant_pct or 0) | round(1) }}%</strong>
+          <span style="font-size: 0.7rem; text-transform: uppercase; color: var(--pico-muted-color);">Vacancy</span>
+        </div>
+      </div>
+
+      <div style="margin-top: 0.75rem;">
+        <div class="race-bar" style="height: 6px; margin: 0.25rem 0 0.5rem;">
+          {% if (area_stats.black_pct or 0) > 0    %}<div class="race-segment" style="width:{{ (area_stats.black_pct or 0) | round(1) }}%;    background:#6366f1;" title="Black {{ (area_stats.black_pct or 0) | round(1) }}%"></div>{% endif %}
+          {% if (area_stats.white_pct or 0) > 0    %}<div class="race-segment" style="width:{{ (area_stats.white_pct or 0) | round(1) }}%;    background:#94a3b8;" title="White {{ (area_stats.white_pct or 0) | round(1) }}%"></div>{% endif %}
+          {% if (area_stats.hispanic_pct or 0) > 0 %}<div class="race-segment" style="width:{{ (area_stats.hispanic_pct or 0) | round(1) }}%; background:#f59e0b;" title="Hispanic {{ (area_stats.hispanic_pct or 0) | round(1) }}%"></div>{% endif %}
+          {% if (area_stats.asian_pct or 0) > 0    %}<div class="race-segment" style="width:{{ (area_stats.asian_pct or 0) | round(1) }}%;    background:#10b981;" title="Asian {{ (area_stats.asian_pct or 0) | round(1) }}%"></div>{% endif %}
+          {% if (area_stats.other_pct or 0) > 0    %}<div class="race-segment" style="width:{{ (area_stats.other_pct or 0) | round(1) }}%;    background:#e2e8f0;" title="Other {{ (area_stats.other_pct or 0) | round(1) }}%"></div>{% endif %}
+        </div>
+        <div class="race-legend" style="font-size: 0.65rem; gap: 0.4rem 0.75rem;">
+          {% if (area_stats.black_pct or 0) > 0    %}<span class="race-legend-item"><span class="race-dot" style="background:#6366f1"></span>{{ (area_stats.black_pct or 0) | round(1) }}% Black</span>{% endif %}
+          {% if (area_stats.white_pct or 0) > 0    %}<span class="race-legend-item"><span class="race-dot" style="background:#94a3b8"></span>{{ (area_stats.white_pct or 0) | round(1) }}% White</span>{% endif %}
+          {% if (area_stats.hispanic_pct or 0) > 0 %}<span class="race-legend-item"><span class="race-dot" style="background:#f59e0b"></span>{{ (area_stats.hispanic_pct or 0) | round(1) }}% Hisp</span>{% endif %}
+          {% if (area_stats.asian_pct or 0) > 0    %}<span class="race-legend-item"><span class="race-dot" style="background:#10b981"></span>{{ (area_stats.asian_pct or 0) | round(1) }}% Asian</span>{% endif %}
+          {% if (area_stats.other_pct or 0) > 0    %}<span class="race-legend-item"><span class="race-dot" style="background:#e2e8f0"></span>{{ (area_stats.other_pct or 0) | round(1) }}% Other</span>{% endif %}
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
     <div class="geo-title-row">
       <div class="geo-title-name">
         <h1>{{ area_name | e }}</h1>
@@ -1344,7 +1391,6 @@ def fetch_ownership_demographics(conn):
 
 def render_numbers_page(by_type, quartile_data, totals, top_neighborhoods, last_updated_str):
     env = _make_env()
-    env.filters["format_int"] = lambda v: f"{int(v):,}" if v is not None else "0"
     tmpl = env.from_string(NUMBERS_TMPL)
     return tmpl.render(
         by_type=by_type,
@@ -1887,13 +1933,14 @@ def fetch_geo_data(conn, col_name):
     Returns:
         by_area: {area: [rows sorted by local_parcel_count desc]}
         area_demographics: {area: income_bucket_counts}
+        area_stats: {area: detailed_stats_dict}
     """
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         # 1. Fetch Area-wide demographics (household-weighted census profile)
         # We get the mapping of neighborhoods to areas from parcels_unified
         cur.execute(f"""
             SELECT p.area,
-                   CASE 
+                   CASE
                        WHEN d.median_household_income < 40000 THEN 'Low'
                        WHEN d.median_household_income < 57000 THEN 'Low-Mid'
                        WHEN d.median_household_income < 84000 THEN 'Mid'
@@ -1902,8 +1949,8 @@ def fetch_geo_data(conn, col_name):
                    END as bucket,
                    SUM(d.total_households) as count
             FROM (
-                SELECT DISTINCT {col_name} AS area, city_neighborhood 
-                FROM parcels_unified 
+                SELECT DISTINCT {col_name} AS area, city_neighborhood
+                FROM parcels_unified
                 WHERE {col_name} IS NOT NULL
             ) p
             JOIN gis.neighborhood_demographics d ON p.city_neighborhood = d.neighborhood_name
@@ -1912,6 +1959,29 @@ def fetch_geo_data(conn, col_name):
         area_demographics = defaultdict(dict)
         for row in cur.fetchall():
             area_demographics[row["area"]][row["bucket"]] = row["count"]
+
+        # 1b. Fetch detailed summary stats (household-weighted)
+        cur.execute(f"""
+            SELECT p.area,
+                   round((SUM(d.median_household_income::bigint * d.total_households) / NULLIF(SUM(d.total_households), 0))::numeric) as median_income,
+                   round((SUM(d.median_home_value::bigint * d.total_housing_units) / NULLIF(SUM(d.total_housing_units), 0))::numeric) as median_home_value,
+                   round((100.0 * SUM(d.renter_occupied_count) / NULLIF(SUM(d.total_households), 0))::numeric, 1) as renter_pct,
+                   round((100.0 * SUM(d.white_pct * d.total_population / 100.0) / NULLIF(SUM(d.total_population), 0))::numeric, 1) as white_pct,
+                   round((100.0 * SUM(d.black_pct * d.total_population / 100.0) / NULLIF(SUM(d.total_population), 0))::numeric, 1) as black_pct,
+                   round((100.0 * SUM(d.hispanic_pct * d.total_population / 100.0) / NULLIF(SUM(d.total_population), 0))::numeric, 1) as hispanic_pct,
+                   round((100.0 * SUM(d.asian_pct * d.total_population / 100.0) / NULLIF(SUM(d.total_population), 0))::numeric, 1) as asian_pct,
+                   round((100.0 * SUM(GREATEST(0, 100 - d.white_pct - d.black_pct - d.hispanic_pct - d.asian_pct) * d.total_population / 100.0) / NULLIF(SUM(d.total_population), 0))::numeric, 1) as other_pct,
+                   round((100.0 * SUM(d.vacant_units_count) / NULLIF(SUM(d.total_housing_units), 0))::numeric, 1) as vacant_pct,
+                   SUM(d.total_population) as total_population
+            FROM (
+                SELECT DISTINCT {col_name} AS area, city_neighborhood
+                FROM parcels_unified
+                WHERE {col_name} IS NOT NULL
+            ) p
+            JOIN gis.neighborhood_demographics d ON p.city_neighborhood = d.neighborhood_name
+            GROUP BY 1
+        """)
+        area_stats = {row["area"]: dict(row) for row in cur.fetchall()}
 
         # 2. Fetch Top Owners in area
         cur.execute(f"""
@@ -1952,7 +2022,7 @@ def fetch_geo_data(conn, col_name):
                 "connection_count": 0,
                 "income_spark": None  # Removed per user request for geo leaderboards
             })
-        return dict(by_area), dict(area_demographics)
+        return dict(by_area), dict(area_demographics), area_stats
 
 
 def fetch_county_geo_data(conn):
@@ -1983,6 +2053,28 @@ def fetch_county_geo_data(conn):
         area_demographics = defaultdict(dict)
         for row in cur.fetchall():
             area_demographics[row["county"]][row["bucket"]] = row["count"]
+
+        # 1b. Fetch detailed summary stats (household-weighted)
+        cur.execute("""
+            SELECT p.county AS area,
+                   round((SUM(d.median_household_income::bigint * d.total_households) / NULLIF(SUM(d.total_households), 0))::numeric) as median_income,
+                   round((SUM(d.median_home_value::bigint * d.total_housing_units) / NULLIF(SUM(d.total_housing_units), 0))::numeric) as median_home_value,
+                   round((100.0 * SUM(d.renter_occupied_count) / NULLIF(SUM(d.total_households), 0))::numeric, 1) as renter_pct,
+                   round((100.0 * SUM(d.white_pct * d.total_population / 100.0) / NULLIF(SUM(d.total_population), 0))::numeric, 1) as white_pct,
+                   round((100.0 * SUM(d.black_pct * d.total_population / 100.0) / NULLIF(SUM(d.total_population), 0))::numeric, 1) as black_pct,
+                   round((100.0 * SUM(d.hispanic_pct * d.total_population / 100.0) / NULLIF(SUM(d.total_population), 0))::numeric, 1) as hispanic_pct,
+                   round((100.0 * SUM(d.asian_pct * d.total_population / 100.0) / NULLIF(SUM(d.total_population), 0))::numeric, 1) as asian_pct,
+                   round((100.0 * SUM(GREATEST(0, 100 - d.white_pct - d.black_pct - d.hispanic_pct - d.asian_pct) * d.total_population / 100.0) / NULLIF(SUM(d.total_population), 0))::numeric, 1) as other_pct,
+                   round((100.0 * SUM(d.vacant_units_count) / NULLIF(SUM(d.total_housing_units), 0))::numeric, 1) as vacant_pct,
+                   SUM(d.total_population) as total_population
+            FROM (
+                SELECT DISTINCT county, city_neighborhood
+                FROM parcels_unified
+            ) p
+            JOIN gis.neighborhood_demographics d ON p.city_neighborhood = d.neighborhood_name
+            GROUP BY 1
+        """)
+        area_stats = {row["area"]: dict(row) for row in cur.fetchall()}
 
         # 2. Fetch Top Owners per county
         cur.execute("""
@@ -2022,7 +2114,7 @@ def fetch_county_geo_data(conn):
                 "connection_count": 0,
                 "income_spark": None
             })
-        return dict(by_county), dict(area_demographics)
+        return dict(by_county), dict(area_demographics), area_stats
 
 
 def build_cluster_related(linkable_agents, agent_clusters, address_groups=None):
@@ -2366,7 +2458,7 @@ def build_address_pages(address_groups, output_dir, last_updated_str=None):
 def _build_geo_section(env, area_rows, output_dir, url_base, geo_type_label, area_label,
                        index_title, index_lead, area_display_fn=None, geo_key=None,
                        cluster_connection_count=None, last_updated_str=None,
-                       area_demographics=None):
+                       area_buckets=None, area_stats=None):
     """Build individual area pages + index page for one geo dimension.
     area_display_fn: optional callable(raw_area) -> display string (e.g. 'District 5')
     Returns number of area pages written.
@@ -2385,10 +2477,10 @@ def _build_geo_section(env, area_rows, output_dir, url_base, geo_type_label, are
         area_raw_enc = quote_plus(str(area)) if geo_key else ""
         area_map_url = f"/?geo={geo_key}&area={area_raw_enc}" if geo_key else ""
 
-        # Aggregate area sparkline from provided area_demographics
+        # Aggregate area sparkline from provided area_buckets
         area_spark = None
-        if area_demographics and area in area_demographics:
-            area_spark = _income_spark(area_demographics[area])
+        if area_buckets and area in area_buckets:
+            area_spark = _income_spark(area_buckets[area])
 
         # Filter out single-parcel owners (homeowners, not portfolios)
         filtered = [r for r in rows if r["total_parcel_count"] > 1]
@@ -2402,6 +2494,7 @@ def _build_geo_section(env, area_rows, output_dir, url_base, geo_type_label, are
             meta_description=f"Top property owners in {display}, ranked by local parcel count.",
             area_name=display,
             area_spark=area_spark,
+            area_stats=area_stats.get(area) if area_stats else None,
             geo_type_label=geo_type_label,
             index_url=index_url,
             index_label=index_title,
@@ -2455,7 +2548,7 @@ def build_geo_leaderboard_pages(conn, output_dir, cluster_connection_count=None,
 
     # Atlanta neighborhoods
     print("  neighborhood...", end=" ", flush=True)
-    nbhd_data, nbhd_demographics = fetch_geo_data(conn, "city_neighborhood")
+    nbhd_data, nbhd_buckets, nbhd_stats = fetch_geo_data(conn, "city_neighborhood")
     n = _build_geo_section(
         env, nbhd_data, base / "atlanta" / "neighborhood",
         url_base="l/atlanta/neighborhood",
@@ -2466,13 +2559,14 @@ def build_geo_leaderboard_pages(conn, output_dir, cluster_connection_count=None,
         geo_key="neighborhood",
         cluster_connection_count=cluster_connection_count,
         last_updated_str=last_updated_str,
-        area_demographics=nbhd_demographics
+        area_buckets=nbhd_buckets,
+        area_stats=nbhd_stats
     )
     print(f"{n} pages")
 
     # Atlanta council districts
     print("  council...", end=" ", flush=True)
-    council_data, council_demographics = fetch_geo_data(conn, "city_council")
+    council_data, council_buckets, council_stats = fetch_geo_data(conn, "city_council")
     n = _build_geo_section(
         env, council_data, base / "atlanta" / "council",
         url_base="l/atlanta/council",
@@ -2484,13 +2578,14 @@ def build_geo_leaderboard_pages(conn, output_dir, cluster_connection_count=None,
         geo_key="council",
         cluster_connection_count=cluster_connection_count,
         last_updated_str=last_updated_str,
-        area_demographics=council_demographics
+        area_buckets=council_buckets,
+        area_stats=council_stats
     )
     print(f"{n} pages")
 
     # Atlanta NPUs
     print("  npu...", end=" ", flush=True)
-    npu_data, npu_demographics = fetch_geo_data(conn, "city_npu")
+    npu_data, npu_buckets, npu_stats = fetch_geo_data(conn, "city_npu")
     n = _build_geo_section(
         env, npu_data, base / "atlanta" / "npu",
         url_base="l/atlanta/npu",
@@ -2502,13 +2597,14 @@ def build_geo_leaderboard_pages(conn, output_dir, cluster_connection_count=None,
         geo_key="npu",
         cluster_connection_count=cluster_connection_count,
         last_updated_str=last_updated_str,
-        area_demographics=npu_demographics
+        area_buckets=npu_buckets,
+        area_stats=npu_stats
     )
     print(f"{n} pages")
 
     # County leaderboards
     print("  county...", end=" ", flush=True)
-    county_data, county_demographics = fetch_county_geo_data(conn)
+    county_data, county_buckets, county_stats = fetch_county_geo_data(conn)
     n = _build_geo_section(
         env, county_data, base / "county",
         url_base="l/county",
@@ -2519,7 +2615,8 @@ def build_geo_leaderboard_pages(conn, output_dir, cluster_connection_count=None,
         area_display_fn=lambda v: v.title(),
         cluster_connection_count=cluster_connection_count,
         last_updated_str=last_updated_str,
-        area_demographics=county_demographics
+        area_buckets=county_buckets,
+        area_stats=county_stats
     )
     print(f"{n} pages")
 
