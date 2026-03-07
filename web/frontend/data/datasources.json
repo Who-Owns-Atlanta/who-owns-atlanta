@@ -16,23 +16,23 @@
   "atlanta_tax_parcel": {
     "name": "City of Atlanta GIS — Tax_Parcel",
     "description": "Tax Parcels",
-    "admin_date": "2025-02-05",
-    "last_loaded": "2025-02-13",
+    "admin_date": "2025-07-14",
+    "last_loaded": "2026-02-13",
     "url": "https://dpcd-coaplangis.opendata.arcgis.com/datasets/ee82525ee33b49778055622c3a3cf534_0/explore"
   },
   "atlanta_address_point": {
     "name": "City of Atlanta GIS — Address_Point",
     "description": "Addresses assigned to Tax Parcels",
-    "admin_date": "2025-02-05",
-    "last_loaded": "2025-02-13",
+    "admin_date": "2026-06-11",
+    "last_loaded": "2026-02-13",
     "url": "https://dpcd-coaplangis.opendata.arcgis.com/maps/0a5785b3466a46c7a256f7fa9d628afd/explore"
   },
   "atlanta_gis_neighborhoods": {
-    "name": "City of Atlanta GIS — Neighborhoods",
+    "name": "City of Atlanta GIS — Official Neighborhoods with Current Demographic Data 2024",
     "description": "Neighborhood boundaries (spatial join to parcels)",
     "admin_date": "2025-02-05",
     "last_loaded": "2026-02-28",
-    "url": "https://dcp-coaplangis.opendata.arcgis.com/"
+    "url": "https://dpcd-coaplangis.opendata.arcgis.com/datasets/7e91b75124fc47cbab7ffdb5de1cdd0a_0/explore"
   },
   "atlanta_gis_npu": {
     "name": "City of Atlanta GIS — NPU",
