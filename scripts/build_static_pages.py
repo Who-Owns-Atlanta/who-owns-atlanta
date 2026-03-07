@@ -316,7 +316,7 @@ LEADERBOARD_TMPL = _BASE_HEAD + """\
 
     <h2>Global — Top Landlords in Atlanta</h2>
     <p class="lead">Ranked by parcel count across Fulton and DeKalb counties.
-      <span class="muted">{{ total }} owners shown.</span></p>
+      <span class="muted">Top {{ total }} owners shown.</span></p>
 
     <div class="table-scroll">
     <table class="leaderboard-table">
@@ -2279,7 +2279,7 @@ def _build_geo_section(env, area_rows, output_dir, url_base, geo_type_label, are
             "map_url": area_map_url,
         })
 
-    index_rows.sort(key=lambda r: -r["total_parcels"])
+    index_rows.sort(key=lambda r: [int(c) if c.isdigit() else c.lower() for c in re.split(r'(\d+)', r["area"])])
     index_html = idx_tmpl.render(
         page_title=index_title,
         meta_description=index_lead,
