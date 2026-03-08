@@ -193,7 +193,7 @@ def build_icon(size_px=512, padding_frac=0.04):
 
 
 # ── Output ─────────────────────────────────────────────────────────────────
-OUT_DIR = os.path.join(BASE, "web/frontend/img")
+OUT_DIR = os.path.join(BASE, "web/frontend/icons")
 os.makedirs(OUT_DIR, exist_ok=True)
 
 print("Generating 512px icon…")
