@@ -8,7 +8,12 @@ app = FastAPI(title="Who Owns Atlanta API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://who-owns-atlanta.org"],
+    allow_origins=[
+        "https://who-owns-atlanta.org",
+        "http://who-owns-atlanta.local",
+        "http://who-owns-atlanta.lan",
+        "http://localhost",
+    ],
     allow_methods=["GET"],
     allow_headers=["*"],
 )
