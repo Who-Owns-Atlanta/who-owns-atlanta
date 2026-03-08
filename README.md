@@ -1,6 +1,6 @@
 # Who Owns Atlanta?
 
-A public tool for exploring property ownership across Fulton and DeKalb counties. Search any Atlanta address to find who owns it, whether the owner is a corporation or institution, and follow the ownership network across the city.
+A public tool for exploring property ownership in Atlanta and across Fulton and DeKalb counties. Search any address to find who owns it, whether the owner is a corporation or institution, and follow the ownership network across the city. Leaderboards and map filters also facilitate further exploration.
 
 **Live site:** [who-owns-atlanta.org](https://who-owns-atlanta.org) *(coming soon)*
 
@@ -30,18 +30,47 @@ O.C.G.A. § 50‑18‑71(a) (Right of access; timing; fees) – Georgia Open Rec
 https://law.justia.com/codes/georgia/title-50/chapter-18/article-4/section-50-18-71/
 
 
+## Process
+
+**Claude** and **Gemini** were used heavily - almost exclusively - for code, documentation, and (usually edited) baseline versions of various copy/prose on the website. The code and process is deterministic - there are no LLM calls in the pipeline. There are thoughts of comitting edited verions of the chat prompts/sessions used.
+
+
 ## Tech stack
 
-- **Claude** and **Gemini**: heavy LLM usage with semi-informed guidance
 - **Pipeline:** Python, PostGIS, `uv`
 - **Tiles:** tippecanoe, MapLibre GL JS
 - **API:** FastAPI
 - **Frontend:** vanilla JS, Pico CSS
 - **Infrastructure:** nginx, Docker, PostgreSQL/PostGIS
 
+## Dataset size (March 2026)
+- 615,955 tax parcels — 370,189 Fulton County + 245,766 DeKalb County
+- 523,555 unique owner entities collapsed into 467,581 ownership clusters
+- 37,563 clusters owning 2+ parcels; largest single cluster: 2,930 parcels
+- Matched 37,070 owner entities to Georgia Secretary of State corporate records (13,171 exact name matches + 23,899 fuzzy trigram matches against 49M SOS officer rows)
+
+## Pipeline / build machine
+- Data pipeline runs were on an AMD Ryzen 7 2700X (16 threads), 62GB RAM
+- SOS fuzzy match parallelized across all 16 cores via Python multiprocessing
+  - `30-60 minutes`
+- 135,594 static owner profile pages pre-generated (1.3GB), served directly by nginx — zero DB hits for owner pages
+  - `real	4m23.327s
+    user	33m51.073s
+    sys	0m7.622s
+    `
+- Vector tiles: 198MB, built with tippecanoe, hosted on Cloudflare R2
+  - `
+    real	2m1.777s
+    user	3m48.626s
+    sys	0m10.523s
+    `
+- Various other timings possibly to come...
+
+
+
 ## Running it yourself
 
-The [runbook](./planning/06_production_runbook.md) walks through (hopefully) the last major rebuild. Claude and Gemini were used extensively to build and document this project - fed the correct data, one likely can again.
+The [runbook](./planning/06_production_runbook.md) walks through (hopefully) the last major rebuild. Claude and Gemini were used extensively to build and document this project - fed the referenced data and careful prompts, they likely can build it from scratch.
 
 The general process is:
 
@@ -50,6 +79,11 @@ The general process is:
 3. Build ownership clusters
 4. Generate vector tiles (`scripts/build_tiles.sh`)
 5. Serve with the included nginx config and FastAPI app
+
+### Replicating in other areas
+- Any county with public tax parcel + GIS data can be ingested — pipeline is county-agnostic from step 2 onward, though a lot of fiddling will likely be required to map property coding to corporate/instituinal/condos and the like.
+- SOS match requires a state corporate registry dump (Georgia's is available for purchase from the SOS website).
+
 
 ## License
 
