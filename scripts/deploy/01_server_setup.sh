@@ -21,7 +21,6 @@ DEPLOY_HOME="/home/deploy/who-owns-atlanta"
 if ! id deploy &>/dev/null; then
     useradd -m -s /bin/bash deploy
 fi
-usermod -aG docker,sudo deploy
 mkdir -p /home/deploy/.ssh
 cp /root/.ssh/authorized_keys /home/deploy/.ssh/authorized_keys
 chown -R deploy:deploy /home/deploy/.ssh
@@ -33,7 +32,7 @@ chmod 600 /home/deploy/.ssh/authorized_keys
 # ---------------------------------------------------------------------------
 apt-get update -qq
 
-# Docker (official repo)
+# Docker (official repo) — must install before adding deploy to docker group
 if ! command -v docker &>/dev/null; then
     apt-get install -y ca-certificates curl gnupg lsb-release
     install -m 0755 -d /etc/apt/keyrings
@@ -46,6 +45,8 @@ if ! command -v docker &>/dev/null; then
     apt-get update -qq
     apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
 fi
+
+usermod -aG docker,sudo deploy
 
 apt-get install -y nginx python3-certbot-dns-cloudflare ufw
 
