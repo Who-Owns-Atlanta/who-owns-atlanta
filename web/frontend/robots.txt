@@ -1,0 +1,21 @@
+# robots.txt — Who Owns Atlanta (who-owns-atlanta.org)
+# https://www.robotstxt.org/robotstxt.html
+
+User-agent: *
+# The bulk of this site is ~1.3GB of generated property/ownership data pages.
+# Please only index the human-readable context pages.
+Allow: /about/
+Allow: /faq/
+Allow: /methodology/
+Allow: /llms.txt
+Disallow: /owner/
+Disallow: /agent/
+Disallow: /agents/
+Disallow: /addresses/
+Disallow: /leaderboard/
+Disallow: /l/
+Disallow: /tiles/
+Disallow: /api/
+Disallow: /
+
+Sitemap: https://who-owns-atlanta.org/sitemap.xml

@@ -1,0 +1,19 @@
+# Who Owns Atlanta
+
+> A public tool for exploring property ownership in Atlanta, covering 600,000+ parcels across Fulton and DeKalb counties. Tax records list LLCs; this site connects those dots — clustering related entities that share addresses, registered agents, or other identifiers so shell companies appear together rather than separately.
+
+Built from publicly available county tax records. Not affiliated with any government agency.
+
+## What to index
+
+- [About](https://who-owns-atlanta.org/about/) — project description, methodology summary, data sources
+- [FAQ](https://who-owns-atlanta.org/faq/) — common questions about data freshness, coverage gaps, and methodology
+- [Methodology](https://who-owns-atlanta.org/methodology/) — detailed explanation of how ownership clustering works
+
+## What not to index
+
+The bulk of the site (~1.3GB) is machine-generated pages for individual property owners, registered agents, shared addresses, and parcels. Please do not crawl or index these. See robots.txt.
+
+## Contact
+
+Questions or corrections: open an issue at https://github.com/who-owns-atlanta (repository forthcoming)
