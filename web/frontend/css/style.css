@@ -508,34 +508,78 @@ dl dd { margin: 0; color: var(--pico-color); }
   border-radius: 4px;
 }
 
+/* ── Unit Table ─────────────────────────────────────────────── */
 .units-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   table-layout: fixed;
+  margin: 0.5rem 0 1rem;
+  border-top: 1px solid #e2e8f0;
 }
-
-.units-table td:first-child { width: 52%; }
-.units-table td:last-child  { width: 48%; }
 
 .unit-row {
   cursor: pointer;
+  background: #fff;
 }
 
-.unit-row:hover td {
-  filter: brightness(0.94);
+.unit-row:hover {
+  background: #f8fafc;
 }
-
-.unit-row.unit-current      td { background: #dbeafe; }
-.unit-row.unit-corporate    td { background: #fee2e2; }
-.unit-row.unit-institutional td { background: #fef3c7; }
 
 .unit-row td {
-  padding: 0.25rem 0.4rem;
-  border-bottom: 1px solid rgba(0,0,0,0.06);
-  line-height: 1.3;
-  word-break: break-word;
+  padding: 0.45rem 0.5rem;
+  line-height: 1.2;
+  vertical-align: middle;
+  border-bottom: 1px solid #f1f5f9;
 }
+
+.unit-num {
+  width: 70px;
+  font-weight: 700;
+  color: #1e293b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.unit-owner {
+  overflow: hidden;
+}
+
+.u-name {
+  color: #334155;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.unit-row.unit-current {
+  background: #f1f7ff;
+}
+.unit-row.unit-current .unit-num { color: var(--pico-primary); }
+.unit-row.unit-current .u-name { color: var(--pico-primary); font-weight: 600; }
+
+/* Badges for owner types */
+.u-badges {
+  margin-top: 0.15rem;
+  display: flex;
+  gap: 0.3rem;
+}
+.u-badge {
+  font-size: 0.6rem;
+  font-weight: 700;
+  padding: 0.05rem 0.35rem;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.u-badge.corp { background: #fee2e2; color: #991b1b; }
+.u-badge.inst { background: #fef3c7; color: #92400e; }
+
+/* Subtle row highlights for owner types */
+.unit-row.unit-corporate .u-name { color: #991b1b; }
+.unit-row.unit-institutional .u-name { color: #92400e; }
 
 .unit-row:last-child td {
   border-bottom: none;

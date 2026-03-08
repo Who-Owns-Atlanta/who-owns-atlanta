@@ -1124,32 +1124,61 @@ function renderRelatedUnits(p) {
     return;
   }
 
+  // Helper to extract unit string (e.g., "# 101", "UNIT 202", "303")
+  function getUnitLabel(addr, baseAddr, parcelId) {
+    if (!addr) return parcelId.slice(-4);
+    const cleanBase = (baseAddr || '').replace(/\s+/g, ' ').trim().toUpperCase();
+    const cleanAddr = addr.replace(/\s+/g, ' ').trim().toUpperCase();
+    
+    // If exact match
+    if (cleanAddr === cleanBase) return 'Main';
+    if (cleanAddr.startsWith(cleanBase)) {
+      let unit = cleanAddr.slice(cleanBase.length).trim();
+      unit = unit.replace(/^(#|UNIT)\s*/, '');
+      return unit || 'Main';
+    }
+    
+    // If addresses match but they're supposed to be units, or if extraction fails, use last 4 of PID
+    return parcelId.slice(-4);
+  }
+
+  const baseAddr = p.site_address || '';
   parcelUnitsSumm.textContent = `${units.length + 1} units in this building`;
 
-  const unitRowClass = (props, current) => {
-    if (current)               return 'unit-row unit-current';
-    if (props.is_corporate)    return 'unit-row unit-corporate';
-    if (props.is_institutional) return 'unit-row unit-institutional';
-    return 'unit-row';
+  const renderRow = (u, isCurrent) => {
+    const cls = ['unit-row'];
+    let badges = [];
+    if (isCurrent) cls.push('unit-current');
+    if (u.is_corporate) {
+      cls.push('unit-corporate');
+      badges.push('<span class="u-badge corp">Corp</span>');
+    }
+    if (u.is_institutional) {
+      cls.push('unit-institutional');
+      badges.push('<span class="u-badge inst">Inst</span>');
+    }
+    
+    const unitLabel = getUnitLabel(u.site_address, baseAddr, u.parcel_id);
+    
+    return `
+      <tr class="${cls.join(' ')}" data-county="${p.county}" data-pid="${u.parcel_id}">
+        <td class="unit-num">${escHtml(unitLabel)}</td>
+        <td class="unit-owner">
+          <div class="u-name">${escHtml(u.owner_name || '')}</div>
+          <div class="u-badges">${badges.join('')}</div>
+        </td>
+      </tr>
+    `;
   };
 
   parcelUnitsList.innerHTML = [
-    `<tr class="${unitRowClass(p, true)}" data-county="${p.county}" data-pid="${p.parcel_id}">
-      <td>${escHtml(p.site_address || p.parcel_id)}</td>
-      <td>${escHtml(p.owner_name || '')}</td>
-    </tr>`,
-    ...units.map(u => `
-      <tr class="${unitRowClass(u, false)}" data-county="${p.county}" data-pid="${u.parcel_id}">
-        <td>${escHtml(u.site_address || u.parcel_id)}</td>
-        <td>${escHtml(u.owner_name || '')}</td>
-      </tr>
-    `)
+    renderRow(p, true),
+    ...units.map(u => renderRow(u, false))
   ].join('');
 
   // Scroll current unit into view and add click handlers
   parcelUnitsList.querySelectorAll('.unit-row').forEach(row => {
     const select = () => loadParcel(row.dataset.county, row.dataset.pid);
-    row.setAttribute('role', 'button');
     row.setAttribute('tabindex', '0');
     row.addEventListener('click', select);
     row.addEventListener('keydown', (e) => {
