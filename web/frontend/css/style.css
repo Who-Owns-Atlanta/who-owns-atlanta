@@ -4,7 +4,7 @@
   --pico-primary:               #2563eb;
   --pico-primary-hover:         #1d4ed8;
   --pico-color:                 #1e293b;
-  --pico-muted-color:           #64748b;
+  --pico-muted-color:           #526071; /* Darkened from #64748b for 4.65:1 contrast */
   --pico-border-radius:         6px;
   --pico-font-family:           system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --pico-form-element-color:    #1e293b;
@@ -25,6 +25,27 @@ body {
   background: var(--pico-background-color);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Skip link for accessibility */
+.skip-link {
+  position: absolute;
+  top: -40px;
+  left: 0;
+  background: var(--pico-primary);
+  color: white;
+  padding: 8px 16px;
+  z-index: 1000;
+  transition: top 0.2s;
+  text-decoration: none;
+  font-weight: 600;
+  border-radius: 0 0 4px 0;
+}
+
+.skip-link:focus {
+  top: 0;
+  outline: 2px solid #fff;
+  outline-offset: -4px;
 }
 
 /* Pico classless constrains body > header/main/footer with responsive max-widths.
@@ -79,7 +100,7 @@ body > header {
 }
 
 #search-input::placeholder {
-  color: #94a3b8;
+  color: #526071; /* Darkened from #94a3b8 */
 }
 
 #search-input:focus {
@@ -226,6 +247,10 @@ body > header {
   appearance: none;
 }
 
+.filter-row-neighborhood input[type="search"]::placeholder {
+  color: #526071;
+}
+
 .filter-search-wrapper {
   position: relative;
 }
@@ -349,10 +374,11 @@ main {
   letter-spacing: 0.04em;
   padding: 0.15rem 0.5rem;
   border-radius: 999px;
-  background: #d97706;
+  background: #b45309; /* Darkened from #d97706 for 4.75:1 contrast */
   color: #fff;
   margin-right: 0.35rem;
 }
+
 
 #parcel-badges { margin-bottom: 0.75rem; min-height: 1.2rem; }
 

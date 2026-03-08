@@ -18,6 +18,7 @@
   <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
+  <a href="#main-content" class="skip-link">Skip to main content</a>
 
   <header>
     <a href="/" class="site-name">Who Owns Atlanta?</a>
@@ -29,35 +30,35 @@
     <div class="filter-wrapper">
       <div id="filter-active" hidden>
         <span id="filter-active-label"></span>
-        <button id="filter-clear">✕</button>
+        <button id="filter-clear" aria-label="Clear area filter">✕</button>
       </div>
-      <button id="filter-toggle" aria-label="Filter by area" title="Filter by area">
-        <svg width="14" height="13" viewBox="0 0 14 13" fill="currentColor"><path d="M0 0h14l-5 6v6l-4-2V6z"/></svg>
+      <button id="filter-toggle" aria-label="Filter by area" title="Filter by area" aria-expanded="false" aria-controls="filter-panel">
+        <svg width="14" height="13" viewBox="0 0 14 13" fill="currentColor" aria-hidden="true"><path d="M0 0h14l-5 6v6l-4-2V6z"/></svg>
       </button>
       <div id="filter-panel" hidden>
         <div class="filter-row-neighborhood">
           <label for="filter-neighborhood">Neighborhood</label>
           <div class="filter-search-wrapper">
-            <input type="search" id="filter-neighborhood" placeholder="Search…" autocomplete="off">
-            <ul id="filter-neighborhood-results" hidden></ul>
+            <input type="search" id="filter-neighborhood" placeholder="Search…" autocomplete="off" aria-autocomplete="list" aria-controls="filter-neighborhood-results" aria-expanded="false">
+            <ul id="filter-neighborhood-results" hidden role="listbox"></ul>
           </div>
         </div>
         <div class="filter-row">
           <label for="filter-npu">NPU</label>
-          <select id="filter-npu"><option value="">All NPUs</option></select>
+          <select id="filter-npu" aria-label="Select NPU"><option value="">All NPUs</option></select>
         </div>
         <div class="filter-row">
           <label for="filter-council">Council</label>
-          <select id="filter-council"><option value="">All Districts</option></select>
+          <select id="filter-council" aria-label="Select Council District"><option value="">All Districts</option></select>
         </div>
       </div>
     </div>
   </header>
 
-  <main>
-    <div id="map"></div>
-    <div id="cluster-loading" hidden>Loading cluster…</div>
-    <div id="map-legend" hidden></div>
+  <main id="main-content">
+    <div id="map" role="region" aria-label="Interactive property ownership map"></div>
+    <div id="cluster-loading" hidden role="status" aria-live="polite">Loading cluster…</div>
+    <div id="map-legend" hidden aria-label="Map legend"></div>
 
     <aside id="detail-panel" hidden aria-live="polite">
       <button id="panel-close" aria-label="Close panel">✕</button>
@@ -93,7 +94,7 @@
   </main>
 
   <footer>
-    <nav>
+    <nav aria-label="Footer">
       <a href="/l/">Leaderboards</a>
       <a href="/numbers/">By The Numbers</a>
       <a href="/about/">About</a>
