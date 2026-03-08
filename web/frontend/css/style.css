@@ -152,7 +152,7 @@ body > header {
   white-space: nowrap;
 }
 
-/* ── Area filter ────────────────────────────────────────────── */
+/* ── Area filter (refactored to <details>) ────────────────────── */
 .filter-wrapper {
   position: relative;
   flex: 0 0 auto;
@@ -161,6 +161,7 @@ body > header {
   gap: 0.5rem;
 }
 
+/* Hide default disclosure arrow */
 #filter-toggle {
   display: flex;
   align-items: center;
@@ -171,11 +172,15 @@ body > header {
   cursor: pointer;
   color: var(--pico-muted-color);
   line-height: 1;
+  list-style: none;
 }
+#filter-toggle::-webkit-details-marker { display: none; }
 
 #filter-toggle:hover { background: #f1f5f9; color: var(--pico-color); }
 
-#filter-toggle.active {
+/* Apply 'active' style when details is open or has active filter */
+.filter-wrapper[open] #filter-toggle,
+.filter-wrapper.has-active #filter-toggle {
   background: #eff6ff;
   border-color: var(--pico-primary);
   color: var(--pico-primary);
@@ -318,17 +323,32 @@ main {
   height: 100%;
 }
 
-/* ── Detail panel ───────────────────────────────────────────── */
+/* ── Detail panel (refactored to <dialog>) ───────────────────── */
 #detail-panel {
+  display: none; /* Hide when not [open] */
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
   width: 360px;
-  flex: 0 0 360px;
   height: 100%;
-  overflow-y: auto;
-  background: #fff;
-  border-left: 1px solid #e2e8f0;
+  margin: 0;
   padding: 1.2rem 1.2rem 1.5rem;
-  position: relative;
+  background: #fff;
+  border: none;
+  border-left: 1px solid #e2e8f0;
   box-shadow: -2px 0 8px rgba(15, 23, 42, 0.05);
+  overflow-y: auto;
+  z-index: 150;
+}
+
+#detail-panel[open] {
+  display: block;
+}
+
+/* Ensure no backdrop for the sidebar style */
+#detail-panel::backdrop {
+  background: transparent;
 }
 
 #panel-close {

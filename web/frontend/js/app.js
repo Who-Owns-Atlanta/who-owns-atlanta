@@ -835,10 +835,12 @@ async function fetchSearch(q) {
 function renderResults(results) {
   searchResults.innerHTML = '';
   selectedIndex = -1;
+  searchInput.setAttribute('aria-expanded', results.length > 0 ? 'true' : 'false');
   if (!results.length) { hideResults(); return; }
 
-  results.forEach((r) => {
+  results.forEach((r, idx) => {
     const li = document.createElement('li');
+    li.id = `search-opt-${idx}`;
     li.setAttribute('role', 'option');
     li.setAttribute('aria-selected', 'false');
     li.innerHTML = `
@@ -861,6 +863,11 @@ function setSelectedIndex(i) {
     el.setAttribute('aria-selected', idx === i ? 'true' : 'false');
   });
   selectedIndex = i;
+  if (i >= 0) {
+    searchInput.setAttribute('aria-activedescendant', `search-opt-${i}`);
+  } else {
+    searchInput.removeAttribute('aria-activedescendant');
+  }
 }
 
 function hideResults() {
@@ -868,6 +875,8 @@ function hideResults() {
   searchResults.innerHTML = '';
   currentResults = [];
   selectedIndex = -1;
+  searchInput.setAttribute('aria-expanded', 'false');
+  searchInput.removeAttribute('aria-activedescendant');
 }
 
 function selectResult(result) {
@@ -1139,8 +1148,15 @@ function renderRelatedUnits(p) {
 
   // Scroll current unit into view and add click handlers
   parcelUnitsList.querySelectorAll('.unit-row').forEach(row => {
-    row.addEventListener('click', () => {
-      loadParcel(row.dataset.county, row.dataset.pid);
+    const select = () => loadParcel(row.dataset.county, row.dataset.pid);
+    row.setAttribute('role', 'button');
+    row.setAttribute('tabindex', '0');
+    row.addEventListener('click', select);
+    row.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        select();
+      }
     });
   });
 
@@ -1185,9 +1201,12 @@ function renderParcelLinks(p) {
     : '';
 }
 
-function showPanel()  { detailPanel.hidden = false; }
+function showPanel()  { 
+  detailPanel.show(); 
+  panelClose.focus(); // Accessibility: Move focus to the panel
+}
 function closePanel() {
-  detailPanel.hidden = true;
+  detailPanel.close();
   if (selectedMarker) { selectedMarker.remove(); selectedMarker = null; }
   highlightParcel(null);
   highlightCluster(null);
@@ -1257,8 +1276,8 @@ function setAreaFilter(label, geometry) {
     map.getSource('area-overlay').setData({ type: 'FeatureCollection', features: [makeOutsideMask(geometry)] });
   filterLabel.textContent = label;
   filterActive.hidden = false;
-  filterToggle.classList.add('active');
-  filterPanel.hidden = true;
+  document.getElementById('filter-details').classList.add('has-active');
+  document.getElementById('filter-details').open = false; // Native close
   map.fitBounds(geomBounds(geometry), { padding: 40, maxZoom: 15 });
   updateChoroOpacity();
 }
@@ -1269,58 +1288,102 @@ function clearAreaFilter() {
     map.getSource('area-overlay').setData({ type: 'FeatureCollection', features: [] });
   updateChoroOpacity();
   filterActive.hidden = true;
-  filterToggle.classList.remove('active');
+  document.getElementById('filter-details').classList.remove('has-active');
   filterNbInput.value  = '';
   filterNpuSel.value   = '';
   filterCouncil.value  = '';
   filterNbList.hidden  = true;
 }
 
-// Filter toggle open/close
-filterToggle.addEventListener('click', async () => {
-  const opening = filterPanel.hidden;
-  filterPanel.hidden = !opening;
-  if (opening) await loadGeoData();
+// Filter toggle open/close (now using native <details> toggle event)
+document.getElementById('filter-details').addEventListener('toggle', async (e) => {
+  if (e.target.open) await loadGeoData();
 });
 
 // Close filter panel when clicking outside
 document.addEventListener('click', (e) => {
-  if (!e.target.closest('.filter-wrapper')) filterPanel.hidden = true;
+  const details = document.getElementById('filter-details');
+  if (!e.target.closest('.filter-wrapper')) details.open = false;
 });
+
+// Neighborhood search (accessibility enhanced)
+let nbCurrentResults = [];
+let nbSelectedIndex = -1;
+
+function renderNbResults(matches) {
+  nbCurrentResults = matches;
+  nbSelectedIndex = -1;
+  filterNbList.innerHTML = matches.map((f, idx) =>
+    `<li id="nb-opt-${idx}" role="option" aria-selected="false" data-name="${escHtml(f.properties.NAME)}">${escHtml(f.properties.NAME)}</li>`
+  ).join('');
+  filterNbList.hidden = matches.length === 0;
+  filterNbInput.setAttribute('aria-expanded', matches.length > 0 ? 'true' : 'false');
+}
+
+function setNbSelectedIndex(i) {
+  const items = filterNbList.querySelectorAll('li');
+  items.forEach((el, idx) => {
+    el.setAttribute('aria-selected', idx === i ? 'true' : 'false');
+  });
+  nbSelectedIndex = i;
+  if (i >= 0) {
+    filterNbInput.setAttribute('aria-activedescendant', `nb-opt-${i}`);
+  } else {
+    filterNbInput.removeAttribute('aria-activedescendant');
+  }
+}
+
+function hideNbResults() {
+  filterNbList.hidden = true;
+  filterNbInput.setAttribute('aria-expanded', 'false');
+  filterNbInput.removeAttribute('aria-activedescendant');
+  nbSelectedIndex = -1;
+}
+
+function selectNbResult(name) {
+  const feat = geoCache.neighborhoods.find(f => f.properties.NAME === name);
+  if (!feat) return;
+  filterNbInput.value = name;
+  hideNbResults();
+  filterNpuSel.value  = '';
+  filterCouncil.value = '';
+  setAreaFilter(`Neighborhood: ${name}`, feat.geometry);
+}
 
 // Neighborhood text search
 let nbTimeout = null;
 filterNbInput.addEventListener('input', () => {
   clearTimeout(nbTimeout);
   const q = filterNbInput.value.trim().toLowerCase();
-  if (!q || !geoCache.neighborhoods) { filterNbList.hidden = true; return; }
+  if (!q || !geoCache.neighborhoods) { hideNbResults(); return; }
   nbTimeout = setTimeout(() => {
     const matches = geoCache.neighborhoods
       .filter(f => f.properties.NAME.toLowerCase().includes(q))
       .slice(0, 10);
-    if (!matches.length) { filterNbList.hidden = true; return; }
-    filterNbList.innerHTML = matches.map(f =>
-      `<li data-name="${escHtml(f.properties.NAME)}">${escHtml(f.properties.NAME)}</li>`
-    ).join('');
-    filterNbList.hidden = false;
+    renderNbResults(matches);
   }, 150);
 });
 
 filterNbList.addEventListener('click', (e) => {
   const li = e.target.closest('li');
   if (!li) return;
-  const name = li.dataset.name;
-  const feat = geoCache.neighborhoods.find(f => f.properties.NAME === name);
-  if (!feat) return;
-  filterNbInput.value = name;
-  filterNbList.hidden = true;
-  filterNpuSel.value  = '';
-  filterCouncil.value = '';
-  setAreaFilter(`Neighborhood: ${name}`, feat.geometry);
+  selectNbResult(li.dataset.name);
 });
 
 filterNbInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') filterNbList.hidden = true;
+  if (filterNbList.hidden) return;
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    setNbSelectedIndex(Math.min(nbSelectedIndex + 1, nbCurrentResults.length - 1));
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    setNbSelectedIndex(Math.max(nbSelectedIndex - 1, 0));
+  } else if (e.key === 'Enter' && nbSelectedIndex >= 0) {
+    e.preventDefault();
+    selectNbResult(nbCurrentResults[nbSelectedIndex].properties.NAME);
+  } else if (e.key === 'Escape' || e.key === 'Tab') {
+    hideNbResults();
+  }
 });
 
 // NPU select

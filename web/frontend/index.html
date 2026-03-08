@@ -27,15 +27,15 @@
       <ul id="search-results" role="listbox" hidden></ul>
     </div>
 
-    <div class="filter-wrapper">
-      <div id="filter-active" hidden>
-        <span id="filter-active-label"></span>
-        <button id="filter-clear" aria-label="Clear area filter">✕</button>
-      </div>
-      <button id="filter-toggle" aria-label="Filter by area" title="Filter by area" aria-expanded="false" aria-controls="filter-panel">
+    <details class="filter-wrapper" id="filter-details">
+      <summary id="filter-toggle" aria-label="Filter by area" title="Filter by area">
         <svg width="14" height="13" viewBox="0 0 14 13" fill="currentColor" aria-hidden="true"><path d="M0 0h14l-5 6v6l-4-2V6z"/></svg>
-      </button>
-      <div id="filter-panel" hidden>
+        <div id="filter-active" hidden>
+          <span id="filter-active-label"></span>
+          <button id="filter-clear" aria-label="Clear area filter">✕</button>
+        </div>
+      </summary>
+      <div id="filter-panel">
         <div class="filter-row-neighborhood">
           <label for="filter-neighborhood">Neighborhood</label>
           <div class="filter-search-wrapper">
@@ -52,7 +52,7 @@
           <select id="filter-council" aria-label="Select Council District"><option value="">All Districts</option></select>
         </div>
       </div>
-    </div>
+    </details>
   </header>
 
   <main id="main-content">
@@ -60,7 +60,7 @@
     <div id="cluster-loading" hidden role="status" aria-live="polite">Loading cluster…</div>
     <div id="map-legend" hidden aria-label="Map legend"></div>
 
-    <aside id="detail-panel" hidden aria-live="polite">
+    <dialog id="detail-panel" aria-live="polite">
       <button id="panel-close" aria-label="Close panel">✕</button>
 
       <div id="parcel-view">
