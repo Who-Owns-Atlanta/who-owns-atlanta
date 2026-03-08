@@ -4,7 +4,7 @@
 
 // Tile URL: relative path in dev (served by local nginx), CloudFront in prod.
 // Set PROD_TILES_URL once the CloudFront distribution is live.
-const PROD_TILES_URL = null; // e.g. "https://tiles.who-owns-atlanta.org/tiles/{z}/{x}/{y}.pbf"
+const PROD_TILES_URL = "https://tiles.who-owns-atlanta.org/tiles/{z}/{x}/{y}.pbf";
 const DEV_TILES_URL  = `${window.location.origin}/tiles/{z}/{x}/{y}.pbf`;
 
 const DEV_HOSTNAMES = ["who-owns-atlanta.local", "who-owns-atlanta.lan", "localhost"];

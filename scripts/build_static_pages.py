@@ -66,7 +66,7 @@ def is_commercial_ra(name):
 
 def _make_env():
     """Create a Jinja2 Environment with our custom filters."""
-    env = Environment(loader=BaseLoader())
+    env = Environment(loader=BaseLoader(), autoescape=True)
     env.filters['urlencode'] = lambda s: quote_plus(str(s)) if s else ''
     env.filters['format_int'] = lambda v: f"{int(v):,}" if v is not None else "0"
     return env

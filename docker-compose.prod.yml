@@ -1,0 +1,6 @@
+services:
+  api:
+    environment:
+      DEV_MODE: "0"
+    command: uv run uvicorn main:app --host 0.0.0.0 --port 8080 --workers 2
+    volumes: []
