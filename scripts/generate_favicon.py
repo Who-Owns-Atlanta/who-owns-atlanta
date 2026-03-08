@@ -28,16 +28,16 @@ LAT_CENTER = 33.76   # approx center of Atlanta
 # 1° lon ≈ cos(lat) * (1° lat in km).  To display correctly, stretch x by 1/cos(lat).
 MERC_ASPECT = 1.0 / math.cos(math.radians(LAT_CENTER))   # ≈ 1.202
 
-# ── Color mapping (YlOrRd — matches the poverty map) ──────────────────────
+# ── Color mapping — Atlanta official palette (warm triad) ──────────────────
+# #ebaf55 amber · #e67147 orange · #e33d40 red
+# Extended with a light tint at the low end and a deep maroon at the high end
 POVERTY_STOPS = [
-    (0.00, "#FAFFA0"),
-    (0.05, "#FFED6A"),
-    (0.12, "#FDC144"),
-    (0.20, "#FD8D3C"),
-    (0.30, "#F03B20"),
-    (0.40, "#C0141B"),
-    (0.55, "#800010"),
-    (1.00, "#4A0008"),
+    (0.00, "#f5dfa8"),   # pale amber tint (very low poverty)
+    (0.08, "#ebaf55"),   # ATL amber
+    (0.22, "#e67147"),   # ATL orange
+    (0.38, "#e33d40"),   # ATL red
+    (0.58, "#b02428"),   # deeper red
+    (1.00, "#6b1114"),   # dark maroon
 ]
 
 def hex_to_rgb(h):
@@ -72,9 +72,10 @@ def polygon_to_path(coords_rings):
     return Path(verts, codes)
 
 # ── Build figure ───────────────────────────────────────────────────────────
-def build_icon(size_px=512, padding_frac=0.04):
+def build_icon(size_px=512, padding_frac=0.04, outline_color='#e0f3fc', bg=None):
     """
-    Render at size_px × size_px with transparent background.
+    Render at size_px × size_px.
+    bg=None → transparent; bg='#rrggbb' → solid fill behind the shape.
     Returns a PIL RGBA Image.
     """
     # Bounding box from ALL city polygons
@@ -116,15 +117,22 @@ def build_icon(size_px=512, padding_frac=0.04):
     dpi = 96
     fig_size = size_px / dpi
     fig, ax = plt.subplots(figsize=(fig_size, fig_size), dpi=dpi)
-    # TRANSPARENT background
     fig.patch.set_alpha(0)
-    ax.set_facecolor((0, 0, 0, 0))
+    ax.set_facecolor((0, 0, 0, 0))   # always transparent in mpl; bg composited in PIL below
 
     ax.set_xlim(lon_min, lon_max)
     ax.set_ylim(lat_min, lat_max)
     ax.set_aspect(MERC_ASPECT)   # correct Mercator distortion
     ax.axis('off')
     fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
+
+    # ── Step 0: Fill entire city boundary with neutral grey base ──────────
+    # Covers any gaps between neighborhood polygons so background doesn't show
+    city_geom = city_limits['features'][0]['geometry']
+    for poly in city_geom['coordinates']:
+        patch = PathPatch(polygon_to_path(poly),
+                          facecolor='#7a7a8a', edgecolor='none', linewidth=0, zorder=1)
+        ax.add_patch(patch)
 
     # ── Step 1: Neighborhood patches colored by poverty ────────────────────
     for feat in neighborhoods['features']:
@@ -150,8 +158,7 @@ def build_icon(size_px=512, padding_frac=0.04):
                 ys = [p[1] for p in ring]
                 ax.plot(xs, ys, color='#1A0005', linewidth=line_lw, alpha=0.28, zorder=3)
 
-    # ── Step 3: City boundary — gold rim over dark shadow ─────────────────
-    city_geom = city_limits['features'][0]['geometry']
+    # ── Step 3: City boundary — amber rim over dark shadow ────────────────
     stroke_lw = max(1.2, size_px / 160)
     # Only the main (largest) polygon; skip tiny enclave
     polys_sorted = sorted(city_geom['coordinates'], key=lambda p: len(p[0]), reverse=True)
@@ -162,7 +169,7 @@ def build_icon(size_px=512, padding_frac=0.04):
             ax.plot(xs, ys, color='#000000', linewidth=stroke_lw * 3.2,
                     alpha=0.65, zorder=4,
                     solid_capstyle='round', solid_joinstyle='round')
-            ax.plot(xs, ys, color='#1E4C8A', linewidth=stroke_lw,
+            ax.plot(xs, ys, color=outline_color, linewidth=stroke_lw,
                     alpha=1.0, zorder=5,
                     solid_capstyle='round', solid_joinstyle='round')
 
@@ -175,16 +182,26 @@ def build_icon(size_px=512, padding_frac=0.04):
     img = Image.open(buf).convert('RGBA')
     img = img.resize((size_px, size_px), Image.LANCZOS)
 
-    # PIL radial vignette: darkens (not blackens) the corners
+    # Composite solid background behind the shape if requested
+    if bg:
+        r, g, b = [int(bg.lstrip('#')[i:i+2], 16) for i in (0, 2, 4)]
+        canvas = Image.new('RGBA', img.size, (r, g, b, 255))
+        canvas.alpha_composite(img)
+        img = canvas
+
+    # PIL radial vignette: darkens corners, but only where the image is opaque
     cx_px, cy_px = img.size[0] / 2, img.size[1] / 2
     max_r = math.sqrt(cx_px**2 + cy_px**2)
+    src_alpha = img.getchannel('A')
     vignette = Image.new('L', img.size, 0)
     pixels = vignette.load()
+    src_px = src_alpha.load()
     for y in range(img.size[1]):
         for x in range(img.size[0]):
             t = math.sqrt((x - cx_px)**2 + (y - cy_px)**2) / max_r
             darkness = int(max(0.0, (t - 0.60) / 0.40) ** 1.8 * 140)
-            pixels[x, y] = darkness
+            # Only darken where the city shape is already visible
+            pixels[x, y] = int(darkness * src_px[x, y] / 255)
     dark_layer = Image.new('RGBA', img.size, (0, 0, 0, 0))
     dark_layer.putalpha(vignette)
     img = Image.alpha_composite(img, dark_layer)
@@ -192,32 +209,49 @@ def build_icon(size_px=512, padding_frac=0.04):
     return img
 
 
+# ── ATL official palette ───────────────────────────────────────────────────
+ATL_NAVY   = '#223971'
+ATL_BLUE   = '#0d71ba'
+ATL_LBLUE  = '#e0f3fc'
+ATL_AMBER  = '#ebaf55'
+
 # ── Output ─────────────────────────────────────────────────────────────────
 OUT_DIR = os.path.join(BASE, "web/frontend/icons")
 os.makedirs(OUT_DIR, exist_ok=True)
 
-print("Generating 512px icon…")
-img512 = build_icon(512)
+VARIANTS = [
+    # (filename_stem, outline_color, bg)
+    ('transparent',  ATL_LBLUE, None),        # transparent bg, light-blue outline
+    ('on-navy',      ATL_LBLUE, ATL_NAVY),    # dark navy bg, light-blue outline
+    ('on-blue',      ATL_LBLUE, ATL_BLUE),    # medium blue bg, light-blue outline
+    ('on-navy-amb',  ATL_AMBER, ATL_NAVY),    # dark navy bg, amber outline
+    ('on-blue-amb',  ATL_AMBER, ATL_BLUE),    # medium blue bg, amber outline
+]
+
+for stem, outline, bg in VARIANTS:
+    print(f"Generating 512px {stem}…")
+    img = build_icon(512, outline_color=outline, bg=bg)
+    img.save(os.path.join(OUT_DIR, f"icon-512-{stem}.png"))
+    print(f"  → icon-512-{stem}.png")
+
+# ── Production assets: transparent variant for web ─────────────────────────
+print("\nGenerating production favicons (transparent / amber outline)…")
+img512 = build_icon(512, outline_color=ATL_AMBER)
 img512.save(os.path.join(OUT_DIR, "icon-512.png"))
-print("  → icon-512.png")
 
-print("Generating 192px icon…")
-img192 = build_icon(192)
+img192 = build_icon(192, outline_color=ATL_AMBER)
 img192.save(os.path.join(OUT_DIR, "icon-192.png"))
-print("  → icon-192.png")
 
-print("Generating favicons (from 256px source)…")
-src = build_icon(256)
-img48 = src.resize((48, 48), Image.LANCZOS)
-img32 = src.resize((32, 32), Image.LANCZOS)
-img16 = src.resize((16, 16), Image.LANCZOS)
+src256 = build_icon(256, outline_color=ATL_AMBER)
+img48 = src256.resize((48, 48), Image.LANCZOS)
+img32 = src256.resize((32, 32), Image.LANCZOS)
+img16 = src256.resize((16, 16), Image.LANCZOS)
 img32.save(os.path.join(OUT_DIR, "favicon-32.png"))
 img16.save(os.path.join(OUT_DIR, "favicon-16.png"))
-print("  → favicon-32.png / favicon-16.png")
 
 ico_path = os.path.join(BASE, "web/frontend/favicon.ico")
 img48.save(ico_path, format='ICO', sizes=[(16,16),(32,32),(48,48)],
            append_images=[img32, img16])
-print(f"  → favicon.ico")
+print("  → icon-512/192, favicon-32/16, favicon.ico")
 
 print("\nDone.")
