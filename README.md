@@ -2,7 +2,7 @@
 
 A public tool for exploring property ownership in Atlanta and across Fulton and DeKalb counties. Search any address to find who owns it, whether the owner is a corporation or institution, and follow the ownership network across the city. Leaderboards and map filters also facilitate further exploration.
 
-**Live site:** [who-owns-atlanta.org](https://who-owns-atlanta.org) *(coming soon)*
+**Live site:** [who-owns-atlanta.org](https://who-owns-atlanta.org)
 
 ## What it does
 
