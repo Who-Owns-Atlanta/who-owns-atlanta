@@ -232,7 +232,14 @@ for stem, outline, bg in VARIANTS:
     print(f"Generating 512px {stem}…")
     img = build_icon(512, outline_color=outline, bg=bg)
     img.save(os.path.join(OUT_DIR, f"icon-512-{stem}.png"))
-    print(f"  → icon-512-{stem}.png")
+
+# ── Social / profile variant (navy bg, extra padding to survive circle crop) ──
+# For circle-cropped avatars (Bluesky, Twitter, etc.) the shape must fit within
+# the inscribed circle, so padding_frac needs to be ~0.18 to clear all edges.
+print("Generating social/avatar (navy + amber, circle-safe padding)…")
+img_social = build_icon(512, padding_frac=0.18, outline_color=ATL_AMBER, bg=ATL_NAVY)
+img_social.save(os.path.join(OUT_DIR, "icon-512-social.png"))
+print("  → icon-512-social.png")
 
 # ── Production assets: transparent variant for web ─────────────────────────
 print("\nGenerating production favicons (transparent / amber outline)…")
