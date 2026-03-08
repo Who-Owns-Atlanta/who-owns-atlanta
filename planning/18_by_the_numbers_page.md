@@ -1,6 +1,6 @@
 # 18 — "By the Numbers" Citywide Findings Page
 
-## Status: planned, not yet implemented
+## Status: implemented (2026-03-06)
 
 ## Context
 
