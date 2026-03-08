@@ -1202,11 +1202,11 @@ function renderParcelLinks(p) {
 }
 
 function showPanel()  { 
-  detailPanel.show(); 
+  detailPanel.hidden = false;
   panelClose.focus(); // Accessibility: Move focus to the panel
 }
 function closePanel() {
-  detailPanel.close();
+  detailPanel.hidden = true;
   if (selectedMarker) { selectedMarker.remove(); selectedMarker = null; }
   highlightParcel(null);
   highlightCluster(null);
