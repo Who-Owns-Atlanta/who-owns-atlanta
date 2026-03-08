@@ -15,6 +15,10 @@ venv/
 # Generated files (not tracked in repo)
 /web/frontend/tiles/
 /web/frontend/img/
+!/web/frontend/img/icon-512.png
+!/web/frontend/img/icon-192.png
+!/web/frontend/img/favicon-32.png
+!/web/frontend/img/favicon-16.png
 
 # uv
 .python-version
