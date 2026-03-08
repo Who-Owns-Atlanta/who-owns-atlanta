@@ -108,6 +108,8 @@ fi
 # ---------------------------------------------------------------------------
 # frontend/ lives in git; symlink it under webroot so nginx root works
 ln -sfn "$DEPLOY_HOME/web/frontend" "$WEBROOT/frontend"
+# nginx (www-data) must be able to traverse /home/deploy to follow the symlink
+chmod o+x /home/deploy
 
 cp "$DEPLOY_HOME/web/nginx/who-owns-atlanta.conf" /etc/nginx/sites-available/
 ln -sfn /etc/nginx/sites-available/who-owns-atlanta.conf /etc/nginx/sites-enabled/
