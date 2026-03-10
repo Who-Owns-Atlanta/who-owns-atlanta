@@ -29,6 +29,7 @@ tmp_nbh_accela
 .env
 .env.*
 credentials*.json
+.wrangler/
 
 # IDE
 .idea/
