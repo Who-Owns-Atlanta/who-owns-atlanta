@@ -78,20 +78,28 @@ def parcel(county: str, parcel_id: str, response: Response):
             # Optimized detail query using UNION ALL of direct table lookups to hit indexes
             cur.execute("""
                 WITH target AS (
-                    SELECT 
-                        parcelid, address, owner, owneraddr1, owneraddr2, 
-                        is_corporate, is_institutional, lucode, classcode, 
+                    SELECT
+                        parcelid, address, owner, owneraddr1, owneraddr2,
+                        is_corporate, is_institutional, lucode, classcode,
                         landacres, livunits, city_neighborhood, city_npu, city_council,
                         excode, NULL::double precision AS appraised_value, NULL::text AS ownernme2,
                         NULL::text AS zoning, NULL::text AS histdesc, NULL::text AS ovldesc,
+                        city_zoning,
+                        CASE
+                            WHEN city_zoning ~ '^R-[1-5]$|^R-[1-5][A-Z]$|^PD-H$' THEN 'Single-Family'
+                            WHEN city_zoning ~ '^RG|^MR|^MRC|^C-|^I-|^SPI-|^PD-MU$' THEN 'Multi-Family / Other'
+                            WHEN city_zoning IS NULL AND lucode IN ('101','107','110') THEN 'Single-Family'
+                            WHEN city_zoning IS NULL AND lucode IN ('106','208','211','212','2A0','2A1','2A2') THEN 'Multi-Family / Condo'
+                            ELSE 'Other'
+                        END AS home_type,
                         geometry
-                    FROM fulton_parcels 
+                    FROM fulton_parcels
                     WHERE parcelid = %(pid)s AND %(county)s = 'fulton'
-                    
+
                     UNION ALL
-                    
-                    SELECT 
-                        COALESCE(parcelid, lowparcelid), siteaddress, ownernme1, pstladdress, 
+
+                    SELECT
+                        COALESCE(parcelid, lowparcelid), siteaddress, ownernme1, pstladdress,
                         NULLIF(TRIM(
                             COALESCE(NULLIF(TRIM(pstlcity),  '') || ', ', '') ||
                             COALESCE(NULLIF(TRIM(pstlstate), ''), '')         ||
@@ -101,8 +109,16 @@ def parcel(county: str, parcel_id: str, response: Response):
                         NULL::double precision, NULL::double precision, city_neighborhood, city_npu, city_council,
                         NULL::text, totapr1, ownernme2,
                         zoning, histdesc, ovldesc,
+                        city_zoning,
+                        CASE
+                            WHEN city_zoning ~ '^R-[1-5]$|^R-[1-5][A-Z]$|^PD-H$' THEN 'Single-Family'
+                            WHEN city_zoning ~ '^RG|^MR|^MRC|^C-|^I-|^SPI-|^PD-MU$' THEN 'Multi-Family / Other'
+                            WHEN city_zoning IS NULL AND landuse IN ('SUB','TN','TC') THEN 'Single-Family'
+                            WHEN city_zoning IS NULL AND landuse IN ('CRC','NC','RC') THEN 'Multi-Family / Other'
+                            ELSE 'Other'
+                        END AS home_type,
                         geometry
-                    FROM dekalb_parcels 
+                    FROM dekalb_parcels
                     WHERE (parcelid = %(pid)s OR lowparcelid = %(pid)s) AND %(county)s = 'dekalb'
                     LIMIT 1
                 )
@@ -128,6 +144,8 @@ def parcel(county: str, parcel_id: str, response: Response):
                     zoning,
                     histdesc            AS historic_district,
                     ovldesc             AS overlay_district,
+                    city_zoning,
+                    home_type,
                     ST_Y(ST_Centroid(geometry)) AS lat,
                     ST_X(ST_Centroid(geometry)) AS lon
                 FROM target

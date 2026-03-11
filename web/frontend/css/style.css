@@ -487,6 +487,70 @@ dl dd { margin: 0; color: var(--pico-color); }
 
 .sources-footnote:hover { color: var(--pico-primary); }
 
+/* ── Code lookup tooltips (land use, zoning) ────────────────── */
+.code-lookup {
+  display: inline;
+  background: none;
+  border: none;
+  border-bottom: 1px dotted currentColor;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: help;
+  position: relative;
+}
+.code-lookup:focus-visible {
+  outline: 2px solid var(--pico-primary);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* Tooltip bubble */
+.code-lookup::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1e293b;
+  color: #f8fafc;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  padding: 4px 8px;
+  border-radius: 4px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s;
+  z-index: 100;
+  max-width: min(260px, calc(100vw - 2rem));
+  white-space: normal;
+  text-align: left;
+}
+/* Arrow */
+.code-lookup::before {
+  content: '';
+  position: absolute;
+  bottom: calc(100% + 2px);
+  left: 50%;
+  transform: translateX(-50%);
+  border: 4px solid transparent;
+  border-top-color: #1e293b;
+  opacity: 0;
+  transition: opacity 0.12s;
+  pointer-events: none;
+  z-index: 100;
+}
+
+/* Show on hover, focus, or mobile tap (tip-open class) */
+.code-lookup:hover::after,
+.code-lookup:hover::before,
+.code-lookup:focus::after,
+.code-lookup:focus::before,
+.code-lookup.tip-open::after,
+.code-lookup.tip-open::before {
+  opacity: 1;
+}
+
 /* ── Units table (condos) ───────────────────────────────────── */
 #parcel-units {
   margin-bottom: 1rem;

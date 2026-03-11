@@ -980,6 +980,192 @@ const GA_PROPERTY_CLASS = {
   V4:'Conservation Small Tract',      V5:'Conservation Large Tract',
 };
 
+// ---------------------------------------------------------------------------
+// Land use codes — Fulton County Board of Assessors (Updated April 2024)
+// Source: docs/Fulton-County-Land-Use-Codes-2024.pdf
+// DeKalb codes inferred from pipeline context (no official DeKalb PDF available)
+// ---------------------------------------------------------------------------
+const LAND_USE_CODES = {
+  fulton: {
+    '100':'Residential vacant','101':'Residential 1 family','102':'Residential 2 family',
+    '103':'Residential 3 family','104':'Residential 4 family',
+    '105':'Commercial/Dwelling Conversion','106':'Single Family Residential Condominium',
+    '107':'Single Family Residential Townhouse','108':'Single Family Residential Mobile Home',
+    '109':'Auxiliary Improvement','110':'Single Family Residential Loft',
+    '111':'Common Area - residential subdivision','112':'Agricultural-Improved',
+    '113':'Preferential Agricultural-Vacant','166':'Common Area - condominiums',
+    '188':'Homeowner Association Common Area','199':'Residential under construction',
+    '200':'Apartment Vacant Land','201':'Apartment/Dwelling Conversion (>4 units)',
+    '206':'Apt Lofts with Retail on First Floor','207':'Commercial Converted to Residential',
+    '208':'Co Ops Single Family Fee Simple','209':'Apartment Loft Without Retail',
+    '210':'Apartment - Vacant/Boarded Up','211':'Apartment - Garden (3 story & under)',
+    '212':'Apartment - High Rise','213':'Mobile Home Park',
+    '250':'Super Luxury Hotel','251':'Luxury Hotel','252':'First Class Hotel',
+    '253':'High Rise Hotel','254':'Luxury Budget Motel','255':'Economy Motel',
+    '257':'Motel Bed and Breakfast','281':'Low Income Tax Credit',
+    '288':'Partially Exempt Apartment Complex','299':'Apartment Land Tie Back',
+    '2A0':'Apt Mid Rise (4-10) Class A','2A1':'Apt Garden Class A','2A2':'Apt High Rise Class A',
+    '2B0':'Apt Mid Rise (4-10) Class B','2B1':'Apt Garden Class B','2B2':'Apt High Rise Class B',
+    '2C0':'Apt Mid Rise (4-10) Class C','2C1':'Apt Garden Class C','2D1':'Apt Garden Class D',
+    '2H1':'Apt Low Rise Partial Tax Exempt','2H2':'Apt High Rise Partial Tax Exempt',
+    '2X0':'Apt Mid Rise (4-10) Class X','2X1':'Apt Garden Class X','2X2':'Apt High Rise Class X',
+    '300':'Vacant Commercial Land','301':'Commercial/Dwelling Conversion',
+    '302':'Par 3 Golf Course','303':'Miniature Golf Course','304':'Fishing Pier',
+    '305':'Marina','306':'Boat Dock','307':'Private Boat Launch',
+    '308':'Water Amusements','309':'Miscellaneous Amusement',
+    '310':'Unsound Commercial Structure','312':'Assisted Living Residence Community',
+    '316':'Nursing Home','318':'Boarding-Rooming House','319':'Mixed Res/Comm (Built as Comm)',
+    '320':'Commercial Auxiliary Improvements','321':'Restaurant','323':'Food Stands',
+    '325':'Franchise Food','326':'Convenience/Fast Food Market','327':'Bar/Lounge',
+    '328':'Night Club/Dinner Theater','331':'Auto Dealer, Full Service',
+    '332':'Auto Service Garage','333':'Service Station with bays',
+    '334':'Service Station (without bays)','335':'Truck Stop',
+    '336':'Car Wash - Manual','337':'Car Wash - Automatic',
+    '338':'Parking Garage/Deck','339':'Parking Lot (Paved)',
+    '340':'Super Regional Shopping Mall','341':'Regional Shopping Mall',
+    '342':'Community Shopping Center','343':'Neighborhood Shopping Center',
+    '344':'Strip Shopping Center','345':'Discount Department Store',
+    '346':'Department Store','347':'Supermarket','348':'Convenience Food Market',
+    '349':'Medical Office Building','350':'Telecommunications Office Bldg',
+    '351':'Bank','352':'Savings Institution',
+    '353':'Office Building - Low Rise - 1-4 Story',
+    '354':'Office Building - High Rise - 5 Story & Up',
+    '355':'Office Condominium','356':'Retail Condominium',
+    '361':'Funeral Home','362':'Veterinary Clinic','363':'Legitimate Theater',
+    '364':'Motion Picture Theater','365':'Cinema/Theater',
+    '366':'Radio, TV or Motion Picture Studio','367':'Social/Fraternal Hall',
+    '368':'Hangar','369':'Day Care Center','370':'Greenhouse/Florist',
+    '371':'Downtown Row Type','373':'Retail - Single Occupancy',
+    '374':'Retail - Multiple Occupancy','375':'Retail - Drive Up',
+    '381':'Bowling Alley','382':'Skating Rink','383':'Health Spa',
+    '384':'Indoor Swimming Pool','385':'Indoor Tennis Club','386':'Indoor Racquet Club',
+    '387':'Country Club','388':'Club House','389':'Country Club with Golf Course',
+    '390':'Amusement Park','391':'Cold Storage Facility','392':'Lumber Storage',
+    '393':'Auxiliary Improvement','394':'Warehouse (Distribution)','395':'Truck Terminal',
+    '396':'Mini Warehouse','397':'Office Warehouse (flex)',
+    '398':'Warehouse (bulk)','399':'Prefab Warehouse',
+    '3A3':'Office Building (Low Rise >4) Class A','3A4':'Office Building (High Rise <5) Class A',
+    '3B3':'Office Building (Low Rise >4) Class B','3B4':'Office Building (High Rise <5) Class B',
+    '3C3':'Office Building (Low Rise >4) Class C','3C4':'Office Building (High Rise <5) Class C',
+    '3D3':'Office Building (Low Rise >4) Class D',
+    '3H3':'Office Bldg with Partial Exempt Status',
+    '3T4':'Office Building (High Rise <5) Trophy',
+    '3X4':'Office Building (High Rise <5) Class X',
+    '400':'Vacant Industrial Land','401':'Manufacturing/Processing',
+    '405':'Research and Development','411':'Aircraft Engine Mfg.',
+    '412':'Aluminum & Foil Mfg.','413':'Asphalt Plant','414':'Automobile Parts Mfg.',
+    '415':'Bakery','416':'Bottling Plant','417':'Broom Mfg','418':'Candy Mfg.',
+    '419':'Cement Mfg.','420':'Concrete Mfg.','421':'Chemical Plant','422':'Clay Products',
+    '423':'Clothing Mfg.','424':'Coal Processing',
+    '425':'Compressor Station (not public utility)','426':'Dairy',
+    '428':'Dental & Medical Lab','429':'Electronic Components',
+    '430':'Electrical Equipment Mfg','431':'Feed & Flower Manufacturing',
+    '432':'Foundry Products','433':'Food Processing','434':'Glass Manufacturing',
+    '435':'Glass Manufacturing (specialized)','436':'Grain and Milling Products Mfg',
+    '437':'Ice Plant','438':'Leather Products Mfg','439':'Liquefied Natural Gas Plant',
+    '440':'Logging/Cutting of Timber','441':'Machinery/Equipment Mfg',
+    '442':'Meat Packing/Slaughterhouse','443':'Metal Working',
+    '444':'Mining/Deep','445':'Mining/Strip','446':'Natural Gas Extracting Facility',
+    '447':'Nickel Manufacturing','448':'Newspaper Printing Plant',
+    '449':'Oil and Gas Pipelining','450':'Optical Manufacturing',
+    '451':'Paint Manufacturing','452':'Paper Finishing and Converting',
+    '455':'Plastics Products Mfg','456':'Plastics Products - Specialized',
+    '457':'Print Shop','458':'Pulp and Paper','459':'Quarries (Rock)',
+    '460':'Railroad Car Manufacturing','461':'Rubber Mfg (Tire Recapping)',
+    '462':'Shoe Manufacturing','463':'Steel Manufacturing',
+    '464':'Steam Generating Plant','465':'Saw Mill (Permanent)','466':'Saw Mill (temporary)',
+    '467':'Textile Manufacturing','468':'Tobacco Products Manufacturing',
+    '469':'Wood Working Shop','470':'Wire Products Manufacturing',
+    '471':'Jewelry, Toys, Sporting Goods, Other Mfg','472':'Furniture Mfg',
+    '485':'Land Fill','499':'Industrial Tie Back Land',
+    '512':'School Private (Taxable)','513':'College Dormitory (Taxable)',
+    '520':'Taxable Church, Synagogue, Mosque','540':'Hospital/For Profit (Taxable)',
+    '550':'Charitable Office/Svc Center (Taxable)','580':'Cultural Facilities',
+    '591':'USPS (Taxable Private Ownership)',
+    '600':'Vacant Exempt Land','601':'Cemetery','610':'Recreation/Health',
+    '611':'Library','612':'School','613':'College',
+    '614':'Single Family Residential: Institutional',
+    '620':'Religious: Churches, Synagogue, Mosque','621':'Church Parking (Paved)',
+    '622':'Single Family Residential: Parsonage',
+    '625':'Religious Mission (Salvation Army, GW)',
+    '630':'Auditorium','640':'Hospital','641':'Urgent Care Facility',
+    '650':'Charitable Office (Service Center)','660':'Police or Fire Station',
+    '670':'Correctional (Local, State, Federal)','680':'Cultural Facilities',
+    '684':'Housing for the Disabled','685':'Housing for the Homeless',
+    '686':'Housing for the Aged','690':'Rail/Bus/Air Terminal',
+    '691':'US Postal Services (Private)','692':'US Postal Services (Exempt)',
+    '699':'Improved Government Owned Exempt NEC',
+    '700':'Utility Vacant Land','701':'Railroad','702':'Electric Utility',
+    '703':'Gas Utility','704':'Water Utility','705':'Sewer Utility',
+    '706':'Multiple Service Utility','710':'Telephone Equipment Building',
+    '711':'Telephone Utility NEC','715':'Telephone Service Garage',
+    '720':'Radio/TV Transmitter Building','799':'Other Utility NEC',
+    '800':'Unique Restricted Vacant Land',
+    '888':'Economic Development/Public Housing','889':'Brownfield',
+    '88H':'Economic Development - Hotel','88O':'Economic Development - Office',
+    '88R':'Economic Development - Retail','88X':'Economic Development - Apts Class X',
+    '890':'Economic Development/Brownfield','999':'Commercial Land Tie Back',
+  },
+  dekalb: {
+    'SUB':'Residential Subdivision','TN':'Townhome / Townhouse',
+    'CRC':'Condo Residential Community','TC':'Town Center',
+    'NC':'Neighborhood Commercial','RC':'Regional Commercial',
+    'LIND':'Light Industrial','COS':'Common Open Space',
+    'INS':'Institutional','IND':'Industrial','OP':'Open Space',
+  },
+};
+
+// Atlanta city zoning codes
+// Source: Atlanta Code of Ordinances, Chapter 150 (Zoning)
+const ATL_ZONING_CODES = {
+  'R-1':'Single-Family Residential (9,000 sq ft min)',
+  'R-2':'Single-Family Residential (7,500 sq ft min)',
+  'R-2A':'Single-Family Residential',
+  'R-3':'Single-Family Residential (5,000 sq ft min)',
+  'R-3A':'Single-Family Residential',
+  'R-4':'Single-Family Residential (4,500 sq ft min)',
+  'R-4A':'Single-Family Residential',
+  'R-4B':'Single-Family Residential',
+  'R-5':'Two-Family Residential',
+  'RG-1':'Residential General, Low-Density',
+  'RG-2':'Residential General',
+  'RG-3':'Residential General, Medium-Density',
+  'RG-4':'Residential General, High-Density',
+  'RG-5':'Residential General, Very High-Density',
+  'MR-1':'Multi-Family Residential',
+  'MR-2':'Multi-Family Residential',
+  'MR-3':'Multi-Family Residential',
+  'MR-4':'Multi-Family Residential, High-Density',
+  'MR-4A':'Multi-Family Residential',
+  'MRC-1':'Mixed Residential-Commercial',
+  'MRC-2':'Mixed Residential-Commercial',
+  'MRC-3':'Mixed Residential-Commercial',
+  'C-1':'Commercial, Neighborhood Services',
+  'C-2':'Commercial, Medium-Intensity',
+  'C-3':'Commercial, Highway Services',
+  'C-4':'Commercial, High-Intensity',
+  'I-1':'Industrial, Light',
+  'I-2':'Industrial, Heavy',
+  'O-A':'Office-Apartment',
+  'O-I':'Office-Institutional',
+  'PD-H':'Planned Development - Housing',
+  'PD-MU':'Planned Development - Mixed Use',
+  'FCR-1':'Former Campbellton Road District 1',
+  'FCR-2':'Former Campbellton Road District 2',
+  'FCR-3':'Former Campbellton Road District 3',
+};
+
+function lookupAtlZoning(code) {
+  if (!code) return null;
+  if (ATL_ZONING_CODES[code]) return ATL_ZONING_CODES[code];
+  const base = code.replace(/-C$/, '');
+  const baseDesc = ATL_ZONING_CODES[base];
+  if (baseDesc) return baseDesc + ' — Conditional';
+  const spiMatch = code.match(/^SPI-(\d+)/);
+  if (spiMatch) return `Special Public Interest District ${spiMatch[1]}`;
+  return null;
+}
+
 panelClose.addEventListener('click', closePanel);
 
 async function loadParcel(county, parcelId) {
@@ -1034,7 +1220,10 @@ function renderParcelPanel(p) {
   // Physical details
   if (p.land_acres != null) countyMeta.push(['Land', `${Number(p.land_acres).toFixed(2)} acres`]);
   if (p.living_units)       countyMeta.push(['Units', p.living_units]);
-  if (p.land_use)           countyMeta.push(['Land use', p.land_use]);
+  if (p.land_use) {
+    const luDesc = LAND_USE_CODES[p.county]?.[p.land_use] ?? null;
+    countyMeta.push(['__raw__', 'Land use', codeTipHtml(p.land_use, luDesc)]);
+  }
 
   // Homestead exemption (Fulton only) — excode non-empty = homestead exempt
   if (p.county === 'fulton') {
@@ -1051,12 +1240,15 @@ function renderParcelPanel(p) {
   if (p.historic_district) countyMeta.push(['Historic district', p.historic_district]);
   if (p.overlay_district)  countyMeta.push(['Overlay district', p.overlay_district]);
 
-  const renderRow = ([k, v]) => `<dt>${escHtml(k)}</dt><dd>${escHtml(String(v))}</dd>`;
+  const renderRow    = ([k, v])     => `<dt>${escHtml(k)}</dt><dd>${escHtml(String(v))}</dd>`;
+  const renderRowRaw = ([k, vHtml]) => `<dt>${escHtml(k)}</dt><dd>${vHtml}</dd>`;
   const renderDivider = (label) =>
     `<dt class="meta-source-divider">${escHtml(label)}<sup><a href="/faq/#data-sources" title="Data source information">*</a></sup></dt>`;
 
-  parcelMeta.innerHTML = countyMeta.map(([k, v]) =>
-    k === '__divider__' ? renderDivider(v) : renderRow([k, v])
+  parcelMeta.innerHTML = countyMeta.map(([k, v, vHtml]) =>
+    k === '__divider__' ? renderDivider(v)
+    : k === '__raw__'   ? renderRowRaw([v, vHtml])
+    : renderRow([k, v])
   ).join('');
 
   // Owner mailing address — county tax parcel record, rendered as block between the two dls
@@ -1076,11 +1268,16 @@ function renderParcelPanel(p) {
   if (p.npu)              cityFields.push(['NPU', p.npu]);
   if (p.council_district) cityFields.push(['Council', `District ${p.council_district}`]);
   if (p.home_type)        cityFields.push(['Home type', p.home_type]);
-  if (p.city_zoning)      cityFields.push(['Zoning (City)', p.city_zoning]);
+  if (p.city_zoning) {
+    const czDesc = lookupAtlZoning(p.city_zoning);
+    cityFields.push(['__raw__', 'Zoning', codeTipHtml(p.city_zoning, czDesc)]);
+  }
 
   if (cityFields.length) {
     parcelMetaCity.innerHTML = renderDivider('City of Atlanta GIS')
-      + cityFields.map(renderRow).join('');
+      + cityFields.map(([k, v, vHtml]) =>
+          k === '__raw__' ? renderRowRaw([v, vHtml]) : renderRow([k, v])
+        ).join('');
     parcelMetaCity.hidden = false;
   } else {
     parcelMetaCity.innerHTML = '';
@@ -1477,11 +1674,38 @@ function updateHomeTypeFilter() {
 filterClear.addEventListener('click', clearAreaFilter);
 
 // ---------------------------------------------------------------------------
+// Code-lookup tooltip handlers (land use, zoning)
+// ---------------------------------------------------------------------------
+
+// Toggle tooltip on tap/click (mobile — hover handles desktop)
+document.getElementById('detail-panel').addEventListener('click', (e) => {
+  const btn = e.target.closest('.code-lookup');
+  if (!btn) return;
+  const wasOpen = btn.classList.contains('tip-open');
+  document.querySelectorAll('.code-lookup.tip-open')
+    .forEach(b => b.classList.remove('tip-open'));
+  if (!wasOpen) btn.classList.add('tip-open');
+  e.stopPropagation();
+});
+
+// Dismiss open tooltips when clicking elsewhere
+document.addEventListener('click', () => {
+  document.querySelectorAll('.code-lookup.tip-open')
+    .forEach(b => b.classList.remove('tip-open'));
+});
+
+// ---------------------------------------------------------------------------
 // Utilities
 // ---------------------------------------------------------------------------
 
 function escHtml(str) {
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// Renders a code value with an accessible tooltip if a description is available.
+function codeTipHtml(code, desc) {
+  if (!desc) return escHtml(code);
+  return `<button class="code-lookup" data-tip="${escHtml(desc)}" aria-label="${escHtml(desc)}">${escHtml(code)}</button>`;
 }
 
 function fmtDate(iso) {
