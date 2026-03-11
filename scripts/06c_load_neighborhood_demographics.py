@@ -3,14 +3,22 @@
 Source: Official_Neighborhoods_with_Current_Demographic_Data_(2024).geojson
 """
 
+import json
 import geopandas as gpd
+from pathlib import Path
 from sqlalchemy import create_engine, text
 import sys
 import time
 import os
 
 DB_URL = os.environ.get("DATABASE_URL", "postgresql://woa:woa@localhost:5434/who_owns_atl")
-FILE_PATH = "/home/jesse/projects/data/gis_json/geojson/latest/Official_Neighborhoods_with_Current_Demographic_Data_2024.geojson"
+
+def _load_sources():
+    root = Path(__file__).resolve().parent.parent
+    return json.load(open(root / "web/frontend/data/datasources.json"))
+
+SOURCES = _load_sources()
+FILE_PATH = SOURCES["atlanta_gis_neighborhoods_demographics"]["file_path"]
 
 # Mapping of cryptic GeoJSON fields to readable database columns
 # Based on nbh_demo_field_list.html analysis

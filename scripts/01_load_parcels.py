@@ -1,17 +1,24 @@
 """Load Fulton + DeKalb county parcel GeoJSON into PostGIS, then create a unified view."""
 
+import json
 import geopandas as gpd
+from pathlib import Path
 from sqlalchemy import create_engine, text
 import argparse
 from scripts.utils import DB_URL, create_unified_view
-DATA_DIR = "data/json/geojson/latest"
+
+def _load_sources():
+    root = Path(__file__).resolve().parent.parent
+    return json.load(open(root / "web/frontend/data/datasources.json"))
+
+SOURCES = _load_sources()
 
 engine = create_engine(DB_URL)
 
 
 def load_fulton(engine):
     print("Loading Fulton County parcels...")
-    gdf = gpd.read_file(f"{DATA_DIR}/Fulton_County_Tax_Parcel.json")
+    gdf = gpd.read_file(SOURCES["fulton_parcels"]["file_path"])
     print(f"  {len(gdf)} features read")
 
     # Normalize column names to lowercase
@@ -27,7 +34,7 @@ def load_fulton(engine):
 
 def load_dekalb(engine):
     print("Loading DeKalb County parcels...")
-    gdf = gpd.read_file(f"{DATA_DIR}/Dekalb_County_Tax_Parcels.geojson")
+    gdf = gpd.read_file(SOURCES["dekalb_parcels"]["file_path"])
     print(f"  {len(gdf)} features read")
 
     gdf.columns = [c.lower() for c in gdf.columns]

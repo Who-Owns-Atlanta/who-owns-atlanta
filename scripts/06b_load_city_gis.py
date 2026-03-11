@@ -6,20 +6,26 @@ Authoritative sources:
 - NPU.json
 """
 
+import json
 import geopandas as gpd
+from pathlib import Path
 from sqlalchemy import create_engine, text
 import sys
 import time
 import os
 
 DB_URL = os.environ.get("DATABASE_URL", "postgresql://woa:woa@localhost:5434/who_owns_atl")
-DATA_DIR = "data/json/geojson/latest"
+
+def _load_sources():
+    root = Path(__file__).resolve().parent.parent
+    return json.load(open(root / "web/frontend/data/datasources.json"))
+
+SOURCES = _load_sources()
 
 engine = create_engine(DB_URL)
 
-def load_layer(file_name, table_name):
-    path = f"{DATA_DIR}/{file_name}"
-    print(f'Loading {file_name} into gis."{table_name}"...')
+def load_layer(path, table_name):
+    print(f'Loading {Path(path).name} into gis."{table_name}"...')
     t0 = time.time()
     gdf = gpd.read_file(path)
     print(f"  Read {len(gdf)} features in {time.time()-t0:.0f}s")
@@ -38,8 +44,8 @@ def load_layer(file_name, table_name):
     print("  Spatial index created.")
 
 if __name__ == "__main__":
-    load_layer("Official_City_Council_Districts.geojson", "council_districts")
-    load_layer("Neighborhood.json", "neighborhoods")
-    load_layer("NPU.json", "npu")
+    load_layer(SOURCES["atlanta_gis_council"]["file_path"], "council_districts")
+    load_layer(SOURCES["atlanta_gis_neighborhoods"]["file_path"], "neighborhoods")
+    load_layer(SOURCES["atlanta_gis_npu"]["file_path"], "npu")
 
     print("\nDone. City GIS layers loaded.")

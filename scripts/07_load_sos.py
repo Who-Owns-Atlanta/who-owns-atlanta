@@ -10,11 +10,18 @@ Skipped for now: BizEntityFilingHistory.txt, BizEntityStock.txt
 """
 
 import io
+import json
 import os
 import psycopg2
+from pathlib import Path
 
 DB = dict(host="localhost", port=5434, dbname="who_owns_atl", user="woa", password="woa")
-DATA_DIR = "data/text/ga_sos"
+
+def _load_sources():
+    root = Path(__file__).resolve().parent.parent
+    return json.load(open(root / "web/frontend/data/datasources.json"))
+
+DATA_DIR = _load_sources()["ga_sos"]["file_path"]
 
 CHUNK = 500_000  # rows per COPY batch for large files
 

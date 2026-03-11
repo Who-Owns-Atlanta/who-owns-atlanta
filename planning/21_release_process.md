@@ -70,9 +70,31 @@
 - [ ] `git tag -a vYYYYMMx.N` — message: summary + `git log --oneline v<prev>..HEAD`
 - [ ] `git push origin vYYYYMMx.N`
 
+### DB lifecycle
+
+`who_owns_atl` is always the live working database. The pipeline scripts DROP and
+recreate all tables, so running the pipeline IS the reset — no dump restore needed.
+Archive DBs (`woa_v*`) are frozen snapshots created from dump files at the start
+of the next release, before the pipeline runs.
+
+```
+[start of release N+1]
+  db_archive.sh vN            → creates woa_vN (frozen prev release)
+  run pipeline 01→13          → who_owns_atl wiped + rebuilt with new data
+  validate + compare          → diff new vs woa_vN
+  pg_dump who_owns_atl        → dumps/vN+1.dump
+  tag + deploy
+```
+
 ### Data Release Checklist (Type B — advance letter)
+- [ ] Archive previous DB: `scripts/db_archive.sh v<PREV>` → creates `woa_v<prev>`
+- [ ] Snapshot sources: `cp web/frontend/data/datasources.json dumps/v<NEW>.sources.json`
+- [ ] Update `datasources.json` with new `file_path` + `admin_date` + `sha256` for changed inputs
 - [ ] Run full pipeline: scripts 01 → 13 (see `06_production_runbook.md`)
+      (`who_owns_atl` is wiped and rebuilt by the pipeline — no manual reset needed)
 - [ ] Run `validate_pipeline.py` — must pass all firm benchmarks
+- [ ] Cross-release comparison: `uv run scripts/compare_releases.py who_owns_atl woa_v<prev>`
+      Parcels should increase or stay flat; investigate any firm benchmark regression.
 - [ ] Rebuild static pages: `build_static_pages.py`
 - [ ] Rebuild vector tiles: `build_tiles.sh`
 - [ ] Upload tiles to R2 (wrangler / rclone sync)
@@ -99,8 +121,47 @@
 
 ---
 
+## Updating to a New Data Vintage
+
+When a new county parcel or SOS download is available:
+1. Download to a new dated directory: `data/json/geojson/YYYY-MM-DD/` or `data/text/ga_sos/YYYY-MM-DD/`
+2. Update `datasources.json`: `file_path`, `admin_date`, `sha256`
+3. Run pipeline scripts — they read paths from `datasources.json` automatically
+
+SHA256 helper (run after updating `file_path` entries):
+```bash
+python3 -c "
+import json, hashlib
+from pathlib import Path
+sources = json.load(open('web/frontend/data/datasources.json'))
+for key, src in sources.items():
+    fp = src.get('file_path')
+    if fp and Path(fp).is_file():
+        h = hashlib.sha256(Path(fp).read_bytes()).hexdigest()
+        print(f'{key}: {h}')
+"
+```
+
+---
+
+## Restoring an Archive on a New Machine
+
+```bash
+# rsync dumps/ from old machine, then:
+scripts/db_archive.sh v202603A.1
+
+# Or restore all:
+for f in dumps/v*.dump; do scripts/db_archive.sh "$(basename "$f" .dump)"; done
+```
+
+`sos`/`tiger`/`topology` schemas are NOT in dumps — archive DBs are fully functional
+for comparison without them.
+
+---
+
 ## Dump Storage
 
 - Dumps excluded from git via `dumps/.gitignore`
-- `dumps/MANIFEST.md` tracks each archived dump (version, date, parcel count, cluster count, notes)
+- `dumps/MANIFEST.md` tracks each archived dump (version, date, parcel count, cluster count, archived DB name, sources snapshot, notes)
 - Current dump filename convention: `dumps/vYYYYMMx.N.dump` (stored locally, not in git)
+- Sources snapshot: `dumps/vYYYYMMx.N.sources.json` (git-tracked — committed with each release)

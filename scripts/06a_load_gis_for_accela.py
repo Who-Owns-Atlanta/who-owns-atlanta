@@ -5,13 +5,20 @@ These are needed for the geometry-matching trigger on application.records.
 - Tax_Parcel: fallback match by parcel number (bridges Accela parcel IDs to county data)
 """
 
+import json
 import geopandas as gpd
+from pathlib import Path
 from sqlalchemy import create_engine, text
 import sys
 import time
 
 DB_URL = "postgresql://woa:woa@localhost:5434/who_owns_atl"
-DATA_DIR = "data/json/geojson/latest"
+
+def _load_sources():
+    root = Path(__file__).resolve().parent.parent
+    return json.load(open(root / "web/frontend/data/datasources.json"))
+
+SOURCES = _load_sources()
 
 engine = create_engine(DB_URL)
 
@@ -19,7 +26,7 @@ engine = create_engine(DB_URL)
 def load_address_points():
     print("Loading Address_Point.json (~387MB)...")
     t0 = time.time()
-    gdf = gpd.read_file(f"{DATA_DIR}/Address_Point.json")
+    gdf = gpd.read_file(SOURCES["atlanta_address_point"]["file_path"])
     print(f"  Read {len(gdf)} address points in {time.time()-t0:.0f}s")
 
     # Ensure EPSG:4326
@@ -42,7 +49,7 @@ def load_address_points():
 def load_tax_parcels():
     print("Loading Tax_Parcel.json (~348MB)...")
     t0 = time.time()
-    gdf = gpd.read_file(f"{DATA_DIR}/Tax_Parcel.json")
+    gdf = gpd.read_file(SOURCES["atlanta_tax_parcel"]["file_path"])
     print(f"  Read {len(gdf)} tax parcels in {time.time()-t0:.0f}s")
 
     if gdf.crs and gdf.crs.to_epsg() != 4326:
