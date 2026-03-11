@@ -398,10 +398,11 @@ function detailOpacity() {
 // exitClusterMode() can restore it without re-reading paint state).
 const OVERVIEW_COLOR = [
   'case',
-  isCondo(),                   'rgba(139, 92, 246, 0.8)',
-  ['to-boolean', ['get', 'is_corporate']],     'rgba(220, 38, 38, 0.6)',
-  ['to-boolean', ['get', 'is_institutional']], 'rgba(217, 119, 6, 0.6)',
-  'rgba(148, 163, 184, 0.4)',
+  isCondo(),                                   'rgba(139, 92, 246, 0.8)', // violet — condo
+  ['to-boolean', ['get', 'is_corporate']],     'rgba(220, 38, 38, 0.5)',  // red    — corporate
+  ['to-boolean', ['get', 'is_institutional']], 'rgba(217, 119, 6, 0.5)',  // amber  — institutional
+  ['has', 'cluster_id'],                       'rgba(59, 130, 246, 0.5)', // blue   — individual portfolio (approx)
+  'rgba(148, 163, 184, 0.3)',                                             // gray   — default
 ];
 
 // Choropleth color expressions for demographic modes.
