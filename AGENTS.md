@@ -11,6 +11,35 @@
 # CREDENTIALS
 - The `@.env` contains all credentials - database, APIs
 - prefix PGPASSWORD= to all psql cli commands
+- DB: `postgresql://woa:woa@localhost:5434/who_owns_atl`  (Docker PostGIS, port 5434)
+
+# DATA SOURCES
+- `web/frontend/data/datasources.json` is the **single source of truth** for all input file paths and provenance.
+- Pipeline scripts load it via:
+  ```python
+  import json
+  from pathlib import Path
+  def _load_sources():
+      root = Path(__file__).resolve().parent.parent
+      return json.load(open(root / "web/frontend/data/datasources.json"))
+  SOURCES = _load_sources()
+  ```
+- GeoJSON source files live in **dated subdirs**: `data/json/geojson/YYYY-MM-DD/` — there is no `latest/`.
+- `data/json` is a symlink to `/home/jesse/projects/data/gis_json/` (shared with another project).
+- SOS bulk files: `data/text/ga_sos/YYYY-MM-DD/` (currently `2026-02-18/`).
+
+# DB SCHEMA FACTS
+- `is_corporate`, `is_institutional` — columns on **`fulton_parcels`** and **`dekalb_parcels`**, NOT on `owner_entities`.
+- `owner_names` — `text[]` array on `ownership_clusters` and `mv_leaderboard`; use `owner_names[1]` for primary name.
+- SOS match — `owner_entities` has no `sos_match_count`; use `sos_control_number IS NOT NULL`.
+- `parcel_count` on `ownership_clusters` / `mv_leaderboard` is `numeric`, cast to `int` as needed.
+
+# RELEASES & ARCHIVES
+- Release dumps: `dumps/vYYYYMMx.N.dump` (local only, not in git). Manifest: `dumps/MANIFEST.md`.
+- Archive a release into a named DB: `scripts/db_archive.sh v202603A.1` → creates `woa_v202603a1`.
+  - Requires tiger/tiger_data/topology schemas + extensions pre-created (the script handles this).
+- Cross-release comparison: `uv run scripts/compare_releases.py who_owns_atl woa_v202603a1`
+- `who_owns_atl` = always the live working DB; pipeline scripts DROP/recreate tables, no manual reset needed.
 
 # TESTING/VALIDATION LOCATIONS
 - web:  http://who-owns-atlanta.local/
