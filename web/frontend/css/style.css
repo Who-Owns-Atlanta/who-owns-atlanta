@@ -693,6 +693,12 @@ footer nav a {
 
 footer nav a:hover { color: var(--pico-primary); }
 
+.nav-short { display: none; }
+@media (max-width: 460px) {
+  .nav-short { display: inline; }
+  .nav-long  { display: none; }
+}
+
 /* ── Map legend ─────────────────────────────────────────────── */
 #map-legend {
   position: absolute;
