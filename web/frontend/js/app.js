@@ -22,6 +22,7 @@ let pendingClusterId  = parseInt(_initParams.get('cluster')) || null;
 const pendingGeoType  = _initParams.get('geo')  || null;  // 'neighborhood' | 'npu' | 'council'
 const pendingGeoArea  = _initParams.get('area') || null;  // raw GeoJSON NAME value
 const pendingParcel   = _initParams.get('parcel') || null; // 'county/parcel_id'
+const pendingHomeType = _initParams.get('hometype') || null;
 
 const map = new maplibregl.Map({
   container: 'map',
@@ -781,6 +782,16 @@ map.on('load', async () => {
     highlightParcel(parcelId);
     showPanel();
   } catch { /* silently ignore */ }
+});
+
+// ---------------------------------------------------------------------------
+// ?hometype= deep link — apply home type filter on page load
+// ---------------------------------------------------------------------------
+
+map.on('load', () => {
+  if (!pendingHomeType) return;
+  filterHomeTypeSel.value = pendingHomeType;
+  updateHomeTypeFilter();
 });
 
 // ---------------------------------------------------------------------------

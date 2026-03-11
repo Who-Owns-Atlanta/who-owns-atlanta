@@ -1007,6 +1007,31 @@ td.map-link-cell a:hover { color: var(--pico-primary); }
 .vuln-stat { font-size: 0.8rem; color: #475569; }
 .vuln-stat strong { display: block; font-size: 1rem; color: #1e293b; }
 
+/* Sub-filter navigation (County Home Types, etc.) */
+.sub-filter-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  align-items: baseline;
+  margin: 0.25rem 0 1.5rem;
+  padding: 0.6rem 1rem;
+  background: var(--pico-card-background-color, #f8fafc);
+  border: 1px solid var(--pico-muted-border-color, #e2e8f0);
+  border-radius: 6px;
+  font-size: 0.9rem;
+}
+.sub-filter-nav a {
+  color: var(--pico-primary);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.sub-filter-nav a:hover { text-decoration: underline; }
+.sub-filter-current {
+  font-weight: 600;
+  color: var(--pico-color);
+  white-space: nowrap;
+}
+
 @media (max-width: 768px) {
   .demographics-grid,
   .portfolio-maps {
