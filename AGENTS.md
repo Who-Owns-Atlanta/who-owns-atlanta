@@ -56,6 +56,8 @@ Most commong linux tools exist; use any tools liberally. These tools are extreme
 - `psql` - check your postgres/gis queries!
     - you MUST prefix PGPASSWORD=  for psql cli commands to succeed
 - `rg`, grep  (ripgrep)
-- `shot-scraper` - cli tool to take screeshots of web pages so you can "view" your changes.  [local, --help docs](docs/shot-scraper_help.txt) , [fuller, remote docs](https://shot-scraper.datasette.io/en/stable/screenshots.html). DO NOT PREVIEW EMAIL HTML
+- web:
+  - `playwright` skill or mcp
+  - `shot-scraper` - cli tool to take screeshots of web pages so you can "view" your changes.  [local, --help docs](docs/shot-scraper_help.txt) , [fuller, remote docs](https://shot-scraper.datasette.io/en/stable/screenshots.html). DO NOT PREVIEW EMAIL HTML
 
 
