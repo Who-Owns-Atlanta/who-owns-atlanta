@@ -76,9 +76,9 @@
     "description": "Official City of Atlanta zoning districts",
     "file_path": "data/json/geojson/2026-03-10/Official_Zoning_Districts.geojson",
     "sha256": "ff92bb51a1a7cde2bb72f224f42f08b9f05e55c9b5ed87a52ef82ddbfb3479ee",
-    "admin_date": "2026-03-10",
+    "admin_date": "2025-02-05",
     "last_loaded": "2026-03-10",
-    "url": "https://dpcd-coaplangis.opendata.arcgis.com/datasets/official-zoning-districts/explore"
+    "url": "https://dpcd-coaplangis.opendata.arcgis.com/datasets/5a192bb498554a23a48a5b81b6239f44_22/explore?location=33.767250%2C-84.420550%2C11"
   },
   "accela": {
     "name": "City of Atlanta — Accela",
