@@ -309,7 +309,7 @@ def pass_a_fusion(engine):
         rows = conn.execute(text("""
             SELECT entity_id, owner_name_norm, owner_addr_norm, count, cluster_id
             FROM owner_entities
-            WHERE is_institutional = FALSE
+            WHERE is_institutional = FALSE AND is_corporate = TRUE
         """)).fetchall()
 
     cluster_parcels = load_cluster_parcel_counts(engine)

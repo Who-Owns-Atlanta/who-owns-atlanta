@@ -67,15 +67,32 @@ def build_owner_entities(engine):
         conn.execute(text("""
             CREATE TEMP TABLE tmp_raw_entities AS
             SELECT
-                UPPER(TRIM(owner_name)) AS owner_name_norm,
+                CASE
+                  WHEN UPPER(TRIM(owner_name)) LIKE '% & %'
+                  THEN (
+                    SELECT STRING_AGG(part, ' & ' ORDER BY part)
+                    FROM UNNEST(STRING_TO_ARRAY(UPPER(TRIM(owner_name)), ' & ')) AS part
+                  )
+                  ELSE UPPER(TRIM(owner_name))
+                END AS owner_name_norm,
                 COALESCE(owner_addr_norm, '') AS owner_addr_norm,
                 county,
                 BOOL_OR(is_institutional) AS is_institutional,
+                BOOL_OR(is_corporate) AS is_corporate,
                 COUNT(*) AS count,
                 ARRAY_AGG(parcel_id) AS parcel_ids
             FROM parcels_unified
             WHERE owner_name IS NOT NULL AND TRIM(owner_name) != ''
-            GROUP BY UPPER(TRIM(owner_name)), COALESCE(owner_addr_norm, ''), county;
+            GROUP BY
+                CASE
+                  WHEN UPPER(TRIM(owner_name)) LIKE '% & %'
+                  THEN (
+                    SELECT STRING_AGG(part, ' & ' ORDER BY part)
+                    FROM UNNEST(STRING_TO_ARRAY(UPPER(TRIM(owner_name)), ' & ')) AS part
+                  )
+                  ELSE UPPER(TRIM(owner_name))
+                END,
+                COALESCE(owner_addr_norm, ''), county;
         """))
 
         # Upsert into entity_registry to assign/retrieve stable entity_ids
@@ -96,6 +113,7 @@ def build_owner_entities(engine):
                 ne.owner_addr_norm,
                 ne.county,
                 ne.is_institutional,
+                ne.is_corporate,
                 ne.count,
                 ne.parcel_ids
             FROM tmp_raw_entities ne
