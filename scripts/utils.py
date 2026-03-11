@@ -39,9 +39,17 @@ def create_unified_view(engine, refresh_mviews=False):
                 COALESCE(
                     (lucode IN ('106', '107', '110') OR (COALESCE(livunits::int, 0) = 0 AND (subdiv ILIKE '%%CONDO%%' OR subdiv ILIKE '%%CONDOMINIUM%%') AND lucode NOT IN ('111', '166', '188', '208')))
                 , false)::int AS is_condo_potential,
+                CASE
+                    WHEN city_zoning ~ '^R-[1-5]$|^R-[1-5][A-Z]$|^PD-H$' THEN 'Single-Family'
+                    WHEN city_zoning ~ '^RG|^MR|^MRC|^C-|^I-|^SPI-|^PD-MU$' THEN 'Multi-Family / Other'
+                    WHEN city_zoning IS NULL AND lucode IN ('101', '107', '110') THEN 'Single-Family'
+                    WHEN city_zoning IS NULL AND lucode IN ('106', '208', '211', '212', '2A0', '2A1', '2A2') THEN 'Multi-Family / Condo'
+                    ELSE 'Other'
+                END AS home_type,
                 city_neighborhood,
                 city_npu,
                 city_council,
+                city_zoning,
                 geometry
             FROM fulton_parcels
             WHERE 
@@ -77,9 +85,17 @@ def create_unified_view(engine, refresh_mviews=False):
                     WHEN unit_no IS NOT NULL AND unit_no <> '' THEN 1
                     ELSE 0
                 END)::int AS is_condo_potential,
+                CASE
+                    WHEN city_zoning ~ '^R-[1-5]$|^R-[1-5][A-Z]$|^PD-H$' THEN 'Single-Family'
+                    WHEN city_zoning ~ '^RG|^MR|^MRC|^C-|^I-|^SPI-|^PD-MU$' THEN 'Multi-Family / Other'
+                    WHEN city_zoning IS NULL AND (landuse IN ('SUB', 'TN', 'TC') OR classdscrp = 'R3') THEN 'Single-Family'
+                    WHEN city_zoning IS NULL AND (landuse IN ('CRC', 'NC', 'RC') OR classdscrp = 'R9') THEN 'Multi-Family / Other'
+                    ELSE 'Other'
+                END AS home_type,
                 city_neighborhood,
                 city_npu,
                 city_council,
+                city_zoning,
                 geometry
             FROM dekalb_parcels
             WHERE 

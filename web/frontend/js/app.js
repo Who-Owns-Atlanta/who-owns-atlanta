@@ -1063,6 +1063,8 @@ function renderParcelPanel(p) {
   if (p.neighborhood)     cityFields.push(['Neighborhood', p.neighborhood]);
   if (p.npu)              cityFields.push(['NPU', p.npu]);
   if (p.council_district) cityFields.push(['Council', `District ${p.council_district}`]);
+  if (p.home_type)        cityFields.push(['Home type', p.home_type]);
+  if (p.city_zoning)      cityFields.push(['Zoning (City)', p.city_zoning]);
 
   if (cityFields.length) {
     parcelMetaCity.innerHTML = renderDivider('City of Atlanta GIS')
@@ -1251,6 +1253,7 @@ const filterNbInput  = document.getElementById('filter-neighborhood');
 const filterNbList   = document.getElementById('filter-neighborhood-results');
 const filterNpuSel   = document.getElementById('filter-npu');
 const filterCouncil  = document.getElementById('filter-council');
+const filterHomeTypeSel = document.getElementById('filter-home-type');
 const filterActive   = document.getElementById('filter-active');
 const filterLabel    = document.getElementById('filter-active-label');
 const filterClear    = document.getElementById('filter-clear');
@@ -1321,7 +1324,9 @@ function clearAreaFilter() {
   filterNbInput.value  = '';
   filterNpuSel.value   = '';
   filterCouncil.value  = '';
+  filterHomeTypeSel.value = '';
   filterNbList.hidden  = true;
+  updateHomeTypeFilter();
 }
 
 // Filter toggle open/close (now using native <details> toggle event)
@@ -1436,6 +1441,25 @@ filterCouncil.addEventListener('change', () => {
   filterNpuSel.value  = '';
   setAreaFilter(`Council District ${val}`, feat.geometry);
 });
+
+// Home Type select
+filterHomeTypeSel.addEventListener('change', () => {
+  updateHomeTypeFilter();
+});
+
+function updateHomeTypeFilter() {
+  const val = filterHomeTypeSel.value;
+  const filter = val ? ['==', ['get', 'home_type'], val] : null;
+  
+  if (map.getLayer('parcels-overview')) map.setFilter('parcels-overview', filter);
+  if (map.getLayer('parcels-detail'))   map.setFilter('parcels-detail', filter);
+  
+  if (val) {
+    document.getElementById('filter-details').classList.add('has-active');
+  } else if (!activeAreaFilter) {
+    document.getElementById('filter-details').classList.remove('has-active');
+  }
+}
 
 // Clear button
 filterClear.addEventListener('click', clearAreaFilter);

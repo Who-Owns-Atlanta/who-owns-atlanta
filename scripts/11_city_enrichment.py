@@ -21,12 +21,14 @@ ADD_COLUMNS_SQL = """
 ALTER TABLE fulton_parcels
     ADD COLUMN IF NOT EXISTS city_neighborhood TEXT,
     ADD COLUMN IF NOT EXISTS city_npu          TEXT,
-    ADD COLUMN IF NOT EXISTS city_council      TEXT;
+    ADD COLUMN IF NOT EXISTS city_council      TEXT,
+    ADD COLUMN IF NOT EXISTS city_zoning       TEXT;
 
 ALTER TABLE dekalb_parcels
     ADD COLUMN IF NOT EXISTS city_neighborhood TEXT,
     ADD COLUMN IF NOT EXISTS city_npu          TEXT,
-    ADD COLUMN IF NOT EXISTS city_council      TEXT;
+    ADD COLUMN IF NOT EXISTS city_council      TEXT,
+    ADD COLUMN IF NOT EXISTS city_zoning       TEXT;
 """
 
 # Separate updates for each attribute to ensure robustness.
@@ -51,6 +53,12 @@ def get_update_sql(table_name):
         SET city_council = c."NAME"
         FROM gis.council_districts c
         WHERE ST_Intersects(ST_Centroid(f.geometry), c.geometry);
+        """,
+        f"""
+        UPDATE {table_name} f
+        SET city_zoning = z.zoning
+        FROM gis.zoning_districts z
+        WHERE ST_Intersects(ST_Centroid(f.geometry), z.geometry);
         """
     ]
 
@@ -67,7 +75,8 @@ SELECT
     count(*)  AS total,
     count(*) FILTER (WHERE city_council IS NOT NULL) AS in_city,
     count(*) FILTER (WHERE city_neighborhood IS NOT NULL AND city_neighborhood <> '') AS has_neighborhood,
-    count(*) FILTER (WHERE city_npu IS NOT NULL AND city_npu <> '') AS has_npu
+    count(*) FILTER (WHERE city_npu IS NOT NULL AND city_npu <> '') AS has_npu,
+    count(*) FILTER (WHERE city_zoning IS NOT NULL AND city_zoning <> '') AS has_zoning
 FROM fulton_parcels
 
 UNION ALL
@@ -77,7 +86,8 @@ SELECT
     count(*)  AS total,
     count(*) FILTER (WHERE city_council IS NOT NULL) AS in_city,
     count(*) FILTER (WHERE city_neighborhood IS NOT NULL AND city_neighborhood <> '') AS has_neighborhood,
-    count(*) FILTER (WHERE city_npu IS NOT NULL AND city_npu <> '') AS has_npu
+    count(*) FILTER (WHERE city_npu IS NOT NULL AND city_npu <> '') AS has_npu,
+    count(*) FILTER (WHERE city_zoning IS NOT NULL AND city_zoning <> '') AS has_zoning
 FROM dekalb_parcels;
 """
 

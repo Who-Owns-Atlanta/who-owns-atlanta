@@ -71,7 +71,8 @@ psql_cmd -c "
         p.is_institutional,
         p.site_address,
         p.owner_name,
-        p.is_condo_potential
+        p.is_condo_potential,
+        p.home_type
     FROM parcels_unified p
   )
   SELECT
@@ -85,7 +86,8 @@ psql_cmd -c "
       (ARRAY_AGG(site_address))[1] AS site_address,
       (ARRAY_AGG(owner_name))[1]   AS owner_name,
       COUNT(*)                   AS unit_count,
-      (COUNT(*) > 1 OR ST_Area(geometry) < 2e-9 OR MAX(is_condo_potential) > 0) AS is_condo
+      (COUNT(*) > 1 OR ST_Area(geometry) < 2e-9 OR MAX(is_condo_potential) > 0) AS is_condo,
+      MAX(home_type)             AS home_type
   FROM (
       SELECT
           s.geometry,
@@ -94,6 +96,7 @@ psql_cmd -c "
           s.is_corporate,
           s.is_institutional,
           s.is_condo_potential,
+          s.home_type,
           m.cluster_id,
           m.cluster_size,
           s.site_address,
@@ -119,7 +122,7 @@ TILE_TMP_LOW="$WORK_DIR/tiles_low"
 TILE_TMP_HIGH="$WORK_DIR/tiles_high"
 
 # Overview SQL — no cluster_id/cluster_size (not used at z10-12)
-OVERVIEW_SQL="SELECT geometry, parcel_id, county, is_corporate, is_institutional, unit_count, is_condo FROM _tile_export_base ORDER BY ST_Area(geometry) DESC"
+OVERVIEW_SQL="SELECT geometry, parcel_id, county, is_corporate, is_institutional, unit_count, is_condo, home_type FROM _tile_export_base ORDER BY ST_Area(geometry) DESC"
 
 # Pass 1a: z10-11 (city overview — feature-dropped, capped at 1.5 MB per tile)
 # tippecanoe's natural dropping keeps the largest parcels (by area), discarding
@@ -135,6 +138,7 @@ tippecanoe \
   --attribute-type=is_institutional:bool \
   --attribute-type=is_condo:bool \
   --attribute-type=unit_count:int \
+  --attribute-type=home_type:string \
   --simplification=10 \
   --maximum-tile-bytes=1500000 \
   --drop-smallest-as-needed \
@@ -154,6 +158,7 @@ tippecanoe \
   --attribute-type=is_institutional:bool \
   --attribute-type=is_condo:bool \
   --attribute-type=unit_count:int \
+  --attribute-type=home_type:string \
   --simplification=10 \
   --no-tile-size-limit \
   --no-feature-limit \
@@ -173,6 +178,7 @@ tippecanoe \
   --attribute-type=is_institutional:bool \
   --attribute-type=is_condo:bool \
   --attribute-type=unit_count:int \
+  --attribute-type=home_type:string \
   --no-tile-size-limit \
   --no-feature-limit \
   <(PGPASSWORD="$DB_PASS" ogr2ogr -f GeoJSON /vsistdout/ \
