@@ -7,7 +7,7 @@ then joins back to parcel tables. Uses concurrent requests for speed.
 import concurrent.futures
 import requests
 from sqlalchemy import create_engine, text
-from scripts.utils import DB_URL, create_unified_view
+from utils import DB_URL, create_unified_view
 LIBPOSTAL_URL = "http://localhost:6789"
 WORKERS = 32
 BATCH_SIZE = 10000

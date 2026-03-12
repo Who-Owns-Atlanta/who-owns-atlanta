@@ -5,7 +5,7 @@ import geopandas as gpd
 from pathlib import Path
 from sqlalchemy import create_engine, text
 import argparse
-from scripts.utils import DB_URL, create_unified_view
+from utils import DB_URL, create_unified_view
 
 def _load_sources():
     root = Path(__file__).resolve().parent.parent
