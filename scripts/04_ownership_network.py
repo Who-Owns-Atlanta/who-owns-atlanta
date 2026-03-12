@@ -13,6 +13,11 @@ engine = create_engine(DB_URL)
 # ... rest of file (import and engine part) ...
 # Increased to 100 as institutional noise (MARTA, GA Power) is now institutional-flagged.
 NAME_ENTROPY_LIMIT = 100
+INDIVIDUAL_NAME_ENTROPY_LIMIT = 5
+
+JUNK_NAME_BLOCKLIST = {
+    'RESTRICTED', 'UNKNOWN OWNER', 'CURRENT RESIDENT', 'ESTATE OF', 'UNKNOWN'
+}
 
 # Skip addresses if shared by many entities (mailbox centers, office parks)
 # Lowered from 50 to 30 to prevent builder-to-buyer bridges while keeping legitimate operators
@@ -80,6 +85,7 @@ def build_owner_entities(engine):
                 BOOL_OR(is_institutional) AS is_institutional,
                 BOOL_OR(is_corporate) AS is_corporate,
                 COUNT(*) AS count,
+                BOOL_OR(has_homestead) AS has_homestead,
                 ARRAY_AGG(parcel_id) AS parcel_ids
             FROM parcels_unified
             WHERE owner_name IS NOT NULL AND TRIM(owner_name) != ''
@@ -115,6 +121,7 @@ def build_owner_entities(engine):
                 ne.is_institutional,
                 ne.is_corporate,
                 ne.count,
+                ne.has_homestead,
                 ne.parcel_ids
             FROM tmp_raw_entities ne
             JOIN entity_registry er
@@ -129,8 +136,21 @@ def build_owner_entities(engine):
         print(f"  {total:,} distinct owner entities")
     return total
 
-def _get_edges(items):
-    """Worker function for parallel edge generation."""
+def _get_name_edges(items):
+    """Worker function for parallel name edge generation."""
+    key, eids_with_flags = items
+    edges = []
+    if len(eids_with_flags) > 1:
+        for i in range(len(eids_with_flags)):
+            for j in range(i + 1, len(eids_with_flags)):
+                eid1, hs1 = eids_with_flags[i]
+                eid2, hs2 = eids_with_flags[j]
+                
+                edges.append((eid1, eid2))
+    return edges
+
+def _get_addr_edges(items):
+    """Worker function for parallel address edge generation."""
     key, eids = items
     edges = []
     if len(eids) > 1:
@@ -144,7 +164,7 @@ def build_network(engine):
     print("Loading entities for graph construction...")
     with engine.connect() as conn:
         entities = conn.execute(text("""
-            SELECT entity_id, owner_name_norm, owner_addr_norm, is_institutional
+            SELECT entity_id, owner_name_norm, owner_addr_norm, is_institutional, is_corporate, has_homestead
             FROM owner_entities
         """)).fetchall()
 
@@ -156,44 +176,66 @@ def build_network(engine):
     street_counts = {}
     is_inst = {}
     eid_to_name = {}
+    eid_to_corp = {}
 
-    for eid, name, addr, inst in entities:
+    for eid, name, addr, inst, corp, hs in entities:
         G.add_node(eid)
         is_inst[eid] = inst
         eid_to_name[eid] = name
+        eid_to_corp[eid] = corp
         if inst: continue # Skip indexing for institutional bridges
         
-        name_idx.setdefault(name, []).append(eid)
+        name_idx.setdefault(name, []).append((eid, hs))
         if addr:
             addr_idx.setdefault(addr, []).append(eid)
             street = normalize_street(addr)
             if street:
                 street_counts[street] = street_counts.get(street, 0) + 1
 
-    # 1. Name Edges (with Entropy Filter)
-    print(f"Filtering names with entropy > {NAME_ENTROPY_LIMIT}...")
-    valid_name_items = []
-    skipped_names = 0
-    
+    # 1. Name Edges (with Entropy Filter and Blocklist)
     print("  Calculating name entropy...")
     with engine.connect() as conn:
         entropy_rows = conn.execute(text("""
             SELECT owner_name_norm, COUNT(DISTINCT owner_addr_norm) 
             FROM owner_entities 
-            WHERE NOT is_institutional
             GROUP BY owner_name_norm
         """)).fetchall()
         name_entropy = {row[0]: row[1] for row in entropy_rows}
 
-    for name, eids in name_idx.items():
-        if name_entropy.get(name, 0) > NAME_ENTROPY_LIMIT:
-            skipped_names += 1
-            continue
-        valid_name_items.append((name, eids))
+    print("Filtering names by entropy and blocklist...")
+    valid_name_items = []
+    skipped_names_entropy = 0
+    skipped_names_blocklist = 0
+    skipped_names_homestead = 0
     
-    print(f"  Connecting by shared name (skipping {skipped_names:,} generic names)...")
+    for name, eids_with_flags in name_idx.items():
+        if name in JUNK_NAME_BLOCKLIST or any(name.startswith(j + ' ') for j in JUNK_NAME_BLOCKLIST):
+            skipped_names_blocklist += 1
+            continue
+            
+        entropy = name_entropy.get(name, 0)
+        
+        # Check if this name is associated with any corporate entities
+        is_corp_name = any(eid_to_corp.get(eid, False) for eid, _ in eids_with_flags)
+        
+        # If an individual name has multiple distinct properties claiming homestead,
+        # it is a common name representing multiple different people.
+        homestead_count = sum(1 for _, hs in eids_with_flags if hs)
+        if not is_corp_name and homestead_count > 1:
+            skipped_names_homestead += 1
+            continue
+            
+        limit = NAME_ENTROPY_LIMIT if is_corp_name else INDIVIDUAL_NAME_ENTROPY_LIMIT
+        
+        if entropy > limit:
+            skipped_names_entropy += 1
+            continue
+            
+        valid_name_items.append((name, eids_with_flags))
+    
+    print(f"  Connecting by shared name (skipping {skipped_names_entropy:,} high-entropy, {skipped_names_blocklist:,} blocklisted, {skipped_names_homestead:,} multi-homestead)...")
     with Pool(cpu_count()) as pool:
-        results = pool.map(_get_edges, valid_name_items)
+        results = pool.map(_get_name_edges, valid_name_items)
         for chunk in results:
             G.add_edges_from(chunk, rel="same_name")
     
@@ -233,7 +275,7 @@ def build_network(engine):
 
     print(f"  Connecting by shared address (skipped {skipped_addr_cityzip:,} city/zip, {skipped_addr_hub:,} hubs, {skipped_addr_junk:,} junk, {skipped_addr_builder:,} builder hubs)...")
     with Pool(cpu_count()) as pool:
-        results = pool.map(_get_edges, valid_addr_items)
+        results = pool.map(_get_addr_edges, valid_addr_items)
         for chunk in results:
             G.add_edges_from(chunk, rel="same_addr")
 

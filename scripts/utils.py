@@ -50,6 +50,7 @@ def create_unified_view(engine, refresh_mviews=False):
                 city_npu,
                 city_council,
                 city_zoning,
+                (excode IS NOT NULL AND excode != '') AS has_homestead,
                 geometry
             FROM fulton_parcels
             WHERE 
@@ -96,6 +97,7 @@ def create_unified_view(engine, refresh_mviews=False):
                 city_npu,
                 city_council,
                 city_zoning,
+                FALSE AS has_homestead,
                 geometry
             FROM dekalb_parcels
             WHERE 
