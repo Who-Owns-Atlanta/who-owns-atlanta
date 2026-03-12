@@ -1462,10 +1462,26 @@ const filterNbInput  = document.getElementById('filter-neighborhood');
 const filterNbList   = document.getElementById('filter-neighborhood-results');
 const filterNpuSel   = document.getElementById('filter-npu');
 const filterCouncil  = document.getElementById('filter-council');
-const filterHomeTypeSel = document.getElementById('filter-home-type');
-const filterActive   = document.getElementById('filter-active');
-const filterLabel    = document.getElementById('filter-active-label');
-const filterClear    = document.getElementById('filter-clear');
+const filterHomeTypeSel      = document.getElementById('filter-home-type');
+const filterActive           = document.getElementById('filter-active');
+const filterLabel            = document.getElementById('filter-active-label');
+const filterClear            = document.getElementById('filter-clear');
+const filterActiveHometype   = document.getElementById('filter-active-hometype');
+const filterHometypeLabel    = document.getElementById('filter-hometype-label');
+const filterClearHometype    = document.getElementById('filter-clear-hometype');
+
+const HOME_TYPE_ABBR = {
+  'Single-Family':        'SFH',
+  'Multi-Family / Condo': 'MFC',
+  'Multi-Family / Other': 'MFO',
+  'Other':                'Other',
+};
+
+function syncHasActive() {
+  const anyActive = !!(activeAreaFilter || filterHomeTypeSel.value);
+  document.getElementById('filter-details').classList.toggle('has-active', anyActive);
+  document.querySelector('header').classList.toggle('filter-is-active', anyActive);
+}
 
 const geoCache = {};  // keyed by 'neighborhoods' | 'npu' | 'council'
 
@@ -1517,7 +1533,7 @@ function setAreaFilter(label, geometry) {
     map.getSource('area-overlay').setData({ type: 'FeatureCollection', features: [makeOutsideMask(geometry)] });
   filterLabel.textContent = label;
   filterActive.hidden = false;
-  document.getElementById('filter-details').classList.add('has-active');
+  syncHasActive();
   document.getElementById('filter-details').open = false; // Native close
   map.fitBounds(geomBounds(geometry), { padding: 40, maxZoom: 15 });
   updateChoroOpacity();
@@ -1529,13 +1545,12 @@ function clearAreaFilter() {
     map.getSource('area-overlay').setData({ type: 'FeatureCollection', features: [] });
   updateChoroOpacity();
   filterActive.hidden = true;
-  document.getElementById('filter-details').classList.remove('has-active');
-  filterNbInput.value  = '';
-  filterNpuSel.value   = '';
-  filterCouncil.value  = '';
-  filterHomeTypeSel.value = '';
-  filterNbList.hidden  = true;
-  updateHomeTypeFilter();
+  filterNbInput.value = '';
+  filterNpuSel.value  = '';
+  filterCouncil.value = '';
+  filterNbList.hidden = true;
+  // NOTE: home type is NOT cleared here — independent filter
+  syncHasActive();
 }
 
 // Filter toggle open/close (now using native <details> toggle event)
@@ -1659,19 +1674,34 @@ filterHomeTypeSel.addEventListener('change', () => {
 function updateHomeTypeFilter() {
   const val = filterHomeTypeSel.value;
   const filter = val ? ['==', ['get', 'home_type'], val] : null;
-  
+
   if (map.getLayer('parcels-overview')) map.setFilter('parcels-overview', filter);
   if (map.getLayer('parcels-detail'))   map.setFilter('parcels-detail', filter);
-  
+
   if (val) {
-    document.getElementById('filter-details').classList.add('has-active');
-  } else if (!activeAreaFilter) {
-    document.getElementById('filter-details').classList.remove('has-active');
+    filterHometypeLabel.textContent = HOME_TYPE_ABBR[val] || val;
+    filterClearHometype.setAttribute('aria-label', `Clear home type filter: ${val}`);
+    filterActiveHometype.hidden = false;
+  } else {
+    filterActiveHometype.hidden = true;
   }
+  syncHasActive();
 }
 
-// Clear button
-filterClear.addEventListener('click', clearAreaFilter);
+// Area clear button
+filterClear.addEventListener('click', (e) => {
+  e.stopPropagation();
+  clearAreaFilter();
+  filterToggle.focus();
+});
+
+// Home type clear button
+filterClearHometype.addEventListener('click', (e) => {
+  e.stopPropagation();
+  filterHomeTypeSel.value = '';
+  updateHomeTypeFilter();
+  filterToggle.focus();
+});
 
 // ---------------------------------------------------------------------------
 // Code-lookup tooltip handlers (land use, zoning)

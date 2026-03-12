@@ -21,36 +21,33 @@
   <a href="#main-content" class="skip-link">Skip to main content</a>
 
   <header>
-    <a href="/" class="site-name">Who Owns Atlanta?</a>
+    <a href="/" class="site-name">
+      <span class="name-long">Who Owns Atlanta?</span>
+      <span class="name-short">WOA</span>
+    </a>
     <div class="search-wrapper">
       <input type="search" id="search-input" placeholder="Search an address…" autocomplete="off" aria-label="Search an address" aria-autocomplete="list" aria-controls="search-results">
       <ul id="search-results" role="listbox" hidden></ul>
     </div>
 
     <details class="filter-wrapper" id="filter-details">
-      <summary id="filter-toggle" aria-label="Filter by area" title="Filter by area">
-        <svg width="14" height="13" viewBox="0 0 14 13" fill="currentColor" aria-hidden="true"><path d="M0 0h14l-5 6v6l-4-2V6z"/></svg>
-        <div id="filter-active" hidden>
+      <summary id="filter-toggle" aria-label="Filter map" title="Filter map">
+        <span class="filter-icon"><svg width="14" height="13" viewBox="0 0 14 13" fill="currentColor" aria-hidden="true"><path d="M0 0h14l-5 6v6l-4-2V6z"/></svg></span>
+        <!-- Home Type pill (independent) -->
+        <div id="filter-active-hometype" class="filter-pill" hidden>
+          <span id="filter-hometype-label"></span>
+          <button id="filter-clear-hometype" class="filter-pill-clear"
+                  aria-label="Clear home type filter" type="button">✕</button>
+        </div>
+        <!-- Area filter pill -->
+        <div id="filter-active" class="filter-pill" hidden>
           <span id="filter-active-label"></span>
-          <button id="filter-clear" aria-label="Clear area filter">✕</button>
+          <button id="filter-clear" class="filter-pill-clear"
+                  aria-label="Clear area filter" type="button">✕</button>
         </div>
       </summary>
       <div id="filter-panel">
-        <div class="filter-row-neighborhood">
-          <label for="filter-neighborhood">Neighborhood</label>
-          <div class="filter-search-wrapper">
-            <input type="search" id="filter-neighborhood" placeholder="Search…" autocomplete="off" aria-autocomplete="list" aria-controls="filter-neighborhood-results" aria-expanded="false">
-            <ul id="filter-neighborhood-results" hidden role="listbox"></ul>
-          </div>
-        </div>
-        <div class="filter-row">
-          <label for="filter-npu">NPU</label>
-          <select id="filter-npu" aria-label="Select NPU"><option value="">All NPUs</option></select>
-        </div>
-        <div class="filter-row">
-          <label for="filter-council">Council</label>
-          <select id="filter-council" aria-label="Select Council District"><option value="">All Districts</option></select>
-        </div>
+        <!-- Home Type FIRST -->
         <div class="filter-row">
           <label for="filter-home-type">Home Type</label>
           <select id="filter-home-type" aria-label="Select Home Type">
@@ -60,6 +57,23 @@
             <option value="Multi-Family / Other">Multi-Family / Other</option>
             <option value="Other">Other</option>
           </select>
+        </div>
+        <hr class="filter-divider" role="separator" aria-hidden="true">
+        <!-- Area filters: Council → NPU → Neighborhood (most specific last) -->
+        <div class="filter-row">
+          <label for="filter-council">Council</label>
+          <select id="filter-council" aria-label="Select Council District"><option value="">All Districts</option></select>
+        </div>
+        <div class="filter-row">
+          <label for="filter-npu">NPU</label>
+          <select id="filter-npu" aria-label="Select NPU"><option value="">All NPUs</option></select>
+        </div>
+        <div class="filter-row-neighborhood">
+          <label for="filter-neighborhood">Neighborhood</label>
+          <div class="filter-search-wrapper">
+            <input type="search" id="filter-neighborhood" placeholder="Search…" autocomplete="off" aria-autocomplete="list" aria-controls="filter-neighborhood-results" aria-expanded="false">
+            <ul id="filter-neighborhood-results" hidden role="listbox"></ul>
+          </div>
         </div>
       </div>
     </details>
