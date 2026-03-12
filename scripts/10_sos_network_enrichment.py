@@ -15,6 +15,13 @@ MAX_SOS_ADDR_ENTITIES  = 100  # skip SOS address if this many entities share it
 # Increased to 10,000 now that institutional noise is removed.
 MAX_MERGE_PARCELS      = 10000
 
+NAME_ENTROPY_LIMIT = 100
+INDIVIDUAL_NAME_ENTROPY_LIMIT = 5
+
+JUNK_NAME_BLOCKLIST = {
+    'RESTRICTED', 'UNKNOWN OWNER', 'CURRENT RESIDENT', 'ESTATE OF', 'UNKNOWN'
+}
+
 # Skip addresses (Pass 1 & Pass 2) if shared by many entities at the street level
 # Lowered from 50 to 30 to prevent builder-to-buyer bridges
 STREET_ENTITY_LIMIT    = 30
@@ -68,13 +75,27 @@ def is_builder(name: str) -> bool:
 def normalize_street(addr: str) -> str:
     """Strip Suite/Unit/Apt from address to find the base building."""
     if not addr: return ""
-    return re.sub(r'\s+(STE|SUITE|UNIT|BLDG|OFFICE|#|APT)\s+.*$', '', addr, flags=re.IGNORECASE).strip()
+    # Remove junk characters
+    s = _STRIP_PUNCT.sub("", addr.upper()).strip()
+    # Strip suite/unit
+    s = re.sub(r'\s+(STE|SUITE|UNIT|BLDG|OFFICE|#|APT)\s+.*$', '', s, flags=re.IGNORECASE).strip()
+    # Normalize common suffixes to improve matching (STREET -> ST, etc)
+    s = re.sub(r'\bSTREET\b', 'ST', s)
+    s = re.sub(r'\bAVENUE\b', 'AVE', s)
+    s = re.sub(r'\bROAD\b', 'RD', s)
+    s = re.sub(r'\bDRIVE\b', 'DR', s)
+    s = re.sub(r'\bLANE\b', 'LN', s)
+    s = re.sub(r'\bCOURT\b', 'CT', s)
+    s = re.sub(r'\bBOULEVARD\b', 'BLVD', s)
+    s = re.sub(r'\bPLACE\b', 'PL', s)
+    s = re.sub(r'\bTERRACE\b', 'TER', s)
+    s = re.sub(r'\bPARKWAY\b', 'PKWY', s)
+    return s.strip()
 
 def ra_key(name: str, street: str = "") -> str:
     if not name: return ""
     name_part = _STRIP_PUNCT.sub("", name.upper()).strip()
-    street_part = _STRIP_PUNCT.sub("", (street or "").upper()).strip()
-    street_part = re.sub(r'\b(STE|SUITE|UNIT|BLDG|OFFICE|#)\s+.*$', '', street_part, flags=re.IGNORECASE).strip()
+    street_part = normalize_street(street)
     return f"{name_part}|{street_part}"
 
 def load_entities(engine):
@@ -84,54 +105,108 @@ def load_entities(engine):
             SELECT entity_id, owner_name_norm, owner_addr_norm, count,
                    sos_control_number, sos_registered_agent_id,
                    sos_registered_agent, sos_match_type,
-                   sos_registered_agent_address, is_institutional
+                   sos_registered_agent_address, is_institutional,
+                   is_corporate, has_homestead
             FROM owner_entities
         """)).fetchall()
     return rows
 
+def _get_name_edges(items):
+    """Worker function for parallel name edge generation."""
+    key, eids_with_flags = items
+    edges = []
+    if len(eids_with_flags) > 1:
+        for i in range(len(eids_with_flags)):
+            for j in range(i + 1, len(eids_with_flags)):
+                eid1, hs1 = eids_with_flags[i]
+                eid2, hs2 = eids_with_flags[j]
+                edges.append((eid1, eid2))
+    return edges
+
 def build_base_graph(entities):
-    print(f"\nPass 1: base graph (STREET-level cap = {STREET_ENTITY_LIMIT})...")
+    print(f"\\nPass 1: base graph (STREET-level cap = {STREET_ENTITY_LIMIT})...")
     G = nx.Graph()
     name_idx = {}
     addr_idx = {}
     street_counts = {}
     eid_to_name = {}
+    eid_to_corp = {}
+    eid_to_addr = {}
 
     for row in entities:
         eid, name, addr, count = row[0], row[1], row[2], row[3]
-        inst = row[9]
+        inst, corp, hs = row[9], row[10], row[11]
         G.add_node(eid)
         eid_to_name[eid] = name
+        eid_to_corp[eid] = corp
+        eid_to_addr[eid] = addr
         if inst: continue
         
-        name_idx.setdefault(name, []).append(eid)
+        name_idx.setdefault(name, []).append((eid, hs))
         if addr:
             addr_idx.setdefault(addr, []).append(eid)
             street = normalize_street(addr)
-            street_counts[street] = street_counts.get(street, 0) + 1
+            if street:
+                street_counts[street] = street_counts.get(street, 0) + 1
 
-    for name, eids in name_idx.items():
-        if len(eids) > 1:
-            for i in range(len(eids)):
-                for j in range(i + 1, len(eids)):
-                    G.add_edge(eids[i], eids[j], rel="same_name")
+    # 1. Name Edges (with Entropy Filter and Blocklist)
+    print("  Calculating name entropy...")
+    name_entropy = {}
+    for name, eids_with_flags in name_idx.items():
+        addrs = {eid_to_addr[eid] for eid, _ in eids_with_flags if eid_to_addr.get(eid)}
+        name_entropy[name] = len(addrs)
 
+    print("Filtering names by entropy and blocklist...")
+    valid_name_items = []
+    skipped_names_entropy = 0
+    skipped_names_blocklist = 0
+    skipped_names_homestead = 0
+    
+    for name, eids_with_flags in name_idx.items():
+        if name in JUNK_NAME_BLOCKLIST or any(name.startswith(j + ' ') for j in JUNK_NAME_BLOCKLIST):
+            skipped_names_blocklist += 1
+            continue
+            
+        entropy = name_entropy.get(name, 0)
+        is_corp_name = any(eid_to_corp.get(eid, False) for eid, _ in eids_with_flags)
+        
+        homestead_count = sum(1 for _, hs in eids_with_flags if hs)
+        if not is_corp_name and homestead_count > 1:
+            skipped_names_homestead += 1
+            continue
+            
+        limit = NAME_ENTROPY_LIMIT if is_corp_name else INDIVIDUAL_NAME_ENTROPY_LIMIT
+        if entropy > limit:
+            skipped_names_entropy += 1
+            continue
+            
+        valid_name_items.append((name, eids_with_flags))
+    
+    print(f"  Connecting by shared name (skipping {skipped_names_entropy:,} high-entropy, {skipped_names_blocklist:,} blocklisted, {skipped_names_homestead:,} multi-homestead)...")
+    with Pool(cpu_count()) as pool:
+        results = pool.map(_get_name_edges, valid_name_items)
+        for chunk in results:
+            G.add_edges_from(chunk, rel="same_name")
+
+    # 2. Address Edges
     skipped_addr_builder = 0
+    valid_addr_items = []
     for addr, eids in addr_idx.items():
         if _CITY_ZIP_ONLY.match(addr): continue
         street = normalize_street(addr)
-        if any(street.upper().startswith(b) for b in ADDRESS_STREET_BLOCKLIST): continue
+        if any(street.startswith(b) for b in ADDRESS_STREET_BLOCKLIST): continue
         if street_counts.get(street, 0) > STREET_ENTITY_LIMIT: continue
 
-        # Builder-Buyer Heuristic
-        if any(is_builder(eid_to_name.get(eid)) for eid in eids) and len(eids) >= 5:
+        if any(is_builder(eid_to_name.get(eid, "")) for eid in eids) and len(eids) >= 5:
             skipped_addr_builder += 1
             continue
 
-        if len(eids) > 1:
-            for i in range(len(eids)):
-                for j in range(i + 1, len(eids)):
-                    G.add_edge(eids[i], eids[j], rel="same_addr")
+        valid_addr_items.append((addr, eids))
+
+    for addr, eids in valid_addr_items:
+        for i in range(len(eids)):
+            for j in range(i + 1, len(eids)):
+                G.add_edge(eids[i], eids[j], rel="same_addr")
     
     if skipped_addr_builder:
         print(f"  Skipped {skipped_addr_builder:,} builder-buyer address hubs")

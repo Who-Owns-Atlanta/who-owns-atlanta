@@ -28,17 +28,28 @@ CORPORATE_PATTERN = (
     r')\M'
 )
 
-# Non-individual owners that won't resolve in SOS
-# MOVED: authority, development, real estate (when institutional) to here.
-INSTITUTIONAL_PATTERN = (
+# Non-individual owners that are definitely institutional
+STRONG_INSTITUTIONAL_PATTERN = (
     r'('
     r'city\s+of|county|state\s+of|united\s+states'
     r'|marta|board\s+of\s+(education|regents)'
     r'|department\s+of|dept\s+of'
-    r'|authority|development\s+authority|housing\s+authority'
-    r'|trust|trustee|estate\s+of'
+    r'|\m(authority|development\s+authority|housing\s+authority)\M'
+    r'|\mregents\M.*system'
     r'|college|university|school\s+district|school\s+system'
-    r'|church|ministry|ministries|congregation|diocese|temple|mosque|synagogue'
+    r'|railway|railroad|seaboard|norfolk\s+southern|georgia\s+power|bellsouth'
+    r')'
+)
+
+# Non-individual owners that might clash with address-named LLCs or individuals
+WEAK_INSTITUTIONAL_PATTERN = (
+    r'('
+    r'\m(trust|trustee|estate\s+of)\M'
+    r'|\m(ministry|ministries|congregation|diocese|temple|mosque|synagogue)\M'
+    r'|\m(baptist|methodist|episcopal|presbyterian|catholic|apostolic|united|first|second|new|tabernacle|gospel|evangelical)\s+church\M'
+    r'|\mchurch\s+of\M'
+    r'|\mchurch\s+inc\M'
+    r'|church$'
     r'|homeowner|homeowners|h\s*o\s*a'
     r'|community\s+associat|owners\s+associat|associat'
     r'|condo|condominium'
@@ -46,7 +57,6 @@ INSTITUTIONAL_PATTERN = (
     r'|wildwood\s+park|oxford\s+village'
     r'|salvation\s+army|habitat\s+for\s+humanity'
     r'|cemetery'
-    r'|railway|railroad|seaboard|norfolk\s+southern|georgia\s+power|bellsouth'
     r'|atlanta\s+neighborhood\s+development'
     r')'
 )
@@ -65,59 +75,30 @@ def flag_owners(engine):
                 conn.execute(text(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {flag} BOOLEAN DEFAULT FALSE;"))
                 conn.execute(text(f"UPDATE {table} SET {flag} = FALSE;"))
 
-            # Institutional flag FIRST (captures authorities/utilities that might match corporate patterns)
-            pattern = INSTITUTIONAL_PATTERN
-            result = conn.execute(text(f"""
-                UPDATE {table} SET is_institutional = TRUE WHERE {col1} ~* :pattern
-            """), {"pattern": pattern})
-            print(f"  is_institutional via {col1}: {result.rowcount:,}")
-
+            # 1. Strong Institutional (gov, utilities)
+            pattern = STRONG_INSTITUTIONAL_PATTERN
+            conn.execute(text(f"UPDATE {table} SET is_institutional = TRUE WHERE {col1} ~* :pattern"), {"pattern": pattern})
             if col2:
-                result = conn.execute(text(f"""
-                    UPDATE {table} SET is_institutional = TRUE
-                    WHERE NOT is_institutional AND {col2} ~* :pattern
-                """), {"pattern": pattern})
-                print(f"  is_institutional via {col2}: +{result.rowcount:,}")
+                conn.execute(text(f"UPDATE {table} SET is_institutional = TRUE WHERE NOT is_institutional AND {col2} ~* :pattern"), {"pattern": pattern})
 
-            # Institutional via Land Use / Property Class (Common Areas / Co-ops)
+            # 2. Institutional via Land Use (Common Areas)
             if table == "fulton_parcels":
-                # lucode 111: Common Area - residential subdivision
-                # lucode 166: Common Area - condominiums
-                # lucode 188: Homeowner Association Common Area
-                # lucode 208: Co Ops Single Family Fee Simple
-                result = conn.execute(text("""
-                    UPDATE fulton_parcels SET is_institutional = TRUE 
-                    WHERE NOT is_institutional AND "lucode" IN ('111', '166', '188', '208')
-                """))
-                print(f"  is_institutional via Fulton lucode: +{result.rowcount:,}")
+                conn.execute(text("UPDATE fulton_parcels SET is_institutional = TRUE WHERE NOT is_institutional AND \"lucode\" IN ('111', '166', '188', '208')"))
             elif table == "dekalb_parcels":
-                # classcd R9: Common area / Association properties
-                # landuse COS: Land Use "Common Space"
-                # common_area: explicitly marked in DeKalb
-                result = conn.execute(text("""
-                    UPDATE dekalb_parcels SET is_institutional = TRUE 
-                    WHERE NOT is_institutional AND (
-                        "classcd" = 'R9' OR 
-                        "landuse" = 'COS' OR 
-                        "common_area" IS NOT NULL
-                    )
-                """))
-                print(f"  is_institutional via DeKalb codes: +{result.rowcount:,}")
+                conn.execute(text("UPDATE dekalb_parcels SET is_institutional = TRUE WHERE NOT is_institutional AND (\"classcd\" = 'R9' OR \"landuse\" = 'COS' OR \"common_area\" IS NOT NULL)"))
 
-            # Corporate flag (only on rows not already institutional)
+            # 3. Corporate (LLC, Inc, etc) - Only if not strong institutional
             pattern = CORPORATE_PATTERN
-            result = conn.execute(text(f"""
-                UPDATE {table} SET is_corporate = TRUE 
-                WHERE NOT is_institutional AND {col1} ~* :pattern
-            """), {"pattern": pattern})
-            print(f"  is_corporate via {col1}: {result.rowcount:,}")
-
+            conn.execute(text(f"UPDATE {table} SET is_corporate = TRUE WHERE NOT is_institutional AND {col1} ~* :pattern"), {"pattern": pattern})
             if col2:
-                result = conn.execute(text(f"""
-                    UPDATE {table} SET is_corporate = TRUE
-                    WHERE NOT is_institutional AND NOT is_corporate AND {col2} ~* :pattern
-                """), {"pattern": pattern})
-                print(f"  is_corporate via {col2}: +{result.rowcount:,}")
+                conn.execute(text(f"UPDATE {table} SET is_corporate = TRUE WHERE NOT is_institutional AND NOT is_corporate AND {col2} ~* :pattern"), {"pattern": pattern})
+
+            # 4. Weak Institutional (Religious, Trusts, HOAs) - Only if not corporate
+            pattern = WEAK_INSTITUTIONAL_PATTERN
+            conn.execute(text(f"UPDATE {table} SET is_institutional = TRUE WHERE NOT is_institutional AND NOT is_corporate AND {col1} ~* :pattern"), {"pattern": pattern})
+            if col2:
+                conn.execute(text(f"UPDATE {table} SET is_institutional = TRUE WHERE NOT is_institutional AND NOT is_corporate AND {col2} ~* :pattern"), {"pattern": pattern})
+
 
     # Summary
     with engine.connect() as conn:

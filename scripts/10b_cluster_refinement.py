@@ -37,8 +37,7 @@ SUFFIX_NOISE = frozenset({
     'INCORPORATED', 'CORPORATION', 'COMPANY',
     # SFR series vehicle suffixes — these appear as trailing noise in securitized
     # fund names (e.g. "TRICON SFR 2024 3 BORROWER LLC", "SFR JV 2 PROPERTY LLC").
-    # Adding them here lets interior year+digit stripping unify vintage series.
-    # Verified safe: simulation over 33K SOS-matched entities produced zero false merges.
+    # verified safe: simulation over 33K SOS-matched entities produced zero false merges.
     'BORROWER', 'PROPERTY', 'PROPERTIES', 'OWNER', 'OWNERCO',
 })
 ROMAN_NUMERALS = frozenset({
