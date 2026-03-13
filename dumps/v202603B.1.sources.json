@@ -1,0 +1,101 @@
+{
+  "fulton_parcels": {
+    "name": "Fulton County Tax Assessor",
+    "description": "Parcels, ownership, property class, exemptions, appraised value",
+    "file_path": "data/json/geojson/2026-02-11/Fulton_County_Tax_Parcel.json",
+    "sha256": "f1f6351f36e039db490299714441c82b5e8679b57a0978bbecc80802df4d1be8",
+    "admin_date": "2026-01-07",
+    "last_loaded": "2026-02-13",
+    "url": "https://gisdata.fultoncountyga.gov/datasets/fulcogis::tax-parcels/about"
+  },
+  "dekalb_parcels": {
+    "name": "DeKalb County Tax Assessor",
+    "description": "Parcels, ownership, appraised value, zoning, historic districts",
+    "file_path": "data/json/geojson/2026-02-12/Dekalb_County_Tax_Parcels.geojson",
+    "sha256": "b5b1c10fb252cc9feb0f1a64b476909604cd8a92d161380f70200da388611f97",
+    "admin_date": "2025-12-06",
+    "last_loaded": "2026-02-13",
+    "url": "https://dekalbinsights-dekalbgis.opendata.arcgis.com/datasets/731f52734f2346d6b939ff7337fcfaa2_0/"
+  },
+  "atlanta_tax_parcel": {
+    "name": "City of Atlanta GIS — Tax_Parcel",
+    "description": "Tax Parcels",
+    "file_path": "data/json/geojson/2026-02-11/Tax_Parcel.json",
+    "sha256": "3668313605cb2d11ad2772839bff338d59320463a17fcab9e81d70b09f689289",
+    "admin_date": "2025-07-14",
+    "last_loaded": "2026-02-13",
+    "url": "https://dpcd-coaplangis.opendata.arcgis.com/datasets/ee82525ee33b49778055622c3a3cf534_0/explore"
+  },
+  "atlanta_address_point": {
+    "name": "City of Atlanta GIS — Address_Point",
+    "description": "Addresses assigned to Tax Parcels",
+    "file_path": "data/json/geojson/2026-02-11/Address_Point.json",
+    "sha256": "5580149c9346602528d341b154ad459152a2f826e9b239fe1bdcb154197767dd",
+    "admin_date": "2026-06-11",
+    "last_loaded": "2026-02-13",
+    "url": "https://dpcd-coaplangis.opendata.arcgis.com/maps/0a5785b3466a46c7a256f7fa9d628afd/explore"
+  },
+  "atlanta_gis_neighborhoods": {
+    "name": "City of Atlanta GIS — Neighborhood Boundaries",
+    "description": "Neighborhood boundaries (spatial join to parcels)",
+    "file_path": "data/json/geojson/2026-02-11/Neighborhood.json",
+    "sha256": "be359ccc0cf23efd3b3324e5030786214281ae12e0dcb29ea94643d54d790fc3",
+    "admin_date": "2025-02-05",
+    "last_loaded": "2026-02-28",
+    "url": "https://dpcd-coaplangis.opendata.arcgis.com/datasets/7e91b75124fc47cbab7ffdb5de1cdd0a_0/explore"
+  },
+  "atlanta_gis_neighborhoods_demographics": {
+    "name": "City of Atlanta GIS — Official Neighborhoods with Current Demographic Data 2024",
+    "description": "Neighborhood boundaries with demographic data (population, income, housing tenure)",
+    "file_path": "data/json/geojson/2026-02-28/Official_Neighborhoods_with_Current_Demographic_Data_2024.geojson",
+    "sha256": "6e2f642c02344629d1c89e1c177d226d1bf567c445ed51ea866d0f4cb49ef93c",
+    "admin_date": "2025-02-05",
+    "last_loaded": "2026-02-28",
+    "url": "https://dpcd-coaplangis.opendata.arcgis.com/datasets/7e91b75124fc47cbab7ffdb5de1cdd0a_0/explore"
+  },
+  "atlanta_gis_npu": {
+    "name": "City of Atlanta GIS — NPU",
+    "description": "Neighborhood Planning Unit boundaries",
+    "file_path": "data/json/geojson/2026-02-11/NPU.json",
+    "sha256": "653fc5f5a6ddf8597ae4172b1047f6a617d3bfe1ef3381c86c9bf1d1a3e3245e",
+    "admin_date": "2025-02-05",
+    "last_loaded": "2026-02-28",
+    "url": "https://dpcd-coaplangis.opendata.arcgis.com/datasets/db52ab3981434142870a0d5300aa5c07_4/explore"
+  },
+  "atlanta_gis_council": {
+    "name": "City of Atlanta GIS — Council Districts",
+    "description": "City Council district boundaries",
+    "file_path": "data/json/geojson/2026-02-28/Official_City_Council_Districts.geojson",
+    "sha256": "2c138aef7b5d1ca10992ae55944ea556f70df4d65d705089fafaa0106681d71f",
+    "admin_date": "2026-02-09",
+    "last_loaded": "2026-02-28",
+    "url": "https://dpcd-coaplangis.opendata.arcgis.com/datasets/7c3899849bb04fa99365d9ec1179a491_4/explore"
+  },
+  "atlanta_gis_zoning": {
+    "name": "City of Atlanta GIS — Official Zoning Districts",
+    "description": "Official City of Atlanta zoning districts",
+    "file_path": "data/json/geojson/2026-03-10/Official_Zoning_Districts.geojson",
+    "sha256": "ff92bb51a1a7cde2bb72f224f42f08b9f05e55c9b5ed87a52ef82ddbfb3479ee",
+    "admin_date": "2025-02-05",
+    "last_loaded": "2026-03-10",
+    "url": "https://dpcd-coaplangis.opendata.arcgis.com/datasets/5a192bb498554a23a48a5b81b6239f44_22/explore?location=33.767250%2C-84.420550%2C11"
+  },
+  "accela": {
+    "name": "City of Atlanta — Accela",
+    "description": "Building complaints and code enforcement records",
+    "file_path": null,
+    "sha256": null,
+    "admin_date": null,
+    "last_loaded": "2026-02-13",
+    "url": "https://aca-prod.accela.com/ATLANTA_GA/"
+  },
+  "ga_sos": {
+    "name": "Georgia Secretary of State, Corporations Division",
+    "description": "Business entity registrations, officers, registered agents",
+    "file_path": "data/text/ga_sos/2026-02-18/",
+    "sha256": null,
+    "admin_date": "2026-02-18",
+    "last_loaded": "2026-02-19",
+    "url": "https://ecorp.sos.ga.gov/"
+  }
+}

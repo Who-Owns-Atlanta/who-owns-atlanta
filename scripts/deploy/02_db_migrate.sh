@@ -26,13 +26,17 @@ WHERE o.control_number IN (
 );
 EOF
 
-echo "=== [DEV] Dumping DB (public + gis + application; excluding sos/tiger/topology) ==="
+echo "=== [DEV] Dumping DB (public + gis + application; excluding sos/tiger/topology and pipeline-only tables) ==="
 
 PGPASSWORD=woa pg_dump -Fc \
   --exclude-schema=sos \
   --exclude-schema=tiger \
   --exclude-schema=tiger_data \
   --exclude-schema=topology \
+  --exclude-table=bq_people \
+  --exclude-table=bq_locations \
+  --exclude-table=bq_organizations \
+  --exclude-table=addr_norm_lookup \
   -h localhost -p 5434 -U woa -d who_owns_atl \
   > "$DUMP_FILE"
 
