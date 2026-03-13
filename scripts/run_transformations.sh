@@ -8,7 +8,7 @@ set -e
 cd "$(dirname "$0")/.."
 ROOT_DIR=$(pwd)
 
-LOG_FILE="pipeline_$(date +%Y%m%d_%H%M%S).log"
+LOG_FILE="data/pipeline_$(date +%Y%m%d_%H%M%S).log"
 
 log() {
     echo "------------------------------------------------------------------------" | tee -a "$LOG_FILE"
