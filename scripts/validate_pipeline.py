@@ -224,37 +224,32 @@ def run_checks():
             warnings += 1  # warn not fail — mixed clusters can be legitimate
 
         # ------------------------------------------------------------------
-        # 5. Script consistency checks (static analysis)
+        # 5. Script consistency checks
         # ------------------------------------------------------------------
         print("\n--- 5. Script consistency ---")
 
-        import re
-        blocklist_pattern = re.compile(
-            r"ADDRESS_STREET_BLOCKLIST\s*=\s*\{([^}]+)\}", re.DOTALL)
-
-        def extract_blocklist(path):
+        def check_import(path, symbol):
             try:
                 src = open(path).read()
-                m = blocklist_pattern.search(src)
-                if not m: return None
-                entries = re.findall(r"'([^']+)'", m.group(1))
-                return set(entries)
+                return f"from utils_clustering import" in src and symbol in src
             except FileNotFoundError:
-                return None
+                return False
 
-        bl_04 = extract_blocklist("scripts/04_ownership_network.py")
-        bl_10 = extract_blocklist("scripts/10_sos_network_enrichment.py")
+        # Verify that both scripts are using the shared utility module
+        ok_04 = check_import("scripts/04_ownership_network.py", "ADDRESS_STREET_BLOCKLIST")
+        ok_10 = check_import("scripts/10_sos_network_enrichment.py", "ADDRESS_STREET_BLOCKLIST")
 
-        if bl_04 is None or bl_10 is None:
-            print(f"  [{WARN}] Could not parse ADDRESS_STREET_BLOCKLIST from one or both scripts")
-            warnings += 1
+        if ok_04:
+            print(f"  [{PASS}] scripts/04_ownership_network.py imports from utils_clustering")
         else:
-            ok = bl_04 == bl_10
-            status = PASS if ok else FAIL
-            diff = bl_04.symmetric_difference(bl_10)
-            print(f"  [{status}] ADDRESS_STREET_BLOCKLIST in sync between scripts 04 and 10"
-                  + (f" — drift: {diff}" if not ok else ""))
-            if not ok: failures += 1
+            print(f"  [{FAIL}] scripts/04_ownership_network.py is missing utils_clustering import")
+            failures += 1
+
+        if ok_10:
+            print(f"  [{PASS}] scripts/10_sos_network_enrichment.py imports from utils_clustering")
+        else:
+            print(f"  [{FAIL}] scripts/10_sos_network_enrichment.py is missing utils_clustering import")
+            failures += 1
 
         # ------------------------------------------------------------------
         # Summary

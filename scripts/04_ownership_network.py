@@ -4,54 +4,17 @@ from sqlalchemy import create_engine, text
 from multiprocessing import Pool, cpu_count
 
 from utils_persistence import ensure_persistence_schema
+from utils_clustering import (
+    NAME_ENTROPY_LIMIT, INDIVIDUAL_NAME_ENTROPY_LIMIT, JUNK_NAME_BLOCKLIST,
+    STREET_ENTITY_LIMIT, BUILDER_KEYWORDS, ADDRESS_STREET_BLOCKLIST,
+    is_builder, normalize_street
+)
 
 DB_URL = "postgresql://woa:woa@localhost:5434/who_owns_atl"
 engine = create_engine(DB_URL)
 
-# --- Tuning knobs ---
-# Skip names with many distinct addresses (likely generic labels like 'BRANDYWINE')
-# ... rest of file (import and engine part) ...
-# Increased to 100 as institutional noise (MARTA, GA Power) is now institutional-flagged.
-NAME_ENTROPY_LIMIT = 100
-INDIVIDUAL_NAME_ENTROPY_LIMIT = 5
-
-JUNK_NAME_BLOCKLIST = {
-    'RESTRICTED', 'UNKNOWN OWNER', 'CURRENT RESIDENT', 'ESTATE OF', 'UNKNOWN'
-}
-
-# Skip addresses if shared by many entities (mailbox centers, office parks)
-# Lowered from 50 to 30 to prevent builder-to-buyer bridges while keeping legitimate operators
-STREET_ENTITY_LIMIT = 30
-
-# Known corporate developer keywords to trigger the builder-buyer heuristic
-BUILDER_KEYWORDS = {'HORTON', 'BROCK', 'PULTE', 'LENNAR', 'CENTURY', 'BEAZER', 'ASHTON', 'MERITAGE', 'TOLL', 'KB HOME'}
-
-# Addresses (matched as prefix of normalize_street output) that must never create
-# address edges — multi-firm hub offices where unrelated institutional landlords
-# happen to share a mailing address.
-# Format: use the street number + name only (no suite, city, state, zip).
-ADDRESS_STREET_BLOCKLIST = {
-    '3505 KOGER BLVD',     # Duluth GA — Pretium (FYR SFR BORROWER) + Amherst (HOME SFR BORROWER)
-    '5100 TAMARIND REEF',  # Christiansted USVI — same two firms share a USVI trust address
-}
-
 # Skip city/zip-only addresses (PO Box artifacts from libpostal stripping box numbers)
 CITY_ZIP_ONLY = re.compile(r'^[A-Z]+(\s+[A-Z]+)*\s+[A-Z]{2}\s+\d{5}(-\d+)?$')
-
-def is_builder(name: str) -> bool:
-    """Check if owner name contains known builder keywords."""
-    if not name: return False
-    n = name.upper()
-    return any(k in n for k in BUILDER_KEYWORDS)
-
-def normalize_street(addr: str) -> str:
-    """Strip Suite/Unit/Apt from address to find the base building."""
-    if not addr: return ""
-    # Remove junk characters
-    s = re.sub(r'[.,?]', '', addr).strip()
-    if not s or len(s) < 2: return ""
-    # Strip suite/unit
-    return re.sub(r'\s+(STE|SUITE|UNIT|BLDG|OFFICE|#|APT)\s+.*$', '', s, flags=re.IGNORECASE).strip()
 
 def is_junk_addr(addr: str) -> bool:
     """Check if address is clearly a normalization artifact."""

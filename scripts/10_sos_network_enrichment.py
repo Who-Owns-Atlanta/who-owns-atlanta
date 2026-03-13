@@ -3,6 +3,12 @@ import networkx as nx
 from sqlalchemy import create_engine, text
 from multiprocessing import Pool, cpu_count
 
+from utils_clustering import (
+    NAME_ENTROPY_LIMIT, INDIVIDUAL_NAME_ENTROPY_LIMIT, JUNK_NAME_BLOCKLIST,
+    STREET_ENTITY_LIMIT, BUILDER_KEYWORDS, ADDRESS_STREET_BLOCKLIST,
+    is_builder, normalize_street, is_commercial_ra, ra_key
+)
+
 DB_URL = "postgresql://woa:woa@localhost:5434/who_owns_atl"
 engine = create_engine(DB_URL)
 
@@ -15,88 +21,7 @@ MAX_SOS_ADDR_ENTITIES  = 100  # skip SOS address if this many entities share it
 # Increased to 10,000 now that institutional noise is removed.
 MAX_MERGE_PARCELS      = 10000
 
-NAME_ENTROPY_LIMIT = 100
-INDIVIDUAL_NAME_ENTROPY_LIMIT = 5
-
-JUNK_NAME_BLOCKLIST = {
-    'RESTRICTED', 'UNKNOWN OWNER', 'CURRENT RESIDENT', 'ESTATE OF', 'UNKNOWN'
-}
-
-# Skip addresses (Pass 1 & Pass 2) if shared by many entities at the street level
-# Lowered from 50 to 30 to prevent builder-to-buyer bridges
-STREET_ENTITY_LIMIT    = 30
-
-# Known corporate developer keywords to trigger the builder-buyer heuristic
-BUILDER_KEYWORDS = {'HORTON', 'BROCK', 'PULTE', 'LENNAR', 'CENTURY', 'BEAZER', 'ASHTON', 'MERITAGE', 'TOLL', 'KB HOME'}
-
-# Addresses (normalized street part) that must never create edges.
-# These are known commercial RA hubs that might bypass the STREET_ENTITY_LIMIT
-# if they have many slightly different suite/unit numbers.
-ADDRESS_STREET_BLOCKLIST = {
-    '3505 KOGER BLVD',     # Duluth GA — Pretium (FYR SFR BORROWER) + Amherst (HOME SFR BORROWER)
-    '5100 TAMARIND REEF',  # Christiansted USVI — same two firms share a USVI trust address
-    '289 S CULVER ST',     # Lawrenceville GA — Common RA hub for many small LLCs
-}
-
-# Substrings that identify commercial registered agents.
-# Any agent name containing these will be skipped for edge generation.
-COMMERCIAL_RA_SUBSTRINGS = [
-    "CORPORATION SERVICE COMPANY", "C T CORPORATION", "CT CORPORATION",
-    "COGENCY GLOBAL", "NORTHWEST REGISTERED AGENT", "REGISTERED AGENTS INC",
-    "NATIONAL REGISTERED AGENT", "UNITED STATES CORPORATION AGENT",
-    "CORPORATE CREATIONS NETWORK", "CSC OF COBB COUNTY", "VCORP AGENT",
-    "CAPITOL CORPORATE SERVICES", "INCORP SERVICES", "ANDERSON REGISTERED AGENT", "REPUBLIC REGISTERED AGENT",
-    "ACCESS MANAGEMENT", "LEGALINC CORPORATE", "PARACORP",
-    "HOMEOWNER MANAGEMENT", "COMMUNITY MANAGEMENT", "FIELDSTONE REALTY PARTNER",
-    "SENTRY MANAGEMENT", "HOMESIDE PROPERTIES", "SILVERLEAF MANAGEMENT",
-    "GEORGIA REGISTERED AGENT", "BUSINESS FILINGS INC", "UNIVERSAL REGISTERED AGENT",
-    "BCS CORPORATE", "TERRAPIN CORPORATE", "HERITAGE PROPERTY MANAGEMENT",
-    "ATLANTA COMMUNITY SERVICE", "BEACON COMMUNITY MANAGEMENT", "BEACON MANAGEMENT",
-    "TOLLEY COMMUNITY", "POSOLUTIONS", "CANOPY SERVICE", "SPI AGENT SOLUTIONS",
-    "PMI NORTHEAST ATLANTA", "ZENBUSINESS", "REGISTERED AGENT SOLUTIONS",
-]
-
-_STRIP_PUNCT = re.compile(r'[^A-Z0-9 ]')
-
-def is_commercial_ra(name: str) -> bool:
-    if not name: return True
-    n = _STRIP_PUNCT.sub("", name.upper()).strip()
-    if n in ("NONE", "", "LEE MASON", "BILL WETTER"): return True
-    return any(sub in n for sub in COMMERCIAL_RA_SUBSTRINGS)
-
 _CITY_ZIP_ONLY = re.compile(r'^[A-Z]+(\s+[A-Z]+)*\s+[A-Z]{2}\s+\d{5}(-\d+)?$')
-
-def is_builder(name: str) -> bool:
-    """Check if owner name contains known builder keywords."""
-    if not name: return False
-    n = name.upper()
-    return any(k in n for k in BUILDER_KEYWORDS)
-
-def normalize_street(addr: str) -> str:
-    """Strip Suite/Unit/Apt from address to find the base building."""
-    if not addr: return ""
-    # Remove junk characters
-    s = _STRIP_PUNCT.sub("", addr.upper()).strip()
-    # Strip suite/unit
-    s = re.sub(r'\s+(STE|SUITE|UNIT|BLDG|OFFICE|#|APT)\s+.*$', '', s, flags=re.IGNORECASE).strip()
-    # Normalize common suffixes to improve matching (STREET -> ST, etc)
-    s = re.sub(r'\bSTREET\b', 'ST', s)
-    s = re.sub(r'\bAVENUE\b', 'AVE', s)
-    s = re.sub(r'\bROAD\b', 'RD', s)
-    s = re.sub(r'\bDRIVE\b', 'DR', s)
-    s = re.sub(r'\bLANE\b', 'LN', s)
-    s = re.sub(r'\bCOURT\b', 'CT', s)
-    s = re.sub(r'\bBOULEVARD\b', 'BLVD', s)
-    s = re.sub(r'\bPLACE\b', 'PL', s)
-    s = re.sub(r'\bTERRACE\b', 'TER', s)
-    s = re.sub(r'\bPARKWAY\b', 'PKWY', s)
-    return s.strip()
-
-def ra_key(name: str, street: str = "") -> str:
-    if not name: return ""
-    name_part = _STRIP_PUNCT.sub("", name.upper()).strip()
-    street_part = normalize_street(street)
-    return f"{name_part}|{street_part}"
 
 def load_entities(engine):
     print("Loading owner_entities...")
